@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_ANIWATCH_API_URL || 'http://localhost:4000';
 
@@ -6,20 +6,27 @@ console.log('🔧 API Base URL:', API_BASE_URL);
 
 const aniwatchApi = axios.create({
   baseURL: `${API_BASE_URL}/api/v2/hianime`,
-  timeout: 15000,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
-  }
+  },
+  withCredentials: false, // Mudar para false para evitar problemas de CORS
 });
 
 // Interceptor para log de requisições
 aniwatchApi.interceptors.request.use(
   (config) => {
-    console.log('📤 Requisição:', config.method?.toUpperCase(), config.url);
+    console.log('📤 Request:', {
+      method: config.method?.toUpperCase(),
+      url: config.url,
+      baseURL: config.baseURL,
+      fullURL: `${config.baseURL}${config.url}`,
+      params: config.params,
+    });
     return config;
   },
   (error) => {
-    console.error('❌ Erro na requisição:', error);
+    console.error('❌ Request Error:', error);
     return Promise.reject(error);
   }
 );
@@ -27,12 +34,22 @@ aniwatchApi.interceptors.request.use(
 // Interceptor para log de respostas
 aniwatchApi.interceptors.response.use(
   (response) => {
-    console.log('📥 Resposta:', response.status, response.config.url);
-    console.log('📦 Dados:', response.data);
+    console.log('✅ Response:', {
+      status: response.status,
+      url: response.config.url,
+      dataKeys: Object.keys(response.data || {}),
+      data: response.data,
+    });
     return response;
   },
-  (error) => {
-    console.error('❌ Erro na resposta:', error.response?.status, error.message);
+  (error: AxiosError) => {
+    console.error('❌ Response Error:', {
+      message: error.message,
+      code: error.code,
+      status: error.response?.status,
+      data: error.response?.data,
+      url: error.config?.url,
+    });
     return Promise.reject(error);
   }
 );
@@ -100,88 +117,143 @@ export interface StreamingLink {
 export const aniwatchService = {
   // Home page com animes em destaque
   getHomePage: async () => {
-    const response = await aniwatchApi.get('/home');
-    return response.data;
+    try {
+      const response = await aniwatchApi.get('/home');
+      return response.data;
+    } catch (error) {
+      console.error('Error in getHomePage:', error);
+      throw error;
+    }
   },
 
   // Buscar animes
   searchAnime: async (query: string, page: number = 1) => {
-    const response = await aniwatchApi.get('/search', {
-      params: { q: query, page }
-    });
-    return response.data;
+    try {
+      const response = await aniwatchApi.get('/search', {
+        params: { q: query, page }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in searchAnime:', error);
+      throw error;
+    }
   },
 
   // Sugestões de busca
   searchSuggestions: async (query: string) => {
-    const response = await aniwatchApi.get('/search/suggestion', {
-      params: { q: query }
-    });
-    return response.data;
+    try {
+      const response = await aniwatchApi.get('/search/suggestion', {
+        params: { q: query }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in searchSuggestions:', error);
+      throw error;
+    }
   },
 
   // Detalhes do anime
   getAnimeInfo: async (animeId: string) => {
-    const response = await aniwatchApi.get('/anime/info', {
-      params: { id: animeId }
-    });
-    return response.data;
+    try {
+      const response = await aniwatchApi.get('/anime/info', {
+        params: { id: animeId }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in getAnimeInfo:', error);
+      throw error;
+    }
   },
 
   // Episódios do anime
   getAnimeEpisodes: async (animeId: string) => {
-    const response = await aniwatchApi.get('/anime/episodes', {
-      params: { id: animeId }
-    });
-    return response.data;
+    try {
+      const response = await aniwatchApi.get('/anime/episodes', {
+        params: { id: animeId }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in getAnimeEpisodes:', error);
+      throw error;
+    }
   },
 
   // Servidores de um episódio
   getEpisodeServers: async (episodeId: string) => {
-    const response = await aniwatchApi.get('/episode/servers', {
-      params: { episodeId }
-    });
-    return response.data;
+    try {
+      const response = await aniwatchApi.get('/episode/servers', {
+        params: { episodeId }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in getEpisodeServers:', error);
+      throw error;
+    }
   },
 
   // Links de streaming
   getEpisodeSources: async (episodeId: string, server: string = 'hd-1', category: string = 'sub') => {
-    const response = await aniwatchApi.get('/episode/sources', {
-      params: { episodeId, server, category }
-    });
-    return response.data;
+    try {
+      const response = await aniwatchApi.get('/episode/sources', {
+        params: { episodeId, server, category }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in getEpisodeSources:', error);
+      throw error;
+    }
   },
 
   // Animes por gênero
   getAnimeByGenre: async (genreName: string, page: number = 1) => {
-    const response = await aniwatchApi.get('/genre', {
-      params: { name: genreName, page }
-    });
-    return response.data;
+    try {
+      const response = await aniwatchApi.get('/genre', {
+        params: { name: genreName, page }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in getAnimeByGenre:', error);
+      throw error;
+    }
   },
 
   // Animes por categoria
   getAnimeByCategory: async (category: string, page: number = 1) => {
-    const response = await aniwatchApi.get('/category', {
-      params: { category, page }
-    });
-    return response.data;
+    try {
+      const response = await aniwatchApi.get('/category', {
+        params: { category, page }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in getAnimeByCategory:', error);
+      throw error;
+    }
   },
 
   // Animes por produtor
   getAnimeByProducer: async (producerName: string, page: number = 1) => {
-    const response = await aniwatchApi.get('/producer', {
-      params: { name: producerName, page }
-    });
-    return response.data;
+    try {
+      const response = await aniwatchApi.get('/producer', {
+        params: { name: producerName, page }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in getAnimeByProducer:', error);
+      throw error;
+    }
   },
 
   // Cronograma de episódios
   getEstimatedSchedule: async (date: string) => {
-    const response = await aniwatchApi.get('/schedule/estimated-schedule', {
-      params: { date }
-    });
-    return response.data;
+    try {
+      const response = await aniwatchApi.get('/schedule/estimated-schedule', {
+        params: { date }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in getEstimatedSchedule:', error);
+      throw error;
+    }
   },
 };
 
