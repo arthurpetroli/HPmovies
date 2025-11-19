@@ -155,12 +155,13 @@ export const aniwatchService = {
   // Detalhes do anime
   getAnimeInfo: async (animeId: string) => {
     try {
-      const response = await aniwatchApi.get('/anime/info', {
-        params: { id: animeId }
-      });
+      console.log('🎯 Getting anime info for ID:', animeId);
+      // CORREÇÃO: Remover /info da URL
+      const response = await aniwatchApi.get(`/anime/${animeId}`);
+      console.log('✅ Anime info response:', response.data);
       return response.data;
-    } catch (error) {
-      console.error('Error in getAnimeInfo:', error);
+    } catch (error: any) {
+      console.error('❌ Error getting anime info:', error);
       throw error;
     }
   },
@@ -168,12 +169,12 @@ export const aniwatchService = {
   // Episódios do anime
   getAnimeEpisodes: async (animeId: string) => {
     try {
-      const response = await aniwatchApi.get('/anime/episodes', {
-        params: { id: animeId }
-      });
+      console.log('🎯 Getting episodes for ID:', animeId);
+      const response = await aniwatchApi.get(`/anime/${animeId}/episodes`);
+      console.log('✅ Episodes response:', response.data);
       return response.data;
-    } catch (error) {
-      console.error('Error in getAnimeEpisodes:', error);
+    } catch (error: any) {
+      console.error('❌ Error getting episodes:', error);
       throw error;
     }
   },

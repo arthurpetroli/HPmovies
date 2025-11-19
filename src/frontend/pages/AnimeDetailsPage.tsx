@@ -1,17 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import aniwatchService from '../services/aniwatch';
 import type { AnimeDetails, Episode } from '../types/anime';
-import { Play, Calendar, Star } from 'lucide-react';
+import { Play, Calendar, Star, ArrowLeft } from 'lucide-react';
 
 export const AnimeDetailsPage: React.FC = () => {
   const { animeId } = useParams<{ animeId: string }>();
+  const navigate = useNavigate();
   const [anime, setAnime] = useState<AnimeDetails | null>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (animeId) {
+      console.log('🎬 Loading anime with ID:', animeId);
       loadAnimeData(animeId);
     }
   }, [animeId]);
@@ -19,15 +22,27 @@ export const AnimeDetailsPage: React.FC = () => {
   const loadAnimeData = async (id: string) => {
     try {
       setLoading(true);
+      setError(null);
+      
+      console.log('📡 Fetching anime info for:', id);
+      
       const [infoData, episodesData] = await Promise.all([
         aniwatchService.getAnimeInfo(id),
         aniwatchService.getAnimeEpisodes(id),
       ]);
 
-      setAnime(infoData.data?.anime?.info);
+      console.log('✅ Anime info received:', infoData);
+      console.log('✅ Episodes received:', episodesData);
+
+      if (!infoData?.data?.anime?.info) {
+        throw new Error('Dados do anime não encontrados');
+      }
+
+      setAnime(infoData.data.anime.info);
       setEpisodes(episodesData.data?.episodes || []);
-    } catch (error) {
-      console.error('Erro ao carregar anime:', error);
+    } catch (error: any) {
+      console.error('❌ Erro ao carregar anime:', error);
+      setError(error?.response?.data?.message || 'Erro ao carregar anime. Verifique se o ID está correto.');
     } finally {
       setLoading(false);
     }
@@ -37,6 +52,22 @@ export const AnimeDetailsPage: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white text-2xl">Carregando...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center px-4">
+        <div className="text-red-500 text-2xl mb-4">⚠️ {error}</div>
+        <div className="text-gray-400 mb-2">ID recebido: {animeId}</div>
+        <button
+          onClick={() => navigate('/')}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center gap-2"
+        >
+          <ArrowLeft size={20} />
+          Voltar para Home
+        </button>
       </div>
     );
   }

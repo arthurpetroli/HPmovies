@@ -3,21 +3,18 @@ export interface Anime {
   name: string;
   jname?: string;
   poster: string;
-  duration?: string;
-  type?: string;
+  description?: string;
   rating?: string | null;
+  type?: string;
+  duration?: string;
   episodes?: {
     sub: number;
     dub: number;
   };
 }
 
-export interface AnimeDetails {
-  id: string;
-  name: string;
-  poster: string;
-  description: string;
-  stats: {
+export interface AnimeDetails extends Anime {
+  stats?: {
     rating: string;
     quality: string;
     episodes: {
@@ -27,7 +24,7 @@ export interface AnimeDetails {
     type: string;
     duration: string;
   };
-  moreInfo: {
+  moreInfo?: {
     aired: string;
     genres: string[];
     status: string;

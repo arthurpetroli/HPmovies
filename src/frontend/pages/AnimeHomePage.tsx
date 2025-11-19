@@ -78,6 +78,28 @@ export const AnimeHomePage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const loadHomeData = async () => {
+      try {
+        const data = await aniwatchService.getHomePage();
+        console.log('🏠 Home page data:', data);
+        
+        // Log dos IDs dos animes
+        if (data?.data?.spotlightAnimes) {
+          console.log('🎯 Spotlight anime IDs:', 
+            data.data.spotlightAnimes.map((a: any) => ({ name: a.name, id: a.id }))
+          );
+        }
+        
+        // Continue com o resto do código...
+      } catch (error) {
+        console.error('Error loading home:', error);
+      }
+    };
+    
+    loadHomeData();
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center pt-20">
