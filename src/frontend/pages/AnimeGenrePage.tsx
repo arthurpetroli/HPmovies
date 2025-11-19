@@ -1,93 +1,113 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import aniwatchService from '../services/aniwatch';
 import { AnimeCard } from '../components/anime/AnimeCard';
-import type { Anime, ANIME_GENRES } from '../types/anime';
-import { ANIME_GENRES as genres } from '../types/anime';
+import aniwatchService from '../services/aniwatch';
+import type { Anime } from '../types/anime';
 
 export const AnimeGenrePage: React.FC = () => {
-  const { genreName } = useParams<{ genreName: string }>();
+  const { genre } = useParams<{ genre: string }>();
   const [animes, setAnimes] = useState<Anime[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [hasNextPage, setHasNextPage] = useState(false);
-  const [selectedGenre, setSelectedGenre] = useState(genreName || 'Action');
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
-    loadAnimes(selectedGenre, 1);
-  }, [selectedGenre]);
+    if (genre) {
+      loadGenreAnimes(genre, 1);
+    }
+  }, [genre]);
 
-  const loadAnimes = async (genre: string, page: number) => {
+  const loadGenreAnimes = async (genreName: string, page: number) => {
     try {
       setLoading(true);
-      const response = await aniwatchService.getAnimeByGenre(genre, page);
-      setAnimes(response.data?.animes || []);
-      setHasNextPage(response.data?.hasNextPage || false);
-      setCurrentPage(page);
-    } catch (error) {
-      console.error('Erro ao carregar gênero:', error);
+      setError(null);
+
+      const response = await aniwatchService.getAnimeByGenre(genreName, page);
+
+      if (response.data?.animes) {
+        setAnimes(response.data.animes);
+        setCurrentPage(response.data.currentPage || 1);
+        setTotalPages(response.data.totalPages || 1);
+      } else {
+        setAnimes([]);
+      }
+    } catch (err: any) {
+      console.error('Error loading genre:', err);
+      setError('Erro ao carregar animes. Tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
   const handlePageChange = (newPage: number) => {
-    loadAnimes(selectedGenre, newPage);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (genre) {
+      loadGenreAnimes(genre, newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-900 pt-20 px-4 md:px-8">
-      <h1 className="text-4xl font-bold text-white mb-6">Gêneros</h1>
-
-      {/* Genre Chips */}
-      <div className="flex flex-wrap gap-2 mb-8">
-        {genres.map((genre) => (
-          <button
-            key={genre}
-            onClick={() => setSelectedGenre(genre)}
-            className={`px-4 py-2 rounded-full transition ${
-              selectedGenre === genre
-                ? 'bg-pink-500 text-white'
-                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-            }`}
-          >
-            {genre}
-          </button>
-        ))}
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center">
+        <div className="text-white text-2xl">Carregando...</div>
       </div>
+    );
+  }
 
-      {loading ? (
-        <div className="text-center text-white mt-20">Carregando...</div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {animes.map((anime) => (
-              <AnimeCard key={anime.id} anime={anime} />
-            ))}
-          </div>
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center">
+        <div className="text-red-500 text-2xl">{error}</div>
+      </div>
+    );
+  }
 
-          <div className="flex justify-center gap-4 mt-8 mb-8">
-            {currentPage > 1 && (
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                className="bg-gray-800 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition"
-              >
-                Anterior
-              </button>
-            )}
-            <span className="text-white flex items-center">Página {currentPage}</span>
-            {hasNextPage && (
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                className="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-lg transition"
-              >
-                Próxima
-              </button>
-            )}
+  return (
+    <div className="min-h-screen bg-gray-900 pt-20 px-4 md:px-8 lg:px-16">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold text-white mb-8 capitalize">
+          {genre?.replace(/-/g, ' ')}
+        </h1>
+
+        {animes.length === 0 ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="text-gray-400 text-xl">Nenhum anime encontrado</div>
           </div>
-        </>
-      )}
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 mb-8">
+              {animes.map((anime) => (
+                <AnimeCard key={anime.id} anime={anime} />
+              ))}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 py-8">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 bg-gray-800 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                >
+                  Anterior
+                </button>
+
+                <span className="text-white px-4">
+                  Página {currentPage} de {totalPages}
+                </span>
+
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 bg-gray-800 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                >
+                  Próxima
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 };

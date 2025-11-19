@@ -6,38 +6,54 @@ import type { Anime } from '../types/anime';
 
 const categoryNames: Record<string, string> = {
   'most-popular': 'Mais Popular',
-  'most-favorite': 'Favoritos',
+  'most-favorite': 'Mais Favoritos',
   'completed': 'Completos',
   'recently-updated': 'Atualizados Recentemente',
   'recently-added': 'Adicionados Recentemente',
   'top-upcoming': 'Próximos Lançamentos',
-  'top-airing': 'No Ar',
-  'subbed-anime': 'Legendados',
-  'dubbed-anime': 'Dublados',
+  'top-airing': 'Em Exibição',
+  'movie': 'Filmes',
+  'special': 'Especiais',
+  'ova': 'OVAs',
+  'ona': 'ONAs',
+  'tv': 'TV',
+  'top-10': 'Top 10'
 };
 
 export const AnimeCategoryPage: React.FC = () => {
   const { category } = useParams<{ category: string }>();
   const [animes, setAnimes] = useState<Anime[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [hasNextPage, setHasNextPage] = useState(false);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     if (category) {
-      loadAnimes(category, 1);
+      loadCategoryAnimes(category, 1);
     }
   }, [category]);
 
-  const loadAnimes = async (cat: string, page: number) => {
+  const loadCategoryAnimes = async (cat: string, page: number) => {
     try {
       setLoading(true);
+      setError(null);
+
+      console.log('📡 Fetching category:', cat, 'page:', page);
       const response = await aniwatchService.getAnimeByCategory(cat, page);
-      setAnimes(response.data?.animes || []);
-      setHasNextPage(response.data?.hasNextPage || false);
-      setCurrentPage(page);
-    } catch (error) {
-      console.error('Erro ao carregar categoria:', error);
+      
+      console.log('✅ Category response:', response);
+
+      if (response.data?.animes) {
+        setAnimes(response.data.animes);
+        setCurrentPage(response.data.currentPage || 1);
+        setTotalPages(response.data.totalPages || 1);
+      } else {
+        setAnimes([]);
+      }
+    } catch (err: any) {
+      console.error('❌ Error loading category:', err);
+      setError('Erro ao carregar animes. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -45,7 +61,7 @@ export const AnimeCategoryPage: React.FC = () => {
 
   const handlePageChange = (newPage: number) => {
     if (category) {
-      loadAnimes(category, newPage);
+      loadCategoryAnimes(category, newPage);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
@@ -58,35 +74,58 @@ export const AnimeCategoryPage: React.FC = () => {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-900 pt-20 px-4 md:px-8">
-      <h1 className="text-4xl font-bold text-white mb-8">
-        {categoryNames[category || ''] || category}
-      </h1>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        {animes.map((anime) => (
-          <AnimeCard key={anime.id} anime={anime} />
-        ))}
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center">
+        <div className="text-red-500 text-2xl">{error}</div>
       </div>
+    );
+  }
 
-      <div className="flex justify-center gap-4 mt-8 mb-8">
-        {currentPage > 1 && (
-          <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            className="bg-gray-800 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition"
-          >
-            Anterior
-          </button>
-        )}
-        <span className="text-white flex items-center">Página {currentPage}</span>
-        {hasNextPage && (
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            className="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-lg transition"
-          >
-            Próxima
-          </button>
+  return (
+    <div className="min-h-screen bg-gray-900 pt-20 px-4 md:px-8 lg:px-16">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold text-white mb-8">
+          {categoryNames[category || ''] || category}
+        </h1>
+
+        {animes.length === 0 ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="text-gray-400 text-xl">Nenhum anime encontrado</div>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 mb-8">
+              {animes.map((anime) => (
+                <AnimeCard key={anime.id} anime={anime} />
+              ))}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 py-8">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 bg-gray-800 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                >
+                  Anterior
+                </button>
+
+                <span className="text-white px-4">
+                  Página {currentPage} de {totalPages}
+                </span>
+
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 bg-gray-800 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
+                >
+                  Próxima
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

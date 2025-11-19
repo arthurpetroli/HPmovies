@@ -1,35 +1,109 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Search, X } from 'lucide-react';
+import aniwatchService from '../../services/aniwatch';
 
 interface SearchBarProps {
-  value: string;
-  onChange: (value: string) => void;
-  onOpenFilters: () => void;
+  onClose?: () => void;
 }
 
-export function SearchBar({ value, onChange, onOpenFilters }: SearchBarProps) {
+export const SearchBar: React.FC<SearchBarProps> = ({ onClose }) => {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      if (query.trim().length < 2) {
+        setSuggestions([]);
+        return;
+      }
+
+      try {
+        const response = await aniwatchService.searchSuggestions(query);
+        setSuggestions(response.data?.suggestions || []);
+      } catch (error) {
+        console.error('Erro ao buscar sugestões:', error);
+        setSuggestions([]);
+      }
+    };
+
+    const debounce = setTimeout(fetchSuggestions, 300);
+    return () => clearTimeout(debounce);
+  }, [query]);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (query.trim()) {
+      navigate(`/search?q=${encodeURIComponent(query)}`);
+      setShowSuggestions(false);
+      onClose?.();
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: any) => {
+    navigate(`/anime/${suggestion.id}`);
+    setShowSuggestions(false);
+    setQuery('');
+    onClose?.();
+  };
+
   return (
-    <div className="flex gap-4 mb-6">
-      <div className="relative flex-1">
-        <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Buscar filmes, séries..."
-          className="w-full pl-12 pr-4 py-4 bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-2xl text-white placeholder-white/50 focus:outline-none focus:border-pink-500/50 focus:bg-zinc-800/70 transition-all duration-300"
-        />
-      </div>
-      <button
-        onClick={onOpenFilters}
-        className="px-6 py-4 bg-zinc-800/50 backdrop-blur-sm hover:bg-zinc-700/50 rounded-2xl text-white transition-all duration-300 border border-zinc-700/50 hover:border-zinc-600/50 flex items-center gap-2"
-      >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
-        </svg>
-        <span className="hidden md:inline">Filtros</span>
-      </button>
+    <div className="relative w-full max-w-2xl mx-auto">
+      <form onSubmit={handleSearch}>
+        <div className="relative">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setShowSuggestions(true);
+            }}
+            onFocus={() => setShowSuggestions(true)}
+            placeholder="Buscar anime..."
+            className="w-full bg-gray-800 text-white rounded-lg pl-12 pr-12 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500"
+          />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery('');
+                setSuggestions([]);
+              }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+            >
+              <X size={20} />
+            </button>
+          )}
+        </div>
+      </form>
+
+      {/* Suggestions Dropdown */}
+      {showSuggestions && suggestions.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 rounded-lg shadow-xl max-h-96 overflow-y-auto z-50">
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion.id}
+              onClick={() => handleSuggestionClick(suggestion)}
+              className="w-full flex items-center gap-3 p-3 hover:bg-gray-700 transition-colors text-left"
+            >
+              <img
+                src={suggestion.poster}
+                alt={suggestion.name}
+                className="w-12 h-16 object-cover rounded"
+              />
+              <div className="flex-1">
+                <div className="text-white font-medium">{suggestion.name}</div>
+                {suggestion.jname && (
+                  <div className="text-gray-400 text-sm">{suggestion.jname}</div>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
-}
+};
