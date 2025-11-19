@@ -39,21 +39,46 @@ export const AnimeCategoryPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      console.log('📡 Fetching category:', cat, 'page:', page);
+      console.log('📡 Buscando categoria:', cat, 'página:', page);
       const response = await aniwatchService.getAnimeByCategory(cat, page);
       
-      console.log('✅ Category response:', response);
+      console.log('📦 Resposta completa:', response);
 
-      if (response.data?.animes) {
-        setAnimes(response.data.animes);
-        setCurrentPage(response.data.currentPage || 1);
-        setTotalPages(response.data.totalPages || 1);
+      // Tenta diferentes estruturas de resposta
+      let categoryData = null;
+      
+      if (response.data?.data) {
+        // Estrutura: { success: true, data: { data: { animes: [...] } } }
+        categoryData = response.data.data;
+      } else if (response.data) {
+        // Estrutura: { success: true, data: { animes: [...] } }
+        categoryData = response.data;
       } else {
+        categoryData = response;
+      }
+
+      console.log('✅ Dados processados:', categoryData);
+
+      if (categoryData?.animes && Array.isArray(categoryData.animes)) {
+        setAnimes(categoryData.animes);
+        setCurrentPage(categoryData.currentPage || page);
+        setTotalPages(categoryData.totalPages || 1);
+        
+        console.log(`📊 ${categoryData.animes.length} animes carregados`);
+      } else {
+        console.warn('⚠️ Nenhum anime encontrado na resposta');
         setAnimes([]);
       }
     } catch (err: any) {
-      console.error('❌ Error loading category:', err);
-      setError('Erro ao carregar animes. Tente novamente.');
+      console.error('❌ Erro ao carregar categoria:', err);
+      
+      if (err.code === 'ERR_NETWORK') {
+        setError('Erro de conexão. Verifique se o backend está rodando.');
+      } else if (err.response?.status === 404) {
+        setError(`Categoria "${cat}" não encontrada.`);
+      } else {
+        setError(err.message || 'Erro ao carregar animes. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
@@ -69,15 +94,37 @@ export const AnimeCategoryPage: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center">
-        <div className="text-white text-2xl">Carregando...</div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-pink-500 mx-auto mb-4"></div>
+          <p className="text-white text-xl">Carregando {categoryNames[category || ''] || 'animes'}...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center">
-        <div className="text-red-500 text-2xl">{error}</div>
+      <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center px-4">
+        <div className="text-center max-w-2xl">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-white mb-4">Erro ao Carregar</h2>
+          <p className="text-gray-300 mb-6">{error}</p>
+          
+          <div className="flex gap-4 justify-center">
+            <button
+              onClick={() => category && loadCategoryAnimes(category, currentPage)}
+              className="bg-pink-500 hover:bg-pink-600 text-white px-8 py-3 rounded-lg transition font-semibold"
+            >
+              🔄 Tentar Novamente
+            </button>
+            <button
+              onClick={() => window.history.back()}
+              className="bg-gray-700 hover:bg-gray-600 text-white px-8 py-3 rounded-lg transition font-semibold"
+            >
+              ← Voltar
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -90,8 +137,14 @@ export const AnimeCategoryPage: React.FC = () => {
         </h1>
 
         {animes.length === 0 ? (
-          <div className="flex justify-center items-center py-20">
-            <div className="text-gray-400 text-xl">Nenhum anime encontrado</div>
+          <div className="flex flex-col justify-center items-center py-20">
+            <div className="text-gray-400 text-xl mb-2">📭 Nenhum anime encontrado</div>
+            <button
+              onClick={() => window.history.back()}
+              className="mt-4 bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-lg transition"
+            >
+              ← Voltar
+            </button>
           </div>
         ) : (
           <>
@@ -101,7 +154,6 @@ export const AnimeCategoryPage: React.FC = () => {
               ))}
             </div>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex justify-center items-center gap-2 py-8">
                 <button
@@ -109,7 +161,7 @@ export const AnimeCategoryPage: React.FC = () => {
                   disabled={currentPage === 1}
                   className="px-4 py-2 bg-gray-800 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
                 >
-                  Anterior
+                  ← Anterior
                 </button>
 
                 <span className="text-white px-4">
@@ -121,7 +173,7 @@ export const AnimeCategoryPage: React.FC = () => {
                   disabled={currentPage === totalPages}
                   className="px-4 py-2 bg-gray-800 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors"
                 >
-                  Próxima
+                  Próxima →
                 </button>
               </div>
             )}
