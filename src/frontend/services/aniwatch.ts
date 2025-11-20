@@ -2,7 +2,6 @@ import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:4000/api/v2/hianime';
 
-// Criar instância do axios
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
@@ -13,13 +12,9 @@ const api = axios.create({
 
 type EpisodeCategory = 'sub' | 'dub' | 'raw';
 
-// Função helper para extrair dados da resposta
 const unwrapResponse = (response: any) => {
-  // Se response.data.data existe, usa isso
   if (response?.data?.data) return response.data.data;
-  // Senão, usa response.data
   if (response?.data) return response.data;
-  // Último recurso
   return response;
 };
 
@@ -44,11 +39,27 @@ const aniwatchService = {
       const response = await api.get(`/search`, {
         params: { q: query, page },
       });
-      console.log('✅ Resultados da busca:', response.data);
-      return unwrapResponse(response);
+      console.log('✅ Resposta da busca:', response.data);
+      return response.data;
     } catch (error: any) {
       console.error('❌ Erro na busca:', error);
       throw error;
+    }
+  },
+
+  // Search suggestions (autocomplete)
+  searchSuggestions: async (query: string) => {
+    try {
+      console.log(`💡 Buscando sugestões para: "${query}"`);
+      const response = await api.get(`/search/suggestion`, {
+        params: { q: query },
+      });
+      console.log('✅ Sugestões:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Erro ao buscar sugestões:', error);
+      // Retornar array vazio em caso de erro para não quebrar a UI
+      return { data: { suggestions: [] } };
     }
   },
 
@@ -58,7 +69,7 @@ const aniwatchService = {
       console.log(`📺 Buscando info do anime: ${animeId}`);
       const response = await api.get(`/anime/${animeId}`);
       console.log('✅ Info do anime:', response.data);
-      return response.data; // Retorna a resposta completa
+      return response.data;
     } catch (error: any) {
       console.error('❌ Erro ao buscar info:', error);
       throw error;
@@ -71,7 +82,7 @@ const aniwatchService = {
       console.log(`📺 Buscando episódios: ${animeId}`);
       const response = await api.get(`/anime/${animeId}/episodes`);
       console.log('✅ Episódios:', response.data);
-      return response.data; // Retorna a resposta completa
+      return response.data;
     } catch (error: any) {
       console.error('❌ Erro ao buscar episódios:', error);
       throw error;
@@ -86,7 +97,7 @@ const aniwatchService = {
         params: { animeEpisodeId: episodeId },
       });
       console.log('✅ Servidores:', response.data);
-      return response.data; // Retorna a resposta completa
+      return response.data;
     } catch (error: any) {
       console.error('❌ Erro ao buscar servidores:', error.response?.data || error);
       throw error;
@@ -115,7 +126,7 @@ const aniwatchService = {
 
       const response = await api.get(`/episode/sources`, { params });
       console.log('✅ Fontes recebidas:', response.data);
-      return response.data; // Retorna a resposta completa
+      return response.data;
     } catch (error: any) {
       console.error('❌ Erro ao buscar fontes:', error.response?.data || error);
       throw error;
