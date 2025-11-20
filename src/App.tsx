@@ -18,7 +18,7 @@ function App() {
           <Route path="/search" element={<AnimeSearchPage />} />
           <Route path="/category/:category" element={<AnimeCategoryPage />} />
           <Route path="/genre/:genre" element={<AnimeGenrePage />} />
-          <Route path="/watch/:episodeId" element={<WatchPage />} />
+          <Route path="/watch/*" element={<WatchPage />} />
         </Routes>
       </div>
     </BrowserRouter>

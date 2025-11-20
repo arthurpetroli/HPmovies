@@ -1,211 +1,216 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import aniwatchService from '../services/aniwatch';
-import type { AnimeDetails, Episode } from '../types/anime';
-import { Play, Calendar, Star, ArrowLeft } from 'lucide-react';
 
 export const AnimeDetailsPage: React.FC = () => {
   const { animeId } = useParams<{ animeId: string }>();
   const navigate = useNavigate();
-  const [anime, setAnime] = useState<AnimeDetails | null>(null);
-  const [episodes, setEpisodes] = useState<Episode[]>([]);
+
+  const [animeInfo, setAnimeInfo] = useState<any>(null);
+  const [episodes, setEpisodes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (animeId) {
-      console.log('🎬 Loading anime with ID:', animeId);
-      loadAnimeData(animeId);
-    }
-  }, [animeId]);
-
-  const loadAnimeData = async (id: string) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('📡 Fetching anime info for:', id);
-      
-      const [infoData, episodesData] = await Promise.all([
-        aniwatchService.getAnimeInfo(id),
-        aniwatchService.getAnimeEpisodes(id),
-      ]);
-
-      console.log('✅ Anime info received:', infoData);
-      console.log('✅ Episodes received:', episodesData);
-
-      if (!infoData?.data?.anime?.info) {
-        throw new Error('Dados do anime não encontrados');
+    const loadAnimeData = async () => {
+      if (!animeId) {
+        setError('ID do anime não fornecido');
+        setLoading(false);
+        return;
       }
 
-      setAnime(infoData.data.anime.info);
-      setEpisodes(episodesData.data?.episodes || []);
-    } catch (error: any) {
-      console.error('❌ Erro ao carregar anime:', error);
-      setError(error?.response?.data?.message || 'Erro ao carregar anime. Verifique se o ID está correto.');
-    } finally {
-      setLoading(false);
-    }
+      try {
+        setLoading(true);
+        setError(null);
+
+        console.log('📺 Carregando dados do anime:', animeId);
+
+        // Buscar informações do anime
+        const infoResponse = await aniwatchService.getAnimeInfo(animeId);
+        console.log('✅ Info do anime:', infoResponse);
+        
+        // A resposta vem com { success: true, data: { anime: {...} } }
+        const info = infoResponse?.data?.anime || infoResponse?.anime || infoResponse;
+        setAnimeInfo(info);
+
+        // Buscar episódios
+        const epsResponse = await aniwatchService.getAnimeEpisodes(animeId);
+        console.log('✅ Episódios:', epsResponse);
+        
+        // A resposta vem com { success: true, data: { episodes: [...] } }
+        const eps = epsResponse?.data?.episodes || epsResponse?.episodes || [];
+        setEpisodes(eps);
+
+      } catch (err: any) {
+        console.error('❌ Erro ao carregar anime:', err);
+        setError(err.response?.data?.message || 'Erro ao carregar anime');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAnimeData();
+  }, [animeId]);
+
+  const handleWatchEpisode = (episode: any) => {
+    // O episodeId já vem no formato correto: "steinsgate-3?ep=213"
+    console.log('🎬 Clicando no episódio:', episode);
+    console.log('🎯 Episode ID:', episode.episodeId);
+    navigate(`/watch/${episode.episodeId}`);
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-2xl">Carregando...</div>
+      <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-pink-500 border-t-transparent" />
+          <p className="text-white">Carregando anime...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center px-4">
-        <div className="text-red-500 text-2xl mb-4">⚠️ {error}</div>
-        <div className="text-gray-400 mb-2">ID recebido: {animeId}</div>
-        <button
-          onClick={() => navigate('/')}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center gap-2"
-        >
-          <ArrowLeft size={20} />
-          Voltar para Home
-        </button>
+      <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-red-400 text-xl">❌ {error}</p>
+          <button
+            onClick={() => navigate('/')}
+            className="bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-lg transition"
+          >
+            Voltar para Home
+          </button>
+        </div>
       </div>
     );
   }
 
-  if (!anime) {
+  if (!animeInfo) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-2xl">Anime não encontrado</div>
+      <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center">
+        <p className="text-white">Anime não encontrado</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Hero Background */}
-      <div
-        className="relative h-[50vh] bg-cover bg-center"
-        style={{ backgroundImage: `url(${anime.poster})` }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-900 to-transparent" />
-      </div>
+    <div className="min-h-screen bg-gray-900 pt-20">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-8">
+        {/* Botão voltar */}
+        <button
+          onClick={() => navigate(-1)}
+          className="text-pink-500 hover:text-pink-400 transition flex items-center gap-2"
+        >
+          <span>←</span> Voltar
+        </button>
 
-      {/* Content */}
-      <div className="relative -mt-32 px-8 md:px-16">
-        <div className="flex flex-col md:flex-row gap-8">
-          {/* Poster */}
-          <img
-            src={anime.poster}
-            alt={anime.name}
-            className="w-64 h-96 object-cover rounded-lg shadow-2xl"
-          />
+        {/* Info do anime */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="md:col-span-1">
+            <img
+              src={animeInfo.info?.poster || animeInfo.poster}
+              alt={animeInfo.info?.name || animeInfo.name}
+              className="w-full rounded-lg shadow-lg"
+              onError={(e) => {
+                e.currentTarget.src = 'https://via.placeholder.com/300x450?text=No+Image';
+              }}
+            />
+          </div>
 
-          {/* Info */}
-          <div className="flex-1">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">{anime.name}</h1>
+          <div className="md:col-span-2 space-y-4">
+            <h1 className="text-3xl md:text-4xl font-bold text-white">
+              {animeInfo.info?.name || animeInfo.name || 'Sem título'}
+            </h1>
 
-            <div className="flex flex-wrap gap-4 mb-6">
-              {anime.stats?.rating && (
-                <div className="flex items-center gap-2 bg-yellow-500 text-black px-3 py-1 rounded">
-                  <Star size={16} fill="currentColor" />
-                  {anime.stats.rating}
-                </div>
-              )}
-              {anime.stats?.type && (
-                <span className="bg-purple-600 px-3 py-1 rounded uppercase font-semibold">
-                  {anime.stats.type}
+            {animeInfo.info?.description && (
+              <p className="text-gray-300 leading-relaxed">
+                {animeInfo.info.description}
+              </p>
+            )}
+
+            {/* Stats */}
+            <div className="flex flex-wrap gap-2">
+              {animeInfo.info?.stats?.episodes?.sub && (
+                <span className="bg-pink-500/20 text-pink-400 px-3 py-1 rounded-full text-sm">
+                  {animeInfo.info.stats.episodes.sub} eps (leg)
                 </span>
               )}
-              {anime.stats?.episodes && (
-                <>
-                  {anime.stats.episodes.sub > 0 && (
-                    <span className="bg-blue-600 px-3 py-1 rounded">
-                      SUB {anime.stats.episodes.sub}
-                    </span>
-                  )}
-                  {anime.stats.episodes.dub > 0 && (
-                    <span className="bg-green-600 px-3 py-1 rounded">
-                      DUB {anime.stats.episodes.dub}
-                    </span>
-                  )}
-                </>
+              {animeInfo.info?.stats?.episodes?.dub > 0 && (
+                <span className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-sm">
+                  {animeInfo.info.stats.episodes.dub} eps (dub)
+                </span>
+              )}
+              {animeInfo.info?.stats?.type && (
+                <span className="bg-purple-500/20 text-purple-400 px-3 py-1 rounded-full text-sm">
+                  {animeInfo.info.stats.type}
+                </span>
+              )}
+              {animeInfo.info?.stats?.rating && (
+                <span className="bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full text-sm">
+                  ⭐ {animeInfo.info.stats.rating}
+                </span>
               )}
             </div>
 
-            <p className="text-gray-300 mb-6 leading-relaxed">
-              {anime.description}
-            </p>
-
-            {anime.moreInfo && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                {anime.moreInfo.status && (
-                  <div>
-                    <span className="text-gray-400">Status:</span>{' '}
-                    <span className="text-white font-semibold">{anime.moreInfo.status}</span>
-                  </div>
-                )}
-                {anime.moreInfo.aired && (
-                  <div>
-                    <span className="text-gray-400">Lançamento:</span>{' '}
-                    <span className="text-white font-semibold">{anime.moreInfo.aired}</span>
-                  </div>
-                )}
-                {anime.moreInfo.studios && (
-                  <div>
-                    <span className="text-gray-400">Estúdio:</span>{' '}
-                    <span className="text-white font-semibold">{anime.moreInfo.studios}</span>
-                  </div>
-                )}
-                {anime.moreInfo.genres && anime.moreInfo.genres.length > 0 && (
-                  <div className="col-span-full">
-                    <span className="text-gray-400">Gêneros:</span>{' '}
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {anime.moreInfo.genres.map((genre) => (
-                        <span
-                          key={genre}
-                          className="bg-gray-700 px-3 py-1 rounded-full text-sm"
-                        >
-                          {genre}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            {/* Gêneros */}
+            {animeInfo.moreInfo?.genres && animeInfo.moreInfo.genres.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-white font-semibold">Gêneros</h3>
+                <div className="flex flex-wrap gap-2">
+                  {animeInfo.moreInfo.genres.map((genre: string, idx: number) => (
+                    <span
+                      key={idx}
+                      className="bg-gray-700 text-gray-200 px-3 py-1 rounded-full text-sm"
+                    >
+                      {genre}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Episodes Section */}
-        <div className="mt-12">
-          <h2 className="text-3xl font-bold mb-6">Episódios</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {episodes.map((episode) => (
-              <Link
-                key={episode.episodeId}
-                to={`/watch/${episode.episodeId}`}
-                className={`bg-gray-800 hover:bg-gray-700 p-4 rounded-lg transition ${
-                  episode.isFiller ? 'border-2 border-yellow-500' : ''
-                }`}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <Play size={16} />
-                  <span className="font-semibold">EP {episode.number}</span>
-                </div>
-                {episode.title && (
-                  <p className="text-xs text-gray-400 mt-2 text-center line-clamp-2">
-                    {episode.title}
-                  </p>
-                )}
-                {episode.isFiller && (
-                  <span className="text-xs text-yellow-500 block text-center mt-1">
-                    Filler
-                  </span>
-                )}
-              </Link>
-            ))}
+        {/* Lista de episódios */}
+        {episodes.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold text-white">
+              Episódios ({episodes.length})
+            </h2>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+              {episodes.map((episode: any) => (
+                <button
+                  key={episode.episodeId}
+                  onClick={() => handleWatchEpisode(episode)}
+                  className="bg-gray-800 hover:bg-pink-500 text-white px-4 py-3 rounded-lg transition-all hover:scale-105 font-medium group"
+                  title={episode.title || `Episódio ${episode.number}`}
+                >
+                  <div className="text-center">
+                    <p className="text-lg font-bold">EP {episode.number}</p>
+                    {episode.title && (
+                      <p className="text-xs text-gray-400 group-hover:text-white truncate mt-1">
+                        {episode.title}
+                      </p>
+                    )}
+                    {episode.isFiller && (
+                      <span className="block text-xs text-yellow-400 mt-1">
+                        Filler
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
+
+        {episodes.length === 0 && (
+          <div className="bg-gray-800 rounded-lg p-8 text-center">
+            <p className="text-gray-400">Nenhum episódio disponível</p>
+          </div>
+        )}
       </div>
     </div>
   );
