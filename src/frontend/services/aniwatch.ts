@@ -11,6 +11,9 @@ const api = axios.create({
   },
 });
 
+type EpisodeCategory = 'sub' | 'dub' | 'raw';
+const unwrapResponse = (response: any) => response?.data?.data || response?.data || response;
+
 const aniwatchService = {
   // Homepage data
   getHomePage: async () => {
@@ -67,14 +70,27 @@ const aniwatchService = {
   },
 
   // Get episode sources
-  getEpisodeSources: async (episodeId: string) => {
+  getEpisodeSources: async (
+    episodeId: string,
+    server?: string,
+    category: EpisodeCategory = 'sub'
+  ) => {
     try {
-      console.log(`🎬 Buscando fontes do episódio: ${episodeId}`);
+      console.log(
+        `🎬 Buscando fontes do episódio: ${episodeId} | servidor: ${server || 'padrão'} | categoria: ${category}`
+      );
+
       const response = await api.get(`/episode/sources`, {
-        params: { animeEpisodeId: episodeId }
+        params: {
+          animeEpisodeId: episodeId,
+          category,
+          ...(server ? { server } : {}),
+        },
       });
-      console.log('✅ Fontes do episódio:', response.data);
-      return response.data;
+
+      const data = unwrapResponse(response);
+      console.log('✅ Fontes do episódio:', data);
+      return data;
     } catch (error: any) {
       console.error('❌ Erro ao buscar fontes:', error);
       throw error;
@@ -118,8 +134,10 @@ const aniwatchService = {
       const response = await api.get(`/episode/servers`, {
         params: { animeEpisodeId: episodeId }
       });
-      console.log('✅ Servidores:', response.data);
-      return response.data;
+
+      const data = unwrapResponse(response);
+      console.log('✅ Servidores:', data);
+      return data;
     } catch (error: any) {
       console.error('❌ Erro ao buscar servidores:', error);
       throw error;
