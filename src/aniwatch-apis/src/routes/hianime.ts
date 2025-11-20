@@ -240,19 +240,19 @@ hianimeRouter.get("/anime/:animeId/next-episode-schedule", async (c) => {
 // Verifique se a rota está definida assim:
 
 hianimeRouter.get("/anime/info/:id", async (c) => {
+  const cacheConfig = c.get("CACHE_CONFIG");
   const animeId = c.req.param("id");
   
-  // LOG IMPORTANTE - adicione isso
   console.log("🎯 Received anime ID:", animeId);
   
   try {
-    const data = await cache.getOrSet(
-      `anime-info-${animeId}`,
-      async () => await hianime.getInfo(animeId),
-      60 * 60 // 1 hora
+    const data = await cache.getOrSet<HiAnime.ScrapedAnimeAboutInfo>(
+      async () => hianime.getInfo(animeId),
+      cacheConfig.key,
+      cacheConfig.duration
     );
     
-    return c.json(data);
+    return c.json({ status: 200, data }, { status: 200 });
   } catch (error: any) {
     console.error("❌ Error fetching anime info:", error);
     return c.json(
