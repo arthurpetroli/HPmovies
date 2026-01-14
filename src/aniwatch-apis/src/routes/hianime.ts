@@ -1,5 +1,5 @@
-import { Hono } from "hono";
 import { HiAnime } from "aniwatch";
+import { Hono } from "hono";
 import { cache } from "../config/cache.js";
 import type { ServerContext } from "../config/context.js";
 
@@ -240,29 +240,115 @@ hianimeRouter.get("/anime/:animeId/next-episode-schedule", async (c) => {
 // Verifique se a rota está definida assim:
 
 hianimeRouter.get("/anime/info/:id", async (c) => {
-  const cacheConfig = c.get("CACHE_CONFIG");
-  const animeId = c.req.param("id");
-  
-  console.log("🎯 Received anime ID:", animeId);
-  
-  try {
-    const data = await cache.getOrSet<HiAnime.ScrapedAnimeAboutInfo>(
-      async () => hianime.getInfo(animeId),
-      cacheConfig.key,
-      cacheConfig.duration
-    );
-    
-    return c.json({ status: 200, data }, { status: 200 });
-  } catch (error: any) {
-    console.error("❌ Error fetching anime info:", error);
-    return c.json(
-      {
-        success: false,
-        message: error?.message || "Failed to fetch anime info"
-      },
-      error?.status || 500
-    );
-  }
+    const cacheConfig = c.get("CACHE_CONFIG");
+    const animeId = c.req.param("id");
+
+    console.log("🎯 Received anime ID:", animeId);
+
+    try {
+        const data = await cache.getOrSet<HiAnime.ScrapedAnimeAboutInfo>(
+            async () => hianime.getInfo(animeId),
+            cacheConfig.key,
+            cacheConfig.duration
+        );
+
+        return c.json({ status: 200, data }, { status: 200 });
+    } catch (error: any) {
+        console.error("❌ Error fetching anime info:", error);
+        return c.json(
+            {
+                success: false,
+                message: error?.message || "Failed to fetch anime info",
+            },
+            error?.status || 500
+        );
+    }
+});
+
+// /api/v2/hianime/proxy-stream?url={encodedUrl}
+hianimeRouter.get("/proxy-stream", async (c) => {
+    try {
+        const encodedUrl = c.req.query("url");
+        if (!encodedUrl) {
+            return c.json({ error: "URL parameter is required" }, 400);
+        }
+
+        const url = decodeURIComponent(encodedUrl);
+
+        // Buscar o conteúdo com os headers corretos
+        const response = await fetch(url, {
+            headers: {
+                Referer: "https://megacloud.blog/",
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                Accept: "*/*",
+                "Accept-Language": "en-US,en;q=0.9",
+                Origin: "https://megacloud.blog",
+            },
+        });
+
+        if (!response.ok) {
+            return c.json(
+                { error: `Failed to fetch stream: ${response.statusText}` },
+                response.status
+            );
+        }
+
+        // Pegar o content-type
+        const contentType =
+            response.headers.get("content-type") ||
+            "application/vnd.apple.mpegurl";
+
+        // Se for um arquivo m3u8, precisamos reescrever as URLs internas para também passarem pelo proxy
+        if (contentType.includes("mpegurl") || contentType.includes("m3u8")) {
+            const body = await response.text();
+            const baseUrl = url.substring(0, url.lastIndexOf("/") + 1);
+            const modifiedBody = body
+                .split("\n")
+                .map((line) => {
+                    // Se a linha não é um comentário e não começa com http
+                    if (
+                        !line.startsWith("#") &&
+                        line.trim() &&
+                        !line.startsWith("http")
+                    ) {
+                        const fullUrl = line.startsWith("/")
+                            ? new URL(line, baseUrl).href
+                            : baseUrl + line;
+                        // Reescrever para passar pelo proxy
+                        return `/api/v2/hianime/proxy-stream?url=${encodeURIComponent(fullUrl)}`;
+                    }
+                    return line;
+                })
+                .join("\n");
+
+            return c.text(modifiedBody, 200, {
+                "Content-Type": contentType,
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers":
+                    "Range, Accept, Accept-Language, Content-Type",
+                "Cache-Control": "no-cache",
+            });
+        }
+
+        // Para outros tipos de conteúdo (segmentos .ts, etc), apenas retornar o conteúdo
+        const arrayBuffer = await response.arrayBuffer();
+        return c.body(arrayBuffer, 200, {
+            "Content-Type": contentType,
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers":
+                "Range, Accept, Accept-Language, Content-Type",
+            "Cache-Control": "public, max-age=3600",
+        });
+    } catch (error: any) {
+        console.error("Proxy stream error:", error);
+        return c.json(
+            { error: error.message || "Failed to proxy stream" },
+            500
+        );
+    }
 });
 
 export { hianimeRouter };
