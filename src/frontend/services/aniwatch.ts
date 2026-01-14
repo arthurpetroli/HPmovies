@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:4000/api/v2/hianime';
+// Em desenvolvimento, usamos o proxy do Vite (/api) para evitar erros de CORS.
+// Em produção, usamos a URL completa ou a variável de ambiente.
+const API_BASE_URL = import.meta.env.DEV ? '/api/v2/hianime' : 'http://localhost:4000/api/v2/hianime';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
