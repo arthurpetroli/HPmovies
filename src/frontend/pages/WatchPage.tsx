@@ -84,7 +84,7 @@ export const WatchPage: React.FC = () => {
       
       console.log('📦 Resposta dos servidores:', response);
 
-      if (!response || !response.success) {
+      if (!response || (!response.success && response.status !== 200)) {
         throw new Error('Resposta inválida da API');
       }
 
@@ -150,7 +150,7 @@ export const WatchPage: React.FC = () => {
 
       console.log('📦 Resposta das fontes:', response);
 
-      if (!response || !response.success) {
+      if (!response || (!response.success && response.status !== 200)) {
         throw new Error('Resposta inválida da API');
       }
 

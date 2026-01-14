@@ -56,7 +56,7 @@ export const AnimeDetailsPage: React.FC = () => {
     // O episodeId já vem no formato correto: "steinsgate-3?ep=213"
     console.log('🎬 Clicando no episódio:', episode);
     console.log('🎯 Episode ID:', episode.episodeId);
-    navigate(`/watch/${episode.episodeId}`);
+    navigate(`/watch/${encodeURIComponent(episode.episodeId)}`);
   };
 
   if (loading) {
