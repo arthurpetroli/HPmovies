@@ -42,8 +42,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [settingsView, setSettingsView] = useState<'main' | 'quality' | 'subtitles'>('main');
   const [qualities, setQualities] = useState<{height: number, level: number}[]>([]);
-  const [currentQuality, setCurrentQuality] = useState<number>(-1); // -1 = Auto
-  const [currentSubtitle, setCurrentSubtitle] = useState<number>(-1); // -1 = Off
+  const [currentQuality, setCurrentQuality] = useState<number>(-1);
+  const [currentSubtitle, setCurrentSubtitle] = useState<number>(0); // Começa com a primeira legenda (0)
 
   // Formata o tempo (ex: 24:05)
   const formatTime = (time: number) => {
@@ -154,6 +154,39 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }; 
   }, [src, isM3U8]); // Removido autoPlay das dependências para evitar reload
 
+  // Sincroniza a legenda ativa sempre que a lista ou a seleção mudar
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Se a lista de legendas mudar, reseta para a primeira (se existir)
+    if (subtitles.length > 0 && currentSubtitle >= subtitles.length) {
+      setCurrentSubtitle(0);
+    }
+
+    const applySubtitleMode = () => {
+      const tracks = video.textTracks;
+      // Itera sobre as faixas de texto nativas do vídeo
+      for (let i = 0; i < tracks.length; i++) {
+        const track = tracks[i];
+        // Verifica se é uma faixa de legenda criada por nós (comparando label ou language)
+        // Se currentSubtitle for -1, desativa tudo.
+        if (currentSubtitle !== -1 && subtitles[currentSubtitle]) {
+           const selected = subtitles[currentSubtitle];
+           const isMatch = track.label === (selected.label || selected.lang) || track.language === selected.lang;
+           track.mode = isMatch ? 'showing' : 'disabled';
+        } else {
+           track.mode = 'disabled';
+        }
+      }
+    };
+
+    // Aplica imediatamente e agenda uma reaplicação para garantir (caso o vídeo ainda esteja carregando)
+    applySubtitleMode();
+    const timeout = setTimeout(applySubtitleMode, 500);
+    return () => clearTimeout(timeout);
+  }, [currentSubtitle, subtitles]);
+
   // Controle de Play/Pause
   const togglePlay = useCallback(() => {
     if (videoRef.current) {
@@ -247,15 +280,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   // Mudança de Legenda
   const changeSubtitle = (index: number) => {
-    if (videoRef.current) {
-      // Desativa todas as faixas primeiro
-      Array.from(videoRef.current.textTracks).forEach(track => track.mode = 'disabled');
-      if (index >= 0 && videoRef.current.textTracks[index]) {
-        videoRef.current.textTracks[index].mode = 'showing';
-      }
-      setCurrentSubtitle(index);
-      setSettingsView('main');
-    }
+    setCurrentSubtitle(index);
+    setSettingsView('main');
   };
 
   // Atalhos de Teclado
@@ -315,13 +341,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       >
         {subtitles.map((sub, index) => (
           <track 
-            key={index} 
+            key={`${sub.url}-${index}`} 
             kind="subtitles" 
             // Usa o proxy para as legendas também para evitar erro de segurança
             src={getProxyUrl(sub.url)} 
             label={sub.label || sub.lang} 
             srcLang={sub.lang} 
-            default={index === 0}
           />
         ))}
       </video>

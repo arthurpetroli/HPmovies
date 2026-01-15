@@ -171,7 +171,8 @@ export const WatchPage: React.FC = () => {
       const subtitlesData = rawTracks.filter((track: any) => 
         track.kind !== 'thumbnails' && 
         track.label !== 'thumbnails' && 
-        track.lang !== 'thumbnails'
+        track.lang !== 'thumbnails' &&
+        track.url // Garante que tem URL
       );
 
       if (sourcesData.length === 0) {
