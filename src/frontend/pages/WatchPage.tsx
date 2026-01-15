@@ -19,6 +19,8 @@ interface StreamingSource {
 interface EpisodeSubtitle {
   lang?: string;
   url: string;
+  label?: string;
+  kind?: string;
 }
 
 interface EpisodeServersByCategory {
@@ -156,7 +158,13 @@ export const WatchPage: React.FC = () => {
 
       const data = response.data;
       const sourcesData = Array.isArray(data.sources) ? data.sources : [];
-      const subtitlesData = Array.isArray(data.subtitles) ? data.subtitles : [];
+
+      const rawTracks = Array.isArray(data.tracks) ? data.tracks : (Array.isArray(data.subtitles) ? data.subtitles : []);
+      const subtitlesData = rawTracks.filter((track: any) => 
+        track.kind !== 'thumbnails' && 
+        track.label !== 'thumbnails' && 
+        track.lang !== 'thumbnails'
+      );
 
       console.log('🎥 Sources processadas:', sourcesData);
       console.log('📝 Subtitles processadas:', subtitlesData);
