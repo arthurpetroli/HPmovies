@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "nodemon --watch src/backend --exec tsx src/backend/server.ts",
     "dev:frontend": "vite",
-    "build": "vite build && npm run build:backend",
+    "build": "vite build && npm run build:backend && echo '{\"type\":\"commonjs\"}' > dist/backend/package.json",
     "start": "npm run start:backend",
     "lint": "eslint .",
     "preview": "vite preview",

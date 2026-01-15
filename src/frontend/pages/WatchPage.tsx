@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { MessageSquare, Share2, Flag, List, Search } from 'lucide-react';
 import aniwatchService from '../services/aniwatch';
 import { VideoPlayer } from '../components/player/VideoPlayer';
 
@@ -41,7 +42,8 @@ export const WatchPage: React.FC = () => {
 
   // O episodeId vem da URL, pode ter múltiplos segmentos (ex: steinsgate-3/ep=230)
   // Vamos reconstruir corretamente
-  const episodeId = params['*'] || params.episodeId || '';
+  const rawEpisodeId = params['*'] || params.episodeId || '';
+  const episodeId = decodeURIComponent(rawEpisodeId);
 
   const [servers, setServers] = useState<EpisodeServersByCategory>({ sub: [], dub: [], raw: [] });
   const [selectedCategory, setSelectedCategory] = useState<EpisodeCategory>('sub');
@@ -49,15 +51,12 @@ export const WatchPage: React.FC = () => {
   const [sources, setSources] = useState<StreamingSource[]>([]);
   const [selectedSource, setSelectedSource] = useState<StreamingSource | null>(null);
   const [subtitles, setSubtitles] = useState<EpisodeSubtitle[]>([]);
+  const [episodeList, setEpisodeList] = useState<any[]>([]);
   const [loadingServers, setLoadingServers] = useState(true);
   const [loadingSources, setLoadingSources] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('📺 WatchPage montado');
-    console.log('📦 Params:', params);
-    console.log('🎯 Episode ID:', episodeId);
-    
     if (!episodeId) {
       setError('ID do episódio não foi fornecido');
       setLoadingServers(false);
@@ -72,20 +71,38 @@ export const WatchPage: React.FC = () => {
       return;
     }
 
+    // Limpar estados anteriores ao mudar de episódio para evitar conflitos
+    setSources([]);
+    setSelectedSource(null);
+    setSubtitles([]);
+    setServers({ sub: [], dub: [], raw: [] });
+    setError(null);
+
     loadEpisodeServers(episodeId);
+    loadAnimeEpisodes(episodeId);
   }, [episodeId]);
+
+  const loadAnimeEpisodes = async (epId: string) => {
+    try {
+      // Extrai o ID do anime da string do episódio (ex: "one-piece-100?ep=2142" -> "one-piece-100")
+      const animeId = epId.split('?')[0];
+      if (!animeId) return;
+
+      const response = await aniwatchService.getAnimeEpisodes(animeId);
+      const eps = response?.data?.episodes || response?.episodes || [];
+      setEpisodeList(eps);
+    } catch (err) {
+      console.error('Erro ao carregar lista de episódios:', err);
+    }
+  };
 
   const loadEpisodeServers = async (epId: string) => {
     try {
       setLoadingServers(true);
       setError(null);
       
-      console.log('🔍 Carregando servidores para:', epId);
-
       const response = await aniwatchService.getEpisodeServers(epId);
       
-      console.log('📦 Resposta dos servidores:', response);
-
       if (!response || (!response.success && response.status !== 200)) {
         throw new Error('Resposta inválida da API');
       }
@@ -97,8 +114,6 @@ export const WatchPage: React.FC = () => {
         dub: Array.isArray(data.dub) ? data.dub : [],
         raw: Array.isArray(data.raw) ? data.raw : [],
       };
-
-      console.log('✅ Servidores normalizados:', normalized);
 
       setServers(normalized);
 
@@ -114,9 +129,6 @@ export const WatchPage: React.FC = () => {
       }
 
       const firstServer = normalized[availableCategory][0];
-
-      console.log('🎯 Categoria selecionada:', availableCategory);
-      console.log('🖥️ Servidor selecionado:', firstServer);
 
       setSelectedCategory(availableCategory);
       setSelectedServer(firstServer);
@@ -142,15 +154,11 @@ export const WatchPage: React.FC = () => {
       setLoadingSources(true);
       setError(null);
 
-      console.log('🎬 Carregando fontes:', { epId, serverName, category });
-
       const response = await aniwatchService.getEpisodeSources(
         epId,
         serverName,
         category
       );
-
-      console.log('📦 Resposta das fontes:', response);
 
       if (!response || (!response.success && response.status !== 200)) {
         throw new Error('Resposta inválida da API');
@@ -165,9 +173,6 @@ export const WatchPage: React.FC = () => {
         track.label !== 'thumbnails' && 
         track.lang !== 'thumbnails'
       );
-
-      console.log('🎥 Sources processadas:', sourcesData);
-      console.log('📝 Subtitles processadas:', subtitlesData);
 
       if (sourcesData.length === 0) {
         setError('Nenhuma fonte de vídeo disponível para este servidor. Tente outro servidor.');
@@ -216,7 +221,6 @@ export const WatchPage: React.FC = () => {
   };
 
   const handleSourceChange = (source: StreamingSource) => {
-    console.log('🔄 Mudando fonte para:', source);
     setSelectedSource(source);
   };
 
@@ -243,144 +247,157 @@ export const WatchPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 pt-20">
-      <div className="max-w-7xl mx-auto px-4 md:px-8 space-y-6 pb-8">
-        <button
-          onClick={() => navigate(-1)}
-          className="text-pink-500 hover:text-pink-400 transition flex items-center gap-2"
-        >
-          <span>←</span> Voltar
-        </button>
+    <div className="min-h-screen bg-[#0f0f0f] text-gray-300 font-sans pb-10">
+      {/* Espaçamento para Navbar fixa */}
+      <div className="h-16"></div>
 
-        <div className="bg-gray-800 rounded-lg p-3 text-xs font-mono text-gray-400">
-          <p>📺 Episode ID: {episodeId}</p>
-          <p>🖥️ Servidores: {Object.values(servers).flat().length}</p>
-        </div>
+      <div className="container mx-auto px-2 md:px-4 py-6">
+        
+        {/* Layout Principal: Player (Esq) + Lista (Dir) */}
+        <div className="flex flex-col lg:flex-row gap-6">
+          
+          {/* Coluna Esquerda: Player e Controles */}
+          <div className="w-full lg:w-3/4 flex flex-col gap-4">
+            
+            {/* Player Container */}
+            <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden shadow-xl border border-gray-800">
+              {loadingSources && (
+                <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-20">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#ffbade] border-t-transparent" />
+                    <p className="text-[#ffbade] font-medium animate-pulse">Carregando stream...</p>
+                  </div>
+                </div>
+              )}
 
-        {error && (
-          <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded-lg">
-            ⚠️ {error}
-          </div>
-        )}
-
-        <div className="bg-black rounded-lg overflow-hidden relative">
-          {loadingSources && (
-            <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10">
-              <div className="flex flex-col items-center gap-2">
-                <div className="animate-spin rounded-full h-10 w-10 border-2 border-pink-500 border-t-transparent" />
-                <p className="text-white text-sm">Carregando vídeo...</p>
-              </div>
-            </div>
-          )}
-
-          {selectedSource ? (
-            <VideoPlayer
-              src={selectedSource.url}
-              isM3U8={selectedSource.isM3U8}
-              subtitles={subtitles}
-              onError={handleVideoError}
-            />
-          ) : (
-            <div className="w-full aspect-video flex items-center justify-center text-white bg-gray-800">
-              <div className="text-center space-y-2">
-                <p className="text-4xl">📺</p>
-                <p className="text-lg">Selecione um servidor para começar</p>
-                {error && <p className="text-sm text-red-400">Ou tente outro episódio</p>}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Categoria */}
-          <div className="bg-gray-800 rounded-lg p-4 space-y-3">
-            <h3 className="text-white font-semibold">Categoria de áudio</h3>
-            <div className="flex flex-wrap gap-2">
-              {(['sub', 'dub', 'raw'] as EpisodeCategory[]).map((category) => {
-                const hasServers = servers[category]?.length > 0;
-                return (
-                  <button
-                    key={category}
-                    onClick={() => hasServers && handleCategoryChange(category)}
-                    className={`px-4 py-2 rounded-lg transition ${
-                      selectedCategory === category
-                        ? 'bg-pink-500 text-white'
-                        : hasServers
-                        ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                        : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-                    }`}
-                    disabled={!hasServers}
-                  >
-                    {CATEGORY_LABELS[category]}
-                    {hasServers && ` (${servers[category].length})`}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Servidores */}
-          <div className="bg-gray-800 rounded-lg p-4 space-y-3">
-            <h3 className="text-white font-semibold">Servidores</h3>
-            <div className="flex flex-wrap gap-2">
-              {(servers[selectedCategory] || []).length > 0 ? (
-                servers[selectedCategory].map((server) => (
-                  <button
-                    key={server.serverId}
-                    onClick={() => handleServerChange(server)}
-                    className={`px-4 py-2 rounded-lg transition ${
-                      selectedServer?.serverId === server.serverId
-                        ? 'bg-pink-500 text-white'
-                        : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
-                    }`}
-                  >
-                    {server.serverName}
-                  </button>
-                ))
+              {error ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-center p-6">
+                  <div>
+                    <p className="text-red-500 text-xl mb-2">⚠️ {error}</p>
+                    <div className="flex gap-4 justify-center">
+                        <button onClick={() => window.location.reload()} className="text-white underline hover:text-[#ffbade]">Recarregar página</button>
+                        <button onClick={() => loadEpisodeServers(episodeId)} className="bg-[#ffbade] text-black px-4 py-2 rounded font-bold hover:bg-white transition">Tentar Novamente</button>
+                    </div>
+                  </div>
+                </div>
+              ) : selectedSource ? (
+                <VideoPlayer
+                  src={selectedSource.url}
+                  isM3U8={selectedSource.isM3U8}
+                  autoPlay={true}
+                  subtitles={subtitles}
+                />
               ) : (
-                <span className="text-gray-400 text-sm">Nenhum servidor disponível</span>
+                <div className="w-full h-full flex items-center justify-center text-gray-500">
+                  Selecione um servidor
+                </div>
               )}
             </div>
-          </div>
 
-          {/* Qualidade */}
-          <div className="bg-gray-800 rounded-lg p-4 space-y-3">
-            <h3 className="text-white font-semibold">Qualidade</h3>
-            {sources.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {sources.map((source, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSourceChange(source)}
-                    className={`px-4 py-2 rounded-lg transition ${
-                      selectedSource?.url === source.url
-                        ? 'bg-pink-500 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    {qualityLabel(source)}
-                  </button>
-                ))}
+            {/* Controles e Informações do Servidor */}
+            <div className="bg-[#201f31] p-4 rounded-lg border border-gray-800">
+              <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-4 border-b border-gray-700 pb-4">
+                <div className="text-sm text-gray-400">
+                  Você está assistindo <span className="text-[#ffbade] font-bold">Episódio {episodeId.split('ep=')[1]}</span>
+                </div>
+                <div className="flex gap-3 text-xs font-medium">
+                  <button className="flex items-center gap-1 hover:text-white transition"><MessageSquare size={14}/> Comentários</button>
+                  <button className="flex items-center gap-1 hover:text-white transition"><Share2 size={14}/> Compartilhar</button>
+                  <button className="flex items-center gap-1 hover:text-white transition"><Flag size={14}/> Reportar</button>
+                </div>
               </div>
-            ) : (
-              <p className="text-gray-400 text-sm">Selecione um servidor primeiro</p>
-            )}
-          </div>
-        </div>
 
-        {/* Legendas */}
-        {subtitles.length > 0 && (
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-white font-semibold mb-2">Legendas disponíveis</h3>
-            <div className="flex flex-wrap gap-2 text-sm text-gray-200">
-              {subtitles.map((subtitle, idx) => (
-                <span key={idx} className="bg-gray-700 px-3 py-1 rounded">
-                  {subtitle.lang || `Legenda ${idx + 1}`}
-                </span>
-              ))}
+              {/* Seleção de Categoria (Sub/Dub) */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {(['sub', 'dub', 'raw'] as EpisodeCategory[]).map((category) => {
+                  const count = servers[category]?.length || 0;
+                  if (count === 0) return null;
+                  return (
+                    <button
+                      key={category}
+                      onClick={() => handleCategoryChange(category)}
+                      className={`px-4 py-1.5 rounded text-sm font-bold uppercase transition-colors ${
+                        selectedCategory === category
+                          ? 'bg-[#ffbade] text-black'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      {CATEGORY_LABELS[category]} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Lista de Servidores */}
+              <div className="space-y-2">
+                <div className="text-xs text-[#ffbade] uppercase font-bold mb-2">Servidores:</div>
+                <div className="flex flex-wrap gap-2">
+                  {(servers[selectedCategory] || []).map((server) => (
+                    <button
+                      key={server.serverId}
+                      onClick={() => handleServerChange(server)}
+                      className={`px-3 py-2 rounded text-xs font-medium transition-all ${
+                        selectedServer?.serverId === server.serverId
+                          ? 'bg-gray-600 text-[#ffbade] border border-[#ffbade]'
+                          : 'bg-gray-800 text-gray-400 hover:text-white border border-transparent hover:border-gray-600'
+                      }`}
+                    >
+                      {server.serverName}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
-        )}
+
+          {/* Coluna Direita: Lista de Episódios (Sidebar) */}
+          <div className="w-full lg:w-1/4">
+            <div className="bg-[#201f31] rounded-lg border border-gray-800 overflow-hidden flex flex-col h-[600px] sticky top-20">
+              <div className="p-3 bg-[#2a2c31] border-b border-gray-700 flex justify-between items-center">
+                <span className="font-bold text-white text-sm">Lista de Episódios</span>
+                <span className="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded">{episodeList.length}</span>
+              </div>
+              
+              {/* Busca na lista (Visual) */}
+              <div className="p-2 border-b border-gray-700">
+                <div className="relative">
+                  <input type="text" placeholder="Número..." className="w-full bg-gray-800 text-white text-xs px-3 py-1.5 rounded outline-none focus:ring-1 focus:ring-[#ffbade]" />
+                  <Search size={12} className="absolute right-2 top-2 text-gray-500" />
+                </div>
+              </div>
+
+              <div className="overflow-y-auto flex-1 p-1 space-y-1 custom-scrollbar">
+                {episodeList.map((ep) => {
+                  const isActive = episodeId === ep.episodeId;
+                  return (
+                    <button
+                      key={ep.episodeId}
+                      onClick={() => navigate(`/watch/${encodeURIComponent(ep.episodeId)}`)}
+                      className={`w-full text-left px-3 py-2 rounded flex items-center gap-3 transition-colors ${
+                        isActive 
+                          ? 'bg-[#2a2c31] border-l-4 border-[#ffbade]' 
+                          : 'hover:bg-gray-700 border-l-4 border-transparent'
+                      }`}
+                    >
+                      <span className={`text-sm font-mono ${isActive ? 'text-[#ffbade]' : 'text-gray-400'}`}>
+                        {ep.number}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-xs truncate ${isActive ? 'text-white font-medium' : 'text-gray-300'}`}>
+                          {ep.title || `Episódio ${ep.number}`}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+                {episodeList.length === 0 && (
+                  <div className="text-center py-10 text-gray-500 text-xs">Carregando lista...</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );
