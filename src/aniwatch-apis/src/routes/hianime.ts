@@ -274,72 +274,67 @@ hianimeRouter.get("/proxy-stream", async (c) => {
         }
 
         const url = decodeURIComponent(encodedUrl);
-        const referer = c.req.query("referer") || "https://megacloud.blog/";
+        const referer = decodeURIComponent(c.req.query("referer") || "https://megacloud.blog/");
+        
+        // Extrair o host da URL para usar como Origin
+        let originHost = "https://megacloud.blog";
+        try {
+            const urlObj = new URL(referer);
+            originHost = urlObj.origin;
+        } catch (e) {
+            // Usa o padrão
+        }
+
+        // Headers mais completos para evitar 403
+        const headers: Record<string, string> = {
+            "Referer": referer,
+            "Origin": originHost,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "identity",
+            "Connection": "keep-alive",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "cross-site",
+        };
+
+        // Se a URL for para netmagcdn, adiciona headers específicos
+        if (url.includes("netmagcdn") || url.includes("biananset") || url.includes("kiwi")) {
+            headers["Referer"] = "https://megacloud.blog/";
+            headers["Origin"] = "https://megacloud.blog";
+        }
 
         // Buscar o conteúdo com os headers corretos
-        const response = await fetch(url, {
-            headers: {
-                Referer: referer,
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            },
-        });
+        const response = await fetch(url, { headers });
 
         if (!response.ok) {
             console.error(`Proxy upstream error: ${response.status} ${response.statusText} for URL: ${url}`);
+            
+            // Tentar novamente com headers alternativos
+            if (response.status === 403) {
+                const retryHeaders = {
+                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0",
+                    "Referer": "https://megacloud.tv/",
+                    "Origin": "https://megacloud.tv",
+                    "Accept": "*/*",
+                };
+                
+                const retryResponse = await fetch(url, { headers: retryHeaders });
+                
+                if (retryResponse.ok) {
+                    return handleProxyResponse(c, retryResponse, url, referer);
+                }
+            }
+            
             return c.json(
                 { error: `Failed to fetch stream: ${response.statusText}` },
                 response.status as any
             );
         }
 
-        // Pegar o content-type
-        const contentType =
-            response.headers.get("content-type") ||
-            "application/vnd.apple.mpegurl";
-
-        // Se for um arquivo m3u8, precisamos reescrever as URLs internas para também passarem pelo proxy
-        if (contentType.includes("mpegurl") || contentType.includes("m3u8")) {
-            const body = await response.text();
-            const baseUrl = url.substring(0, url.lastIndexOf("/") + 1);
-            const modifiedBody = body
-                .split("\n")
-                .map((line) => {
-                    // Se a linha não é um comentário e não começa com http
-                    if (
-                        !line.startsWith("#") &&
-                        line.trim()
-                    ) {
-                        const fullUrl = line.startsWith("http") ? line : (line.startsWith("/")
-                            ? new URL(line, baseUrl).href
-                            : baseUrl + line);
-                        // Reescrever para passar pelo proxy
-                        return `/api/v2/hianime/proxy-stream?url=${encodeURIComponent(fullUrl)}&referer=${encodeURIComponent(referer)}`;
-                    }
-                    return line;
-                })
-                .join("\n");
-
-            return c.text(modifiedBody, 200, {
-                "Content-Type": contentType,
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-                "Access-Control-Allow-Headers":
-                    "Range, Accept, Accept-Language, Content-Type",
-                "Cache-Control": "no-cache",
-            });
-        }
-
-        // Para outros tipos de conteúdo (segmentos .ts, etc), apenas retornar o conteúdo
-        const arrayBuffer = await response.arrayBuffer();
-        return c.body(arrayBuffer, 200, {
-            "Content-Type": contentType,
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers":
-                "Range, Accept, Accept-Language, Content-Type",
-            "Cache-Control": "public, max-age=3600",
-        });
+        return handleProxyResponse(c, response, url, referer);
+        
     } catch (error: any) {
         console.error("Proxy stream error:", error);
         return c.json(
@@ -347,6 +342,76 @@ hianimeRouter.get("/proxy-stream", async (c) => {
             500
         );
     }
+});
+
+// Função auxiliar para processar a resposta do proxy
+async function handleProxyResponse(c: any, response: Response, url: string, referer: string) {
+    const contentType = response.headers.get("content-type") || "application/vnd.apple.mpegurl";
+    
+    // Se for um arquivo m3u8, precisamos reescrever as URLs internas
+    if (contentType.includes("mpegurl") || contentType.includes("m3u8") || url.endsWith(".m3u8")) {
+        const body = await response.text();
+        const baseUrl = url.substring(0, url.lastIndexOf("/") + 1);
+        
+        const modifiedBody = body
+            .split("\n")
+            .map((line) => {
+                const trimmedLine = line.trim();
+                
+                // Pula linhas vazias e comentários
+                if (!trimmedLine || trimmedLine.startsWith("#")) {
+                    // Mas processa URI dentro de tags EXT-X-KEY
+                    if (trimmedLine.includes('URI="')) {
+                        return trimmedLine.replace(/URI="([^"]+)"/, (match, uri) => {
+                            const fullUrl = uri.startsWith("http") 
+                                ? uri 
+                                : (uri.startsWith("/") ? new URL(uri, baseUrl).href : baseUrl + uri);
+                            return `URI="/api/v2/hianime/proxy-stream?url=${encodeURIComponent(fullUrl)}&referer=${encodeURIComponent(referer)}"`;
+                        });
+                    }
+                    return line;
+                }
+                
+                // Reescreve URLs de segmentos
+                const fullUrl = trimmedLine.startsWith("http")
+                    ? trimmedLine
+                    : (trimmedLine.startsWith("/")
+                        ? new URL(trimmedLine, baseUrl).href
+                        : baseUrl + trimmedLine);
+                        
+                return `/api/v2/hianime/proxy-stream?url=${encodeURIComponent(fullUrl)}&referer=${encodeURIComponent(referer)}`;
+            })
+            .join("\n");
+
+        return c.text(modifiedBody, 200, {
+            "Content-Type": "application/vnd.apple.mpegurl",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Range, Accept, Accept-Language, Content-Type",
+            "Cache-Control": "no-cache",
+        });
+    }
+
+    // Para segmentos de vídeo (.ts, .m4s) e outros arquivos binários
+    const arrayBuffer = await response.arrayBuffer();
+    
+    return c.body(arrayBuffer, 200, {
+        "Content-Type": contentType,
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Range, Accept, Accept-Language, Content-Type",
+        "Cache-Control": "public, max-age=3600",
+    });
+}
+
+// Handler para OPTIONS (CORS preflight)
+hianimeRouter.options("/proxy-stream", (c) => {
+    return c.text("", 204, {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Range, Accept, Accept-Language, Content-Type, Origin, Referer",
+        "Access-Control-Max-Age": "86400",
+    });
 });
 
 export { hianimeRouter };
