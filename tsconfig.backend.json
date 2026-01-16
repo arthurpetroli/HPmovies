@@ -4,7 +4,7 @@
     "module": "commonjs",
     "target": "ES2020",
     "outDir": "./dist/backend",
-    "rootDir": "./src/backend",
+    "rootDir": "./src/aniwatch-apis",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "node",
@@ -12,6 +12,6 @@
     "skipLibCheck": true,
     "noEmit": false
   },
-  "include": ["src/backend/**/*"],
+  "include": ["src/aniwatch-apis/**/*"],
   "exclude": ["node_modules", "dist"]
 }

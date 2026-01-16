@@ -17,7 +17,7 @@ export const Home = () => {
         </div>
       </section>
 
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto px-4">src/frontend
         
         {/* 2. Seção de Tendências (Trending) */}
         <section className="mb-10">
