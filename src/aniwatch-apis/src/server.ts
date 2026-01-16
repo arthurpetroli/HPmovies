@@ -14,7 +14,8 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",
-      "https://hp-movies-five.vercel.app"
+      "https://hp-movies-five.vercel.app",
+      "https://hp-movies-five.vercel.app/"
     ],
     allowHeaders: ["Content-Type", "Authorization", "Accept"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],

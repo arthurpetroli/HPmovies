@@ -4,6 +4,7 @@ import {
   Play, Pause, Volume2, VolumeX, Maximize, Minimize, 
   Settings, SkipForward, RotateCcw, Loader2, FastForward, Check, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import aniwatchService from '../../services/aniwatch';
 
 interface VideoPlayerProps {
   src: string;
@@ -117,9 +118,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   // Gera URL do Proxy
   const getProxyUrl = (url: string) => {
-    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
     if (!url || url.includes('/proxy-stream') || !url.startsWith('http')) return url;
-    return `${apiUrl}/api/v2/hianime/proxy-stream?url=${encodeURIComponent(url)}`;
+    return aniwatchService.getProxyUrl(url);
   };
 
   // Carrega e faz parsing do arquivo de legenda
