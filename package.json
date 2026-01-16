@@ -5,14 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:backend": "nodemon --watch src/aniwatch-apis --exec tsx src/aniwatch-apis/server.ts",
+    "dev:backend": "nodemon --watch src/aniwatch-apis --exec tsx src/aniwatch-apis/src/server.ts",
     "dev:frontend": "vite",
     "build": "vite build && npm run build:backend",
     "start": "npm run start:backend",
     "lint": "eslint .",
     "preview": "vite preview",
     "build:backend": "tsc -p tsconfig.backend.json",
-    "start:backend": "if [ -f dist/backend/server.js ]; then node dist/backend/server.js; else echo '⚠️ Build artifact not found, falling back to ts-node' && ts-node --esm --project tsconfig.backend.json src/aniwatch-apis/server.ts; fi"
+    "start:backend": "if [ -f dist/backend/server.js ]; then node dist/backend/server.js; else echo '⚠️ Build artifact not found, falling back to ts-node' && ts-node --esm --project tsconfig.backend.json src/aniwatch-apis/src/server.ts; fi"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

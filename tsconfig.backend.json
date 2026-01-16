@@ -4,7 +4,7 @@
     "module": "NodeNext",
     "target": "ES2020",
     "outDir": "./dist/backend",
-    "rootDir": "./src/aniwatch-apis",
+    "rootDir": "./src/aniwatch-apis/src",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "NodeNext",
@@ -12,6 +12,6 @@
     "skipLibCheck": true,
     "noEmit": false
   },
-  "include": ["src/aniwatch-apis/**/*"],
+  "include": ["src/aniwatch-apis/src/**/*"],
   "exclude": ["node_modules", "dist"]
 }
