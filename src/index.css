@@ -70,3 +70,51 @@
     to { opacity: 1; transform: translateY(0); }
   }
 }
+
+/* Estilo de Legenda - Estilo Anime (sem fundo, com sombra/contorno) */
+video::cue {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: #ffffff;
+  font-family: 'Trebuchet MS', 'Arial', sans-serif;
+  font-size: 1em;
+  font-weight: 600;
+  line-height: 1.3;
+  /* Sombra múltipla para criar efeito de contorno preto */
+  text-shadow: 
+    /* Contorno principal */
+    -1.5px -1.5px 0 #000,
+    1.5px -1.5px 0 #000,
+    -1.5px 1.5px 0 #000,
+    1.5px 1.5px 0 #000,
+    /* Contorno adicional para espessura */
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000,
+    /* Sombra suave para profundidade */
+    0 0 6px rgba(0, 0, 0, 0.9),
+    0 2px 3px rgba(0, 0, 0, 0.8);
+  padding: 0;
+  white-space: pre-wrap;
+}
+
+/* Firefox - usa pseudo-elemento diferente */
+video::-moz-subtitles {
+  background: transparent !important;
+  color: #ffffff;
+  font-family: 'Trebuchet MS', 'Arial', sans-serif;
+  font-size: 1em;
+  font-weight: 600;
+  text-shadow: 
+    -1.5px -1.5px 0 #000,
+    1.5px -1.5px 0 #000,
+    -1.5px 1.5px 0 #000,
+    1.5px 1.5px 0 #000,
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000,
+    0 0 6px rgba(0, 0, 0, 0.9),
+    0 2px 3px rgba(0, 0, 0, 0.8);
+}

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
 import { 
   Play, Pause, Volume2, VolumeX, Maximize, Minimize, 
-  Settings, SkipForward, RotateCcw, Loader2, FastForward, Check, ChevronLeft, ChevronRight, Captions
+  Settings, SkipForward, RotateCcw, Loader2, FastForward, Check, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 interface VideoPlayerProps {
@@ -13,6 +13,64 @@ interface VideoPlayerProps {
   autoPlay?: boolean;
   subtitles?: { lang?: string; url: string; label?: string }[];
 }
+
+interface SubtitleCue {
+  start: number;
+  end: number;
+  text: string;
+}
+
+// Parser de VTT simples
+const parseVTT = (vttText: string): SubtitleCue[] => {
+  const cues: SubtitleCue[] = [];
+  const lines = vttText.replace(/\r\n/g, '\n').split('\n');
+  
+  let i = 0;
+  // Pula o header WEBVTT
+  while (i < lines.length && !lines[i].includes('-->')) {
+    i++;
+  }
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    
+    if (line.includes('-->')) {
+      const timeParts = line.split('-->');
+      if (timeParts.length === 2) {
+        const start = parseTimestamp(timeParts[0].trim());
+        const end = parseTimestamp(timeParts[1].trim().split(' ')[0]);
+        
+        let text = '';
+        i++;
+        while (i < lines.length && lines[i].trim() !== '') {
+          if (text) text += '\n';
+          text += lines[i].trim();
+          i++;
+        }
+        
+        if (text && !isNaN(start) && !isNaN(end)) {
+          cues.push({ start, end, text });
+        }
+      }
+    }
+    i++;
+  }
+  
+  return cues;
+};
+
+// Converte timestamp VTT para segundos
+const parseTimestamp = (timestamp: string): number => {
+  const parts = timestamp.split(':');
+  if (parts.length === 3) {
+    const [hours, minutes, seconds] = parts;
+    return parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds.replace(',', '.'));
+  } else if (parts.length === 2) {
+    const [minutes, seconds] = parts;
+    return parseInt(minutes) * 60 + parseFloat(seconds.replace(',', '.'));
+  }
+  return 0;
+};
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ 
   src, 
@@ -43,7 +101,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [settingsView, setSettingsView] = useState<'main' | 'quality' | 'subtitles'>('main');
   const [qualities, setQualities] = useState<{height: number, level: number}[]>([]);
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
-  const [currentSubtitle, setCurrentSubtitle] = useState<number>(0); // Começa com a primeira legenda (0)
+  const [currentSubtitle, setCurrentSubtitle] = useState<number>(0);
+  
+  // Estados de Legendas Customizadas
+  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
+  const [currentCueText, setCurrentCueText] = useState<string>('');
 
   // Formata o tempo (ex: 24:05)
   const formatTime = (time: number) => {
@@ -56,10 +118,47 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // Gera URL do Proxy
   const getProxyUrl = (url: string) => {
     const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
-    // Se já estiver usando o proxy ou for uma URL relativa, não altera
     if (!url || url.includes('/proxy-stream') || !url.startsWith('http')) return url;
     return `${apiUrl}/api/v2/hianime/proxy-stream?url=${encodeURIComponent(url)}`;
   };
+
+  // Carrega e faz parsing do arquivo de legenda
+  useEffect(() => {
+    if (currentSubtitle === -1 || !subtitles[currentSubtitle]) {
+      setSubtitleCues([]);
+      setCurrentCueText('');
+      return;
+    }
+
+    const loadSubtitle = async () => {
+      try {
+        const subtitleUrl = getProxyUrl(subtitles[currentSubtitle].url);
+        const response = await fetch(subtitleUrl);
+        const text = await response.text();
+        const cues = parseVTT(text);
+        setSubtitleCues(cues);
+      } catch (error) {
+        console.error('Erro ao carregar legenda:', error);
+        setSubtitleCues([]);
+      }
+    };
+
+    loadSubtitle();
+  }, [currentSubtitle, subtitles]);
+
+  // Atualiza a legenda atual baseado no tempo do vídeo
+  useEffect(() => {
+    if (subtitleCues.length === 0) {
+      setCurrentCueText('');
+      return;
+    }
+
+    const activeCue = subtitleCues.find(
+      cue => currentTime >= cue.start && currentTime <= cue.end
+    );
+
+    setCurrentCueText(activeCue?.text || '');
+  }, [currentTime, subtitleCues]);
 
   // Inicialização do HLS
   useEffect(() => {
@@ -87,7 +186,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         enableWorker: true,
         lowLatencyMode: true,
         xhrSetup: function (xhr, url) {
-          xhr.withCredentials = false; // Importante para CORS com proxy
+          xhr.withCredentials = false;
         }
       });
       hlsRef.current = hls;
@@ -113,8 +212,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       hls.on(Hls.Events.ERROR, (event, data) => {
         if (data.fatal) {
-           console.error("HLS Error:", data);
-           switch (data.type) {
+          console.error("HLS Error:", data);
+          switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               hls.startLoad();
               break;
@@ -122,13 +221,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               hls.recoverMediaError();
               break;
             default:
-              // Não destruir imediatamente em erro fatal, tentar recuperar
               break;
           }
         }
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Suporte nativo (Safari)
       video.src = videoSrc;
       if (autoPlay) video.play().catch(() => {});
     } else {
@@ -152,40 +249,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
     }; 
-  }, [src, isM3U8]); // Removido autoPlay das dependências para evitar reload
+  }, [src, isM3U8]);
 
-  // Sincroniza a legenda ativa sempre que a lista ou a seleção mudar
+  // Reseta estado de legendas quando a lista muda
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    // Se a lista de legendas mudar, reseta para a primeira (se existir)
-    if (subtitles.length > 0 && currentSubtitle >= subtitles.length) {
+    if (subtitles.length > 0) {
       setCurrentSubtitle(0);
+    } else {
+      setCurrentSubtitle(-1);
     }
-
-    const applySubtitleMode = () => {
-      const tracks = video.textTracks;
-      // Itera sobre as faixas de texto nativas do vídeo
-      for (let i = 0; i < tracks.length; i++) {
-        const track = tracks[i];
-        // Verifica se é uma faixa de legenda criada por nós (comparando label ou language)
-        // Se currentSubtitle for -1, desativa tudo.
-        if (currentSubtitle !== -1 && subtitles[currentSubtitle]) {
-           const selected = subtitles[currentSubtitle];
-           const isMatch = track.label === (selected.label || selected.lang) || track.language === selected.lang;
-           track.mode = isMatch ? 'showing' : 'disabled';
-        } else {
-           track.mode = 'disabled';
-        }
-      }
-    };
-
-    // Aplica imediatamente e agenda uma reaplicação para garantir (caso o vídeo ainda esteja carregando)
-    applySubtitleMode();
-    const timeout = setTimeout(applySubtitleMode, 500);
-    return () => clearTimeout(timeout);
-  }, [currentSubtitle, subtitles]);
+  }, [subtitles]);
 
   // Controle de Play/Pause
   const togglePlay = useCallback(() => {
@@ -226,7 +299,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       const current = videoRef.current.currentTime;
       setCurrentTime(current);
       
-      // Simulação de "Skip Intro" (aparece nos primeiros 2 min)
       if (current > 60 && current < 180) {
         setShowSkipIntro(true);
       } else {
@@ -245,7 +317,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   const skipIntro = () => {
     if (videoRef.current) {
-      videoRef.current.currentTime += 85; // Pula 85 segundos
+      videoRef.current.currentTime += 85;
     }
   };
 
@@ -311,6 +383,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [togglePlay]);
 
+  // Renderiza o texto da legenda com suporte a quebras de linha
+  const renderSubtitleText = (text: string) => {
+    // Remove tags HTML/VTT como <i>, <b>, etc mas mantém o texto
+    const cleanText = text
+      .replace(/<[^>]*>/g, '')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&nbsp;/g, ' ');
+    
+    return cleanText.split('\n').map((line, index) => (
+      <span key={index}>
+        {line}
+        {index < cleanText.split('\n').length - 1 && <br />}
+      </span>
+    ));
+  };
+
   return (
     <div 
       ref={containerRef}
@@ -318,38 +408,55 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       onMouseMove={handleMouseMove}
       onMouseLeave={() => isPlaying && setShowControls(false)}
     >
-      <style>{`
-        video::-webkit-media-text-track-display {
-          transition: transform 0.3s ease;
-        }
-        video.controls-visible::-webkit-media-text-track-display {
-          transform: translateY(-60px);
-        }
-      `}</style>
-
       {/* Vídeo */}
       <video
         ref={videoRef}
-        className={`w-full h-full object-contain ${showControls ? 'controls-visible' : ''}`}
+        className="w-full h-full object-contain"
         poster={poster}
-        crossOrigin="anonymous" // ESSENCIAL PARA LEGENDAS E CORS
+        crossOrigin="anonymous"
         playsInline
         onClick={togglePlay}
         onDoubleClick={toggleFullscreen}
         onTimeUpdate={handleTimeUpdate}
         onEnded={() => setIsPlaying(false)}
-      >
-        {subtitles.map((sub, index) => (
-          <track 
-            key={`${sub.url}-${index}`} 
-            kind="subtitles" 
-            // Usa o proxy para as legendas também para evitar erro de segurança
-            src={getProxyUrl(sub.url)} 
-            label={sub.label || sub.lang} 
-            srcLang={sub.lang} 
-          />
-        ))}
-      </video>
+      />
+
+      {/* Legenda Customizada - Funciona igual em todos os navegadores */}
+      {currentCueText && (
+        <div 
+          className="absolute left-0 right-0 flex justify-center pointer-events-none px-4 transition-all duration-300"
+          style={{
+            bottom: showControls ? '80px' : '40px'
+          }}
+        >
+          <div 
+            className="text-center max-w-[90%]"
+            style={{
+              color: '#ffffff',
+              fontFamily: "'Trebuchet MS', 'Arial', sans-serif",
+              fontSize: isFullscreen ? '2.8em' : '1.6em',
+              fontWeight: 600,
+              lineHeight: 1.4,
+              textShadow: `
+                -2px -2px 0 #000,
+                2px -2px 0 #000,
+                -2px 2px 0 #000,
+                2px 2px 0 #000,
+                -1px -1px 0 #000,
+                1px -1px 0 #000,
+                -1px 1px 0 #000,
+                1px 1px 0 #000,
+                0 0 8px rgba(0, 0, 0, 0.9),
+                0 3px 6px rgba(0, 0, 0, 0.8)
+              `,
+              WebkitFontSmoothing: 'antialiased',
+              MozOsxFontSmoothing: 'grayscale'
+            }}
+          >
+            {renderSubtitleText(currentCueText)}
+          </div>
+        </div>
+      )}
 
       {/* Loading Spinner */}
       {isBuffering && (

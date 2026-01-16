@@ -20,6 +20,12 @@ const unwrapResponse = (response: any) => {
   return response;
 };
 
+const upgradeImg = (url: string | undefined, type: 'landscape' | 'portrait' = 'portrait') => {
+  if (!url) return url;
+  const targetRes = type === 'landscape' ? '1920x1080' : '800x1200';
+  return url.replace(/(\d+x\d+)/, targetRes);
+};
+
 const aniwatchService = {
   // Homepage data
   getHomePage: async () => {
@@ -27,7 +33,16 @@ const aniwatchService = {
       console.log('🏠 Buscando dados da home...');
       const response = await api.get('/home');
       console.log('✅ Home data:', response.data);
-      return unwrapResponse(response);
+      const data = unwrapResponse(response);
+
+      if (data.spotlightAnimes) {
+        data.spotlightAnimes = data.spotlightAnimes.map((anime: any) => ({
+          ...anime,
+          poster: upgradeImg(anime.poster, 'landscape'),
+        }));
+      }
+
+      return data;
     } catch (error: any) {
       console.error('❌ Erro ao buscar home:', error);
       throw error;
@@ -71,7 +86,12 @@ const aniwatchService = {
       console.log(`📺 Buscando info do anime: ${animeId}`);
       const response = await api.get(`/anime/${animeId}`);
       console.log('✅ Info do anime:', response.data);
-      return response.data;
+
+      const data = response.data;
+      if (data?.anime?.info?.poster) {
+        data.anime.info.poster = upgradeImg(data.anime.info.poster, 'portrait');
+      }
+      return data;
     } catch (error: any) {
       console.error('❌ Erro ao buscar info:', error);
       throw error;
