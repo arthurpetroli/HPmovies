@@ -280,13 +280,16 @@ hianimeRouter.get("/proxy-stream", async (c) => {
         const response = await fetch(url, {
             headers: {
                 Referer: referer,
+                Origin: new URL(referer).origin,
                 "User-Agent":
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 Accept: "*/*",
+                "X-Requested-With": "XMLHttpRequest",
             },
         });
 
         if (!response.ok) {
+            console.error(`Proxy upstream error: ${response.status} ${response.statusText} for URL: ${url}`);
             return c.json(
                 { error: `Failed to fetch stream: ${response.statusText}` },
                 response.status as any
