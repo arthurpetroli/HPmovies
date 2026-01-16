@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:4000',
+        target: 'https://comparable-robyn-petroli-58d47e57.koyeb.app',
         changeOrigin: true,
         secure: false,
       },

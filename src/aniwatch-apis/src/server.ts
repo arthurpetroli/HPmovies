@@ -12,15 +12,9 @@ const app = new Hono<{ Variables: { CACHE_CONFIG: { key: string; duration: numbe
 app.use(
   "*",
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:3000",
-      "http://localhost:4000",
-      "http://127.0.0.1:5173"
-    ],
+    origin: "*",
     allowHeaders: ["Content-Type", "Authorization", "Accept"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    credentials: true
   })
 );
 
