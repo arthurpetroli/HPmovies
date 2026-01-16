@@ -51,6 +51,7 @@ export const WatchPage: React.FC = () => {
   const [sources, setSources] = useState<StreamingSource[]>([]);
   const [selectedSource, setSelectedSource] = useState<StreamingSource | null>(null);
   const [subtitles, setSubtitles] = useState<EpisodeSubtitle[]>([]);
+  const [referer, setReferer] = useState<string | undefined>();
   const [episodeList, setEpisodeList] = useState<any[]>([]);
   const [loadingServers, setLoadingServers] = useState(true);
   const [loadingSources, setLoadingSources] = useState(false);
@@ -75,6 +76,7 @@ export const WatchPage: React.FC = () => {
     setSources([]);
     setSelectedSource(null);
     setSubtitles([]);
+    setReferer(undefined);
     setServers({ sub: [], dub: [], raw: [] });
     setError(null);
 
@@ -174,6 +176,10 @@ export const WatchPage: React.FC = () => {
         track.lang !== 'thumbnails' &&
         track.url // Garante que tem URL
       );
+
+      if (data.headers?.Referer) {
+        setReferer(data.headers.Referer);
+      }
 
       if (sourcesData.length === 0) {
         setError('Nenhuma fonte de vídeo disponível para este servidor. Tente outro servidor.');
@@ -287,6 +293,7 @@ export const WatchPage: React.FC = () => {
                   isM3U8={selectedSource.isM3U8}
                   autoPlay={true}
                   subtitles={subtitles}
+                  referer={referer}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-gray-500">

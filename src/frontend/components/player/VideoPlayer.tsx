@@ -13,6 +13,7 @@ interface VideoPlayerProps {
   className?: string;
   autoPlay?: boolean;
   subtitles?: { lang?: string; url: string; label?: string }[];
+  referer?: string;
 }
 
 interface SubtitleCue {
@@ -79,7 +80,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   isM3U8 = true,
   className = "",
   autoPlay = false,
-  subtitles = []
+  subtitles = [],
+  referer
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -119,7 +121,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // Gera URL do Proxy
   const getProxyUrl = (url: string) => {
     if (!url || url.includes('/proxy-stream') || !url.startsWith('http')) return url;
-    return aniwatchService.getProxyUrl(url);
+    return aniwatchService.getProxyUrl(url, referer);
   };
 
   // Carrega e faz parsing do arquivo de legenda
