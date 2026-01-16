@@ -3,7 +3,7 @@ import { logger as honoLogger } from "hono/logger";
 import { log } from "../config/logger.js";
 
 export const logging: MiddlewareHandler = honoLogger(
-    (msg: string, ...rest: any[]) => {
-        log.info(msg, ...rest);
+    (msg: string) => {
+        log.info(msg);
     }
 );

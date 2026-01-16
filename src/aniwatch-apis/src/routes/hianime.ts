@@ -290,7 +290,7 @@ hianimeRouter.get("/proxy-stream", async (c) => {
         if (!response.ok) {
             return c.json(
                 { error: `Failed to fetch stream: ${response.statusText}` },
-                response.status
+                response.status as any
             );
         }
 
