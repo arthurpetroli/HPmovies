@@ -12,7 +12,10 @@ const app = new Hono<{ Variables: { CACHE_CONFIG: { key: string; duration: numbe
 app.use(
   "*",
   cors({
-    origin: "*",
+    origin: [
+      "http://localhost:5173",
+      "https://hp-movies-five.vercel.app"
+    ],
     allowHeaders: ["Content-Type", "Authorization", "Accept"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   })
