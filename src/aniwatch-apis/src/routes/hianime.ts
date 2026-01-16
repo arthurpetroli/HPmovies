@@ -274,16 +274,15 @@ hianimeRouter.get("/proxy-stream", async (c) => {
         }
 
         const url = decodeURIComponent(encodedUrl);
+        const referer = c.req.query("referer") || "https://megacloud.blog/";
 
         // Buscar o conteúdo com os headers corretos
         const response = await fetch(url, {
             headers: {
-                Referer: "https://megacloud.blog/",
+                Referer: referer,
                 "User-Agent":
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 Accept: "*/*",
-                "Accept-Language": "en-US,en;q=0.9",
-                Origin: "https://megacloud.blog",
             },
         });
 
@@ -309,14 +308,13 @@ hianimeRouter.get("/proxy-stream", async (c) => {
                     // Se a linha não é um comentário e não começa com http
                     if (
                         !line.startsWith("#") &&
-                        line.trim() &&
-                        !line.startsWith("http")
+                        line.trim()
                     ) {
-                        const fullUrl = line.startsWith("/")
+                        const fullUrl = line.startsWith("http") ? line : (line.startsWith("/")
                             ? new URL(line, baseUrl).href
-                            : baseUrl + line;
+                            : baseUrl + line);
                         // Reescrever para passar pelo proxy
-                        return `/api/v2/hianime/proxy-stream?url=${encodeURIComponent(fullUrl)}`;
+                        return `/api/v2/hianime/proxy-stream?url=${encodeURIComponent(fullUrl)}&referer=${encodeURIComponent(referer)}`;
                     }
                     return line;
                 })

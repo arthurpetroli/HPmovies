@@ -186,8 +186,11 @@ const aniwatchService = {
   },
 
   // Helper para gerar a URL do proxy corretamente usando a base configurada
-  getProxyUrl: (url: string) => {
-    return `${API_BASE_URL}/proxy-stream?url=${encodeURIComponent(url)}`;
+  getProxyUrl: (url: string, referer?: string) => {
+    const params = new URLSearchParams();
+    params.append('url', url);
+    if (referer) params.append('referer', referer);
+    return `${API_BASE_URL}/proxy-stream?${params.toString()}`;
   },
 };
 
