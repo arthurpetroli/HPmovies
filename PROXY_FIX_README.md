@@ -121,6 +121,24 @@ Em produção, configure a variável de ambiente:
 VITE_API_BASE_URL=https://seu-backend.com
 ```
 
+### 🔒 Quando o host bloqueia data center (403 em produção)
+
+Alguns hosts de vídeo bloqueiam IPs de data center (Koyeb/Render/Vercel) mesmo
+com `Referer` correto. Nesse caso, **não é bug do frontend**: o upstream está
+negando a conexão. Uma saída comum é rotear o proxy por um IP permitido
+(residencial ou provedor que o host aceite).
+
+Este projeto aceita um **proxy HTTP(s) de saída** para as requisições de stream:
+
+```bash
+# Exemplo: proxy residencial ou provedor com IP permitido
+STREAM_PROXY_URL=http://usuario:senha@proxy.exemplo:8080
+```
+
+Se você não tiver um proxy externo permitido, considere:
+- Hospedar o backend em um provedor/região que o host aceite.
+- Trocar a fonte de stream por um host que permita tráfego de data center.
+
 ## 📚 Referências
 
 - [HLS.js Documentation](https://github.com/video-dev/hls.js/)

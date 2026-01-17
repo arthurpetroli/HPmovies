@@ -1,10 +1,15 @@
 import { HiAnime } from "aniwatch";
 import { Hono } from "hono";
+import { ProxyAgent, fetch as undiciFetch } from "undici";
 import { cache } from "../config/cache.js";
 import type { ServerContext } from "../config/context.js";
 
 const hianime = new HiAnime.Scraper();
 const hianimeRouter = new Hono<ServerContext>();
+const streamProxyUrl = process.env.STREAM_PROXY_URL;
+const streamProxyAgent = streamProxyUrl
+    ? new ProxyAgent(streamProxyUrl)
+    : undefined;
 
 // /api/v2/hianime
 hianimeRouter.get("/", (c) => c.redirect("/", 301));
@@ -266,6 +271,16 @@ hianimeRouter.get("/anime/info/:id", async (c) => {
 });
 
 // /api/v2/hianime/proxy-stream?url={encodedUrl}
+hianimeRouter.options("/proxy-stream", (c) =>
+    c.body(null, 204, {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers":
+            "Range, Accept, Accept-Language, Content-Type",
+        "Access-Control-Max-Age": "86400",
+    })
+);
+
 hianimeRouter.get("/proxy-stream", async (c) => {
     try {
         const encodedUrl = c.req.query("url");
@@ -273,20 +288,54 @@ hianimeRouter.get("/proxy-stream", async (c) => {
             return c.json({ error: "URL parameter is required" }, 400);
         }
 
-        const url = decodeURIComponent(encodedUrl);
-        const referer = c.req.query("referer") || "https://megacloud.blog/";
+        const safeDecode = (value: string) => {
+            try {
+                return decodeURIComponent(value);
+            } catch {
+                return value;
+            }
+        };
+
+        const url = safeDecode(encodedUrl);
+        const refererParam = c.req.query("referer");
+        const referer = refererParam
+            ? safeDecode(refererParam)
+            : "https://megacloud.blog/";
+        let origin = "https://megacloud.blog";
+        try {
+            origin = new URL(referer).origin;
+        } catch {
+            // fallback to default origin
+        }
+
+        const outgoingHeaders = new Headers();
+        outgoingHeaders.set("Referer", referer);
+        outgoingHeaders.set("Origin", origin);
+        outgoingHeaders.set(
+            "User-Agent",
+            c.req.header("user-agent") ||
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        );
+
+        const accept = c.req.header("accept");
+        const acceptLanguage = c.req.header("accept-language");
+        const range = c.req.header("range");
+
+        if (accept) outgoingHeaders.set("Accept", accept);
+        if (acceptLanguage)
+            outgoingHeaders.set("Accept-Language", acceptLanguage);
+        if (range) outgoingHeaders.set("Range", range);
 
         // Buscar o conteúdo com os headers corretos
-        const response = await fetch(url, {
-            headers: {
-                Referer: referer,
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            },
+        const response = await undiciFetch(url, {
+            headers: outgoingHeaders,
+            dispatcher: streamProxyAgent,
         });
 
         if (!response.ok) {
-            console.error(`Proxy upstream error: ${response.status} ${response.statusText} for URL: ${url}`);
+            console.error(
+                `Proxy upstream error: ${response.status} ${response.statusText} for URL: ${url}`
+            );
             return c.json(
                 { error: `Failed to fetch stream: ${response.statusText}` },
                 response.status as any
@@ -320,7 +369,7 @@ hianimeRouter.get("/proxy-stream", async (c) => {
                 })
                 .join("\n");
 
-            return c.text(modifiedBody, 200, {
+            return c.text(modifiedBody, response.status, {
                 "Content-Type": contentType,
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -332,14 +381,20 @@ hianimeRouter.get("/proxy-stream", async (c) => {
 
         // Para outros tipos de conteúdo (segmentos .ts, etc), apenas retornar o conteúdo
         const arrayBuffer = await response.arrayBuffer();
-        return c.body(arrayBuffer, 200, {
+        const proxiedHeaders: Record<string, string> = {
             "Content-Type": contentType,
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, OPTIONS",
             "Access-Control-Allow-Headers":
                 "Range, Accept, Accept-Language, Content-Type",
             "Cache-Control": "public, max-age=3600",
-        });
+        };
+        const contentLength = response.headers.get("content-length");
+        const contentRange = response.headers.get("content-range");
+        if (contentLength) proxiedHeaders["Content-Length"] = contentLength;
+        if (contentRange) proxiedHeaders["Content-Range"] = contentRange;
+
+        return c.body(arrayBuffer, response.status, proxiedHeaders);
     } catch (error: any) {
         console.error("Proxy stream error:", error);
         return c.json(
