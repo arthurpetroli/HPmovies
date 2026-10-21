@@ -26,6 +26,7 @@ export function MangaHomePage() {
   const error = browsing ? catalog.error : home.error; const loading = browsing ? catalog.loading : home.loading;
   return <main id="main-content" className="manga-page content-width page-shell">
     <div className="manga-heading"><div><span className="eyebrow">HPMOVIES · MANGÁS</span><h1>Uma página. Outro universo.</h1><p>Descubra novas histórias e acompanhe as suas favoritas, com prioridade para português brasileiro.</p></div><span className="manga-heading-icon"><BookOpen size={40} /></span></div>
+    <Link className="button-secondary mb-6" to="/sources?kind=manga">Consultar mangá pelas fontes<ArrowRight size={16} /></Link>
     <form className="manga-filters" onSubmit={(event) => { event.preventDefault(); update('search', draft.trim()); }}>
       <label className="manga-search"><Search size={18} /><input aria-label="Buscar mangá por título" placeholder="Busque sua próxima leitura" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={120} /><button type="submit" className="button-primary">Buscar</button></label>
       <label>Gênero<select value={tag} onChange={(event) => update('tag', event.target.value)}><option value="">Todos os gêneros</option>{tags.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>

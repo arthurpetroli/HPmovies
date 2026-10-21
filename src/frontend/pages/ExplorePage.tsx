@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { ArrowLeft, ArrowRight, Search, SlidersHorizontal, X } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { CatalogQuery } from '../../shared/providers';
 import { AnimeCard } from '../components/anime/AnimeCard';
 import { FilterDrawer, FilterFields } from '../components/filters/FilterDrawer';
@@ -42,6 +42,7 @@ export function ExplorePage({ title = 'Seu próximo anime está aqui.', initialQ
   const activeFilters = [query.genre, query.year, query.season, query.format, query.status].filter(Boolean).length;
   return <main id="main-content" className="page-shell content-width explore-page">
     <div className="page-heading"><span className="eyebrow">DESCUBRA NOVAS HISTÓRIAS</span><h1>{query.search ? `Resultados para “${query.search}”` : title}</h1><p>Dos clássicos que você ama às histórias que ainda vai conhecer.</p></div>
+    <Link className="button-secondary mb-6" to="/sources?kind=anime">Abrir episódio pelas fontes<ArrowRight size={16} /></Link>
     <div className="explore-search-row"><form role="search" className="explore-search" onSubmit={(event) => { event.preventDefault(); update('search', search.trim()); }}><Search size={18} /><input aria-label="Pesquisar no catálogo" placeholder="Buscar pelo nome do anime" type="search" value={search} onChange={(event) => setSearchDraft({ source: searchParam, value: event.target.value })} /><button className="button-primary button-sm" type="submit">Buscar</button></form><button className="button-secondary mobile-filter-button" onClick={() => setDrawer(true)}><SlidersHorizontal size={17} />Filtros{activeFilters > 0 && <span>{activeFilters}</span>}</button></div>
     <div className="desktop-filters"><FilterFields values={query} genresAll={genres} onChange={update} /></div>
     {genreError && <div className="subtle-error" role="status">Os gêneros não carregaram. <button className="text-link" onClick={() => setRetry((value) => value + 1)}>Tentar novamente</button></div>}

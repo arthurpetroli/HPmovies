@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, Film, Info, Loader2, Subtitles } from 'lucide-react';
 import type { CatalogAnime, Playback, StreamSource } from '../../shared/providers';
 import { streamingService } from '../services/streaming';
@@ -7,30 +7,41 @@ import { libraryService } from '../services/library';
 import { VideoPlayer } from '../components/player/VideoPlayer';
 import type { VideoPlayerHandle } from '../components/player/VideoPlayer';
 import { preferredSubtitleId } from '../components/player/playbackUtils';
+import { sourceQuery, sourceSuffix, sourceTitles } from '../services/content';
 
 interface WatchSession { playback: Playback; resumeTime: number }
 
 export function WatchPage() {
   const params = useParams();
   const location = useLocation();
+  const [query] = useSearchParams();
   const episodeId = params['*'] || params.episodeId || '';
   const state = location.state as { anime?: CatalogAnime } | null;
-  return <WatchEpisode key={episodeId} episodeId={episodeId} anime={state?.anime} />;
+  const requestQuery = sourceQuery(query);
+  const hints = sourceSuffix({ ...requestQuery, titles: requestQuery.titles?.length ? requestQuery.titles : sourceTitles.get('anime', episodeId) });
+  return <WatchEpisode key={`${episodeId}:${hints}`} episodeId={episodeId} anime={state?.anime} hints={hints} />;
 }
 
-function WatchEpisode({ episodeId, anime }: { episodeId: string; anime?: CatalogAnime }) {
+function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: CatalogAnime; hints: string }) {
   const playerRef = useRef<VideoPlayerHandle>(null);
   const [session, setSession] = useState<WatchSession | null>(null);
   const [source, setSource] = useState<StreamSource | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
+  const sourceEpisode = /^(tatakai|toko):([1-9]\d*):(\d+(?:\.\d+)?)$/.exec(episodeId);
+  const sourceBack = new URLSearchParams(hints);
+  if (sourceEpisode) { sourceBack.set('kind', 'anime'); sourceBack.set('id', sourceEpisode[2]); sourceBack.set('episode', sourceEpisode[3]); }
+  const backPath = !anime && sourceEpisode ? `/sources?${sourceBack}` : '/explore';
 
   useEffect(() => {
     let active = true;
-    void streamingService.playback(episodeId, anime ? [anime.title, anime.titleOriginal || ''].filter(Boolean) : undefined).then(playback => {
+    const queryTitles = sourceQuery(new URLSearchParams(hints)).titles;
+    const titles = queryTitles?.length ? queryTitles : anime ? [anime.title, anime.titleOriginal || ''].filter(Boolean) : sourceTitles.get('anime', episodeId);
+    void streamingService.playback(episodeId, titles).then(playback => {
       if (!active) return;
       if (!playback.sources.length) throw new Error('A reprodução ainda não está disponível para este episódio.');
+      sourceTitles.save('anime', episodeId, titles);
       const previous = libraryService.getProgress(episodeId);
       setSession({ playback, resumeTime: previous && !previous.completed ? previous.currentTime : 0 });
       setSource(playback.sources[0]);
@@ -44,7 +55,7 @@ function WatchEpisode({ episodeId, anime }: { episodeId: string; anime?: Catalog
       setError(cause instanceof Error ? cause.message : 'Não foi possível carregar o vídeo. Tente novamente em instantes.');
     });
     return () => { active = false; };
-  }, [episodeId, attempt, anime]);
+  }, [episodeId, attempt, anime, hints]);
 
   const saveProgress = useCallback((currentTime: number, duration: number) => {
     if (!session) return;
@@ -65,14 +76,14 @@ function WatchEpisode({ episodeId, anime }: { episodeId: string; anime?: Catalog
   const brazilianPortuguese = preferredSubtitleId(activeSubtitles) !== 'off';
   return (
     <main id="main-content" className="mx-auto max-w-[1440px] px-4 pb-20 pt-24 sm:px-8 lg:px-12">
-      <Link to="/explore" className="mb-6 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={16} />Voltar ao catálogo</Link>
+      <Link to={backPath} className="mb-6 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={16} />{backPath.startsWith('/sources') ? 'Voltar às fontes' : 'Voltar ao catálogo'}</Link>
       <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0">
           <VideoPlayer ref={playerRef} key={`${episodeId}:${source.url}`} source={source} poster={playback.episode.thumbnail} subtitles={activeSubtitles} intro={playback.intro} initialTime={resumeTime} onProgress={saveProgress} />
           <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
             <div><div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-300"><Film size={13} />{playback.isDemo ? 'Demonstração do player' : 'Agora assistindo'}</div><h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{playback.episode.title}</h1></div>
-            {playback.previousEpisodeId && <Link to={`/watch/${encodeURIComponent(playback.previousEpisodeId)}`} state={{ anime }} className="button-secondary"><ArrowLeft size={16} />Episódio anterior</Link>}
-            {playback.nextEpisodeId && <Link to={`/watch/${encodeURIComponent(playback.nextEpisodeId)}`} state={{ anime }} className="inline-flex items-center gap-2 rounded-lg bg-teal-400 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-teal-300">Próximo episódio<ArrowRight size={16} /></Link>}
+            {playback.previousEpisodeId && <Link to={`/watch/${encodeURIComponent(playback.previousEpisodeId)}${hints}`} state={{ anime }} className="button-secondary"><ArrowLeft size={16} />Episódio anterior</Link>}
+            {playback.nextEpisodeId && <Link to={`/watch/${encodeURIComponent(playback.nextEpisodeId)}${hints}`} state={{ anime }} className="inline-flex items-center gap-2 rounded-lg bg-teal-400 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-teal-300">Próximo episódio<ArrowRight size={16} /></Link>}
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-400">
             <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-teal-400" />Fonte autorizada</span>

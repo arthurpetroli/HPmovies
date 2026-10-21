@@ -1,5 +1,7 @@
 import type { NovelChapterList, NovelPage, NovelProvider, NovelReadingResult, NovelTitle } from '../../shared/novel';
 import { requestData } from './http';
+import { sourceSuffix, sourceTitles } from './content';
+import type { ChapterQuery } from '../../shared/content';
 
 export function isNovel(value: unknown): value is NovelTitle {
   if (!value || typeof value !== 'object') return false;
@@ -30,6 +32,11 @@ const isContent = (value: unknown): value is NovelReadingResult => {
       && typeof content.chapter.language === 'string' && content.paragraphs.length > 0));
 };
 
+function readingHints(id: string, query?: ChapterQuery): ChapterQuery {
+  if (query?.titles?.length) sourceTitles.save('novel', id, query.titles);
+  return { ...query, titles: query?.titles?.length ? query.titles : sourceTitles.get('novel', id) };
+}
+
 export const novelService: NovelProvider = {
   search: (query) => {
     const params = new URLSearchParams();
@@ -38,6 +45,6 @@ export const novelService: NovelProvider = {
   },
   genres: () => requestData('/novels/genres', (value): value is string[] => Array.isArray(value) && value.every((genre) => typeof genre === 'string')),
   details: (id) => requestData(`/novels/${encodeURIComponent(id)}`, isNovel),
-  chapters: (id) => requestData(`/novels/${encodeURIComponent(id)}/chapters`, isChapters),
-  content: (id, chapterId) => requestData(`/novels/${encodeURIComponent(id)}/chapters/${encodeURIComponent(chapterId)}/content`, isContent),
+  chapters: (id, query) => requestData(`/novels/${encodeURIComponent(id)}/chapters${sourceSuffix(readingHints(id, query))}`, isChapters, { timeoutMs: 65_000 }),
+  content: (id, chapterId, query) => requestData(`/novels/${encodeURIComponent(id)}/chapters/${encodeURIComponent(chapterId)}/content${sourceSuffix(readingHints(id, query))}`, isContent, { timeoutMs: 65_000 }),
 };

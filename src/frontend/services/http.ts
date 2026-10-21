@@ -3,16 +3,20 @@ export const API_BASE_URL = configuredBase
   ? configuredBase.endsWith('/api') ? configuredBase : `${configuredBase}/api`
   : '/api';
 
+/** Opaque backend media tickets follow a separately configured API origin. */
+export const apiMediaUrl = (url: string): string => /^\/api\/(?:content\/image|streaming\/media)\/[a-zA-Z0-9_-]+(?:[.?/]|$)/.test(url)
+  ? `${API_BASE_URL}${url.slice(4)}` : url;
+
 const pending = new Map<string, Promise<unknown>>();
 
-export async function requestData<T>(path: string, validate: (data: unknown) => data is T): Promise<T> {
+export async function requestData<T>(path: string, validate: (data: unknown) => data is T, options: { timeoutMs?: number } = {}): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
   const existing = pending.get(url);
   if (existing) return existing as Promise<T>;
 
   const request = (async () => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25_000);
+    const timeout = setTimeout(() => controller.abort(), Math.min(65_000, Math.max(1000, options.timeoutMs ?? 25_000)));
     try {
       const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
       const payload: unknown = await response.json().catch((error: unknown) => {

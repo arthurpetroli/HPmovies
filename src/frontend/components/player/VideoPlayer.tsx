@@ -163,7 +163,8 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
     if (source.type === 'hls' && Hls.isSupported()) {
       // The provider supplies external, language-verified WebVTT tracks.
       // Keep HLS subtitle controllers from disabling or clearing those native tracks.
-      const hls = new Hls({ enableWorker: true, subtitleTrackController: undefined, subtitleStreamController: undefined, timelineController: undefined });
+      const hls = new Hls({ enableWorker: true, maxBufferLength: 30, maxMaxBufferLength: 60, maxBufferSize: 20 * 1024 * 1024, backBufferLength: 30,
+        subtitleTrackController: undefined, subtitleStreamController: undefined, timelineController: undefined });
       hlsRef.current = hls;
       hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
         setQualities(data.levels.map((level, index) => ({ index, height: level.height, bitrate: level.bitrate })));

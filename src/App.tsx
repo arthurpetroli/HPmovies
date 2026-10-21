@@ -18,6 +18,8 @@ const NovelHomePage = lazy(() => import('./frontend/pages/NovelHomePage').then(m
 const NovelDetailsPage = lazy(() => import('./frontend/pages/NovelDetailsPage').then(module => ({ default: module.NovelDetailsPage })));
 const NovelReaderPage = lazy(() => import('./frontend/pages/NovelReaderPage').then(module => ({ default: module.NovelReaderPage })));
 const ProvidersPage = lazy(() => import('./frontend/pages/ProvidersPage').then(module => ({ default: module.ProvidersPage })));
+const SourcesPage = lazy(() => import('./frontend/pages/SourcesPage').then(module => ({ default: module.SourcesPage })));
+const SourceMangaReaderPage = lazy(() => import('./frontend/pages/MangaReaderPage').then(module => ({ default: module.SourceMangaReaderPage })));
 
 function ScrollReset() {
   const { pathname } = useLocation();
@@ -37,6 +39,8 @@ function App() {
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/providers" element={<ProvidersPage />} />
+          <Route path="/sources" element={<SourcesPage />} />
+          <Route path="/sources/manga/:mangaId/read/:chapterId" element={<SourceMangaReaderPage />} />
           <Route path="/manga" element={<MangaHomePage />} />
           <Route path="/manga/:mangaId" element={<MangaDetailsPage />} />
           <Route path="/manga/:mangaId/read/:chapterId" element={<MangaReaderPage />} />

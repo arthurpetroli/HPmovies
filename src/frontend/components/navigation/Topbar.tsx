@@ -3,7 +3,7 @@ import { Bookmark, Menu, Play, Search, X } from 'lucide-react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { SearchBar } from '../search/SearchBar';
 
-const navigation = [{ label: 'Início', to: '/' }, { label: 'Animes', to: '/explore' }, { label: 'Mangás', to: '/manga' }, { label: 'Novels', to: '/novels' }, { label: 'Populares', to: '/category/most-popular' }, { label: 'Minha Lista', to: '/library' }];
+const navigation = [{ label: 'Início', to: '/' }, { label: 'Animes', to: '/explore' }, { label: 'Mangás', to: '/manga' }, { label: 'Novels', to: '/novels' }, { label: 'Populares', to: '/category/most-popular' }, { label: 'Fontes', to: '/sources' }, { label: 'Minha Lista', to: '/library' }];
 
 export function Brand() {
   return <Link to="/" className="brand" aria-label="HPmovies — início"><span className="brand-icon"><Play size={18} fill="currentColor" /></span><span>HP<span className="brand-light">movies</span><span className="brand-dot">.</span></span></Link>;
