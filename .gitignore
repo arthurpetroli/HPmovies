@@ -27,3 +27,6 @@ dist-ssr
 # Browser validation artifacts
 playwright-report/
 test-results/
+
+# Local executable source bundles and operator configuration
+.local/
