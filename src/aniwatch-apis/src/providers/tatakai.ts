@@ -22,6 +22,7 @@ export class TatakaiStreamingProvider implements AnimeStreamingProvider {
       contentAuthorized: config.contentAuthorized ?? false,
       allowedProviders: config.allowedProviders ?? [],
       allowedMediaHosts: config.allowedMediaHosts ?? [],
+      allowedRequestOrigins: config.allowedRequestOrigins ?? [],
     };
     this.client = options.client ?? new TokoHttpClient(this.contentConfig, { apiMode: 'extension-host', namespace: config.namespace ?? 'toko' });
     this.adapter = new TokoStreamingProvider({ client: this.client, config: this.contentConfig, id: 'tatakai', name: 'Tatakai local' });

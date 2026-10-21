@@ -33,6 +33,17 @@ describe('platform boundaries', () => {
     expect(Number(limited.headers.get('Retry-After'))).toBeGreaterThan(0);
     expect((await app.request('/health')).status).toBe(200);
   });
+  it('keeps media fetching independent of the catalog quota while still limiting media requests', async () => {
+    const manga = new MangaDexProvider();
+    vi.spyOn(manga, 'image').mockResolvedValue({ bytes: new Uint8Array([1]), contentType: 'image/png', cacheControl: 'private, max-age=300' });
+    const app = createApp({ catalog, manga, rateLimit: 1, mediaRateLimit: 2 });
+    const path = '/api/manga/image/00000000-0000-0000-0000-000000000001';
+    expect((await app.request(path)).status).toBe(200);
+    expect((await app.request(path)).status).toBe(200);
+    expect((await app.request('/api/catalog/genres')).status).toBe(200);
+    expect((await app.request(path, { headers: { 'X-Forwarded-For': '203.0.113.42' } })).status).toBe(429);
+    expect((await app.request('/api/catalog/genres')).status).toBe(429);
+  });
   it('never contacts providers for invalid manga IDs or unsafe language filters', async () => {
     const app = createApp({ catalog });
     expect((await app.request('/api/manga/not-a-uuid')).status).toBe(400);

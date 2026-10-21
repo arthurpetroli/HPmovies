@@ -10,12 +10,14 @@ import type { TokoConfig } from '../config/integrations.js';
 import { normalizeTokoLanguage, permittedMediaUrl } from './toko.js';
 import { TokoHttpClient } from './toko-http.js';
 import type { TokoChapter } from './toko-http.js';
+import type { ContentImageGateway } from './content-image.js';
 
 export interface TokoReadingOptions {
   config?: TokoConfig;
   client?: TokoHttpClient;
   id?: 'toko' | 'tatakai';
   name?: string;
+  imageGateway?: ContentImageGateway;
 }
 
 interface IssuedChapter {
@@ -62,6 +64,7 @@ export class TokoReadingProvider implements ReadingContentProvider {
   readonly name: string;
   readonly config: TokoConfig;
   readonly client: TokoHttpClient;
+  private readonly imageGateway?: ContentImageGateway;
   private readonly issued = new Map<string, IssuedChapter>();
 
   constructor(options: TokoReadingOptions = {}) {
@@ -69,6 +72,7 @@ export class TokoReadingProvider implements ReadingContentProvider {
     this.name = options.name ?? (this.id === 'tatakai' ? 'Tatakai local' : 'Toko HTTP');
     this.config = options.config ?? options.client?.config ?? integrationsConfig.toko;
     this.client = options.client ?? new TokoHttpClient(this.config);
+    this.imageGateway = options.imageGateway;
   }
 
   supports(kind: ReadingKind, workId: string): boolean {
@@ -153,7 +157,7 @@ export class TokoReadingProvider implements ReadingContentProvider {
         const issued = [...unique.values()];
         for (const chapter of issued) this.remember(chapter);
         const upstreamStatus = response.providerStatus?.find((item) => item.provider === provider);
-        const failed = upstreamStatus?.status === 'error';
+        const failed = upstreamStatus?.status === 'error' || upstreamStatus?.status === 'timeout';
         const pending = !issued.length && (upstreamStatus?.status === 'pending' || upstreamStatus?.status === 'running' || (response.partial === true && !upstreamStatus));
         const state = failed ? 'connection_error' : issued.length ? 'available' : pending ? 'checking' : 'empty';
         const message = failed ? `A fonte ${provider} informou uma falha ao consultar seus capítulos.`
@@ -230,11 +234,12 @@ export class TokoReadingProvider implements ReadingContentProvider {
     for (const page of sorted) {
       if (!Number.isSafeInteger(page.pageNumber) || page.pageNumber < 1 || indexes.has(page.pageNumber)) return invalidResponse();
       indexes.add(page.pageNumber);
-      if (page.requiresHeaders) throw new ApiError(503, 'TOKO_REQUIRED_HEADERS_UNSUPPORTED', 'Esta fonte exige cabeçalhos de acesso e não oferece páginas com acesso direto compatível.');
+      if (page.requiresHeaders && (!page.headers || !this.imageGateway)) throw new ApiError(503, 'TOKO_REQUIRED_HEADERS_UNSUPPORTED', 'Esta fonte exige cabeçalhos de acesso e não oferece páginas com acesso direto compatível.');
     }
     const pages = sorted.map((page) => {
       const url = permittedMediaUrl(page.imageUrl, this.config.allowedMediaHosts);
       if (!url) throw new ApiError(503, 'TOKO_MEDIA_NOT_PERMITTED', 'Uma página usa um domínio ou formato de URL sem permissão de mídia configurada.');
+      if (page.requiresHeaders) return this.imageGateway!.issue(this.config, target.provider, url, page.headers!);
       return url;
     });
     return { chapter: target.chapter, pages, previousChapterId, nextChapterId, isDemo: false };

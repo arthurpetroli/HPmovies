@@ -7,6 +7,7 @@ import { integrationsConfig, normalizeProviderKey } from '../config/integrations
 import type { TokoConfig } from '../config/integrations.js';
 import { TokoHttpClient } from './toko-http.js';
 import type { TokoStream } from './toko-http.js';
+import { streamMediaGateway } from './stream-media.js';
 
 export interface TokoStreamingOptions {
   config?: TokoConfig;
@@ -17,7 +18,12 @@ export interface TokoStreamingOptions {
 
 /** Only explicit language metadata is trusted. A label such as "sub" is unknown. */
 export function normalizeTokoLanguage(value: string | undefined): string {
-  const candidate = (value ?? '').trim();
+  const explicitNames: Record<string, string> = {
+    english: 'en', japanese: 'ja',
+    'portuguese(brazil)': 'pt-BR', 'português(brasil)': 'pt-BR',
+  };
+  const supplied = (value ?? '').trim();
+  const candidate = explicitNames[supplied.toLowerCase().replace(/\s*([()])\s*/g, '$1')] ?? supplied;
   if (!/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i.test(candidate) || ['sub', 'dub'].includes(candidate.toLowerCase())) return 'und';
   try { return Intl.getCanonicalLocales(candidate)[0] ?? 'und'; } catch { return 'und'; }
 }
@@ -37,24 +43,35 @@ export function permittedMediaUrl(raw: string, allowedHosts: string[]): string |
 
 export function normalizeTokoSource(source: TokoStream, config: TokoConfig, index = 0): StreamingSource | undefined {
   const providerId = normalizeProviderKey(source.providerKey || source.providerName);
-  if (!config.contentAuthorized || !providerId || !config.allowedProviders.includes(providerId) || source.requiresHeaders) return undefined;
+  if (!config.contentAuthorized || !providerId || !config.allowedProviders.includes(providerId) || source.requiresHeaders && !source.headers) return undefined;
   if (source.type !== 'hls' && source.type !== 'mp4') return undefined;
-  const url = permittedMediaUrl(source.url, config.allowedMediaHosts);
+  let url = permittedMediaUrl(source.url, config.allowedMediaHosts);
   if (!url) return undefined;
+  if (source.requiresHeaders) {
+    try { url = streamMediaGateway.issue(config, providerId, url, source.type, source.headers); }
+    catch { return undefined; }
+  }
   const audioLanguage = normalizeTokoLanguage(source.audioLanguage);
   const subtitles = source.subtitles.flatMap((track, trackIndex): StreamSubtitle[] => {
-    const subtitleUrl = permittedMediaUrl(track.url, config.allowedMediaHosts);
+    let subtitleUrl = permittedMediaUrl(track.url, config.allowedMediaHosts);
     if (!subtitleUrl) return [];
+    const inferred = /\.(srt|ass|ssa|vtt)$/i.exec(new URL(track.url).pathname)?.[1].toLowerCase();
+    const format = track.format !== undefined ? track.format.trim().toLowerCase() : inferred === 'ssa' ? 'ass' : inferred ?? 'vtt';
+    if (!['vtt', 'srt', 'ass'].includes(format) || format === 'ass' && (source.requiresHeaders || track.headers)) return [];
+    if (source.requiresHeaders || track.headers) {
+      try { subtitleUrl = streamMediaGateway.issue(config, providerId, subtitleUrl, 'subtitle', track.headers ?? source.headers); }
+      catch { return []; }
+    }
     return [{
       id: `toko-${providerId}-${index}-${trackIndex}`, url: subtitleUrl,
       label: track.label, language: normalizeTokoLanguage(track.language),
-      kind: 'subtitles', default: track.default,
+      kind: 'subtitles', default: track.default, format: format as StreamSubtitle['format'],
     }];
   });
   // Resolution is a provider label only; the HLS player discovers actual levels.
   return {
     providerId, providerName: source.providerName || providerId,
-    url, type: source.type, label: source.quality || source.providerName || providerId,
+    url, type: source.type, label: [source.providerName || providerId, audioLanguage !== 'und' ? audioLanguage : undefined, source.quality].filter(Boolean).join(' · '),
     quality: source.quality, audioLanguage, subtitles, available: true,
   };
 }
@@ -161,7 +178,7 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
       this.client.episodes(Number(match[1]), titles).catch(() => null),
     ]);
     if (!result.sources.length) {
-      if (result.returnedSources > 0) throw new ApiError(503, 'TOKO_UNAUTHORIZED', 'As fontes retornadas não atendem às permissões ou exigem cabeçalhos de acesso incompatíveis com a reprodução direta.');
+      if (result.returnedSources > 0) throw new ApiError(503, 'TOKO_UNAUTHORIZED', 'As fontes retornadas não atendem às permissões de domínio, provedor ou cabeçalhos configuradas.');
       throw new ApiError(404, 'EPISODE_UNAVAILABLE', 'O Toko não encontrou mídia disponível para este episódio.');
     }
     const subtitles = [...new Map(result.sources.flatMap((source) => source.subtitles).map((track) => [`${track.url}:${track.language}`, track])).values()];

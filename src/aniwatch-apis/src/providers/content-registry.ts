@@ -3,6 +3,7 @@ import type { ProviderDiagnostic } from '../../../shared/providers.js';
 import { ApiError } from '../config/apiError.js';
 import { TokoReadingProvider } from './toko-reading.js';
 import type { StreamingRegistry } from './registry.js';
+import { ContentImageGateway } from './content-image.js';
 
 export interface ContentQuery extends ChapterQuery { source?: string }
 
@@ -28,12 +29,14 @@ export function contentQuery(params: URLSearchParams): ContentQuery {
 
 export class ContentRegistry {
   readonly providers: ReadingContentProvider[];
-  constructor(streaming: StreamingRegistry, providers?: ReadingContentProvider[]) {
+  constructor(streaming: StreamingRegistry, providers?: ReadingContentProvider[], readonly imageGateway = new ContentImageGateway()) {
     this.providers = providers ?? [
-      new TokoReadingProvider({ client: streaming.toko.client, config: streaming.toko.config }),
-      new TokoReadingProvider({ client: streaming.tatakai.client, config: streaming.tatakai.contentConfig, id: 'tatakai', name: 'Tatakai local' }),
+      new TokoReadingProvider({ client: streaming.toko.client, config: streaming.toko.config, imageGateway }),
+      new TokoReadingProvider({ client: streaming.tatakai.client, config: streaming.tatakai.contentConfig, id: 'tatakai', name: 'Tatakai local', imageGateway }),
     ];
   }
+
+  image(token: string) { return this.imageGateway.image(token); }
 
   async chapters(kind: ReadingKind, work: string, query: ContentQuery = {}): Promise<ContentChapterList> {
     const workId = validateWorkId(work);

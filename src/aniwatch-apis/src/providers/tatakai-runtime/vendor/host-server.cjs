@@ -481,12 +481,12 @@ function createBundleLoader(logger, onReload) {
     const tmpDir = path.join(os.tmpdir(), 'tatakai-extension-api-host');
     let counter = 0;
 
-    function load(bundlePath, manifest) {
+    function load(bundlePath, manifest, runtime = {}) {
         if (!fs.existsSync(bundlePath)) {
             throw new Error(`Extension bundle not found at ${bundlePath}`);
         }
         const stat = fs.statSync(bundlePath);
-        const fingerprint = `${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}:${JSON.stringify([manifest?.browserDomains, manifest?.permissions])}`;
+        const fingerprint = `${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}:${JSON.stringify([manifest?.browserDomains, manifest?.permissions, runtime])}`;
         const cached = cache.get(bundlePath);
         if (cached?.fingerprint === fingerprint) return cached.instance;
         if (cached) onReload?.();
@@ -496,10 +496,45 @@ function createBundleLoader(logger, onReload) {
         fs.copyFileSync(bundlePath, tmp);
 
         const mod = require(tmp);
+        // HPmovies: constrain the original bundle's exported registries before
+        // constructing it. Removed providers are never invoked, including by
+        // aggregate manga/novel methods which do not accept a provider filter.
+        if (runtime.providers) {
+            const registries = ['STREAM_PROVIDERS', 'TORRENT_PROVIDERS', 'MANGA_PROVIDERS', 'NOVEL_PROVIDERS']
+                .map(name => mod[name]).filter(Array.isArray);
+            const available = new Set(registries.flatMap(rows => rows.map(row => row.name)));
+            if (!registries.length || runtime.providers.some(name => !available.has(name))) {
+                throw new Error('Selected provider is not present in the bundle exported registries');
+            }
+            for (const rows of registries) rows.splice(0, rows.length, ...rows.filter(row => runtime.providers.includes(row.name)));
+        }
         const Bundle = mod.default || mod;
         const instance = typeof Bundle === 'function' ? new Bundle() : Bundle;
+        // HPmovies: the original manga aggregator hardcodes a 15s timeout for a
+        // complete paginated catalog. Keep the published provider implementation
+        // unchanged while allowing an explicitly bounded local catalog budget.
+        if (runtime.mangaTimeoutMs) {
+            if (!Array.isArray(mod.MANGA_PROVIDERS)) throw new Error('mangaTimeoutMs requires exported MANGA_PROVIDERS');
+            instance.debugMangaChapters = async params => {
+                const rows = await Promise.all(mod.MANGA_PROVIDERS.map(async provider => {
+                    const started = Date.now();
+                    let timer;
+                    try {
+                        const results = await Promise.race([
+                            provider.getChapters(params),
+                            new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Manga catalog timed out')), runtime.mangaTimeoutMs); }),
+                        ]);
+                        if (!Array.isArray(results)) throw new Error('Invalid manga catalog');
+                        return { results, diagnostic: { provider: provider.name, status: results.length ? 'ok' : 'empty', durationMs: Date.now() - started, resultCount: results.length, attempts: 1 } };
+                    } catch (error) {
+                        return { results: [], diagnostic: { provider: provider.name, status: /timed out/i.test(error.message) ? 'timeout' : 'error', error: error.message, durationMs: Date.now() - started, resultCount: 0, attempts: 1 } };
+                    } finally { clearTimeout(timer); }
+                }));
+                return { results: rows.flatMap(row => row.results), diagnostics: rows.map(row => row.diagnostic) };
+            };
+        }
         let browserHost;
-        if (typeof instance?.configureBrowserRuntime === 'function' && manifest?.browserDomains?.length) {
+        if (runtime.browserMode !== 'disabled' && typeof instance?.configureBrowserRuntime === 'function' && manifest?.browserDomains?.length) {
             const { SeanimeBrowserHost } = require('../extension/seanime-browser-host.cjs');
             const network = (manifest.permissions || []).filter(p => typeof p === 'string' && p.startsWith('network:domain:')).map(p => p.slice('network:domain:'.length));
             browserHost = new SeanimeBrowserHost(manifest.browserDomains.filter(domain => typeof domain === 'string' && network.some(allowed => domain === allowed || domain.endsWith('.' + allowed))));
@@ -739,7 +774,7 @@ function createHostApp({ registry, localProxy, logger }) {
     async function handleSourceRequest(req, res, mode, entry, searchParams) {
         let bundle;
         try {
-            bundle = bundleLoader.load(entry.bundlePath, entry.manifest);
+            bundle = bundleLoader.load(entry.bundlePath, entry.manifest, entry.runtime);
         } catch (err) {
             logger?.warn?.(`[ExtHost] bundle load failed: ${err.message}`);
             res.writeHead(502, JSON_HEADERS);
@@ -874,7 +909,7 @@ function createHostApp({ registry, localProxy, logger }) {
     function handleProviderList(res, entry, namespace) {
         let bundle;
         try {
-            bundle = bundleLoader.load(entry.bundlePath, entry.manifest);
+            bundle = bundleLoader.load(entry.bundlePath, entry.manifest, entry.runtime);
         } catch (err) {
             res.writeHead(502, JSON_HEADERS);
             return res.end(JSON.stringify({ providers: [], count: 0, error: err.message }));
@@ -925,7 +960,7 @@ function createHostApp({ registry, localProxy, logger }) {
     async function handleSingleProvider(req, res, entry, namespace, providerName, searchParams) {
         let bundle;
         try {
-            bundle = bundleLoader.load(entry.bundlePath, entry.manifest);
+            bundle = bundleLoader.load(entry.bundlePath, entry.manifest, entry.runtime);
         } catch (err) {
             res.writeHead(502, JSON_HEADERS);
             return res.end(JSON.stringify({ provider: providerName, sources: [], count: 0, error: err.message }));
@@ -987,7 +1022,7 @@ function createHostApp({ registry, localProxy, logger }) {
     async function handleMangaChapters(res, entry, namespace, searchParams) {
         let bundle;
         try {
-            bundle = bundleLoader.load(entry.bundlePath, entry.manifest);
+            bundle = bundleLoader.load(entry.bundlePath, entry.manifest, entry.runtime);
         } catch (err) {
             res.writeHead(502, JSON_HEADERS);
             return res.end(JSON.stringify({ namespace, chapters: [], count: 0, error: err.message }));
@@ -1072,7 +1107,7 @@ function createHostApp({ registry, localProxy, logger }) {
     async function handleMangaPages(res, entry, namespace, searchParams) {
         let bundle;
         try {
-            bundle = bundleLoader.load(entry.bundlePath, entry.manifest);
+            bundle = bundleLoader.load(entry.bundlePath, entry.manifest, entry.runtime);
         } catch (err) {
             res.writeHead(502, JSON_HEADERS);
             return res.end(JSON.stringify({ namespace, pages: [], count: 0, error: err.message }));
@@ -1179,7 +1214,7 @@ function createHostApp({ registry, localProxy, logger }) {
     async function handleNovelChapters(res, entry, namespace, searchParams) {
         let bundle;
         try {
-            bundle = bundleLoader.load(entry.bundlePath, entry.manifest);
+            bundle = bundleLoader.load(entry.bundlePath, entry.manifest, entry.runtime);
         } catch (err) {
             res.writeHead(502, JSON_HEADERS);
             return res.end(JSON.stringify({ namespace, chapters: [], count: 0, error: err.message }));
@@ -1255,7 +1290,7 @@ function createHostApp({ registry, localProxy, logger }) {
     async function handleNovelContent(res, entry, namespace, searchParams) {
         let bundle;
         try {
-            bundle = bundleLoader.load(entry.bundlePath, entry.manifest);
+            bundle = bundleLoader.load(entry.bundlePath, entry.manifest, entry.runtime);
         } catch (err) {
             res.writeHead(502, JSON_HEADERS);
             return res.end(JSON.stringify({ namespace, paragraphs: [], count: 0, error: err.message }));
@@ -1323,7 +1358,7 @@ function createHostApp({ registry, localProxy, logger }) {
     /** Load the namespace's bundle or write a 502; returns null on failure. */
     function loadCustomBundle(res, entry, namespace, emptyShape) {
         try {
-            return bundleLoader.load(entry.bundlePath, entry.manifest);
+            return bundleLoader.load(entry.bundlePath, entry.manifest, entry.runtime);
         } catch (err) {
             res.writeHead(502, JSON_HEADERS);
             res.end(JSON.stringify({ namespace, ...emptyShape, error: err.message }));
@@ -1739,7 +1774,7 @@ function createHostApp({ registry, localProxy, logger }) {
         }
         if (route === 'novel/search') {
             try {
-                const bundle = bundleLoader.load(found.entry.bundlePath, found.entry.manifest);
+                const bundle = bundleLoader.load(found.entry.bundlePath, found.entry.manifest, found.entry.runtime);
                 if (typeof bundle.getNovelSearch !== 'function') { res.writeHead(501, JSON_HEADERS); return res.end(JSON.stringify({ error: 'Update Toko to enable provider search', results: [] })); }
                 const result = await bundle.getNovelSearch({ query: searchParams.get('query') || '', provider: searchParams.get('provider') || undefined });
                 res.writeHead(200, JSON_HEADERS); return res.end(JSON.stringify({ namespace, ...result }));

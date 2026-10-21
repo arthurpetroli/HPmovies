@@ -7,6 +7,7 @@ import { loadIntegrationsConfig } from '../src/aniwatch-apis/src/config/integrat
 import type { TokoConfig } from '../src/aniwatch-apis/src/config/integrations';
 import { TokoHttpClient } from '../src/aniwatch-apis/src/providers/toko-http';
 import { TokoReadingProvider } from '../src/aniwatch-apis/src/providers/toko-reading';
+import { ContentImageGateway } from '../src/aniwatch-apis/src/providers/content-image';
 
 interface Payloads {
   chapters?: (url: URL) => unknown;
@@ -52,6 +53,23 @@ async function fixture(payloads: Payloads, run: (fixture: {
 }
 
 describe('Toko reading HTTP adapter', () => {
+  it('preserves permitted public-image headers and issues gateway tickets only after listing the chapter', async () => {
+    await fixture({ pages: { pages: [{ pageNumber: 1, imageUrl: 'https://media.example.com/1.jpg', headers: { Referer: 'https://www.webtoons.com/' } }] } }, async ({ config, calls }) => {
+      const gateway = new ContentImageGateway({ resolver: async () => [{ address: '1.1.1.1', family: 4 }], transport: async input => {
+        expect(input.headers.referer).toBe('https://www.webtoons.com/');
+        return { status: 200, headers: new Headers({ 'content-type': 'image/jpeg' }), body: (async function* () { yield new Uint8Array([255, 216]); })(), cancel: () => undefined };
+      } });
+      const adapter = new TokoReadingProvider({ config: { ...config, allowedRequestOrigins: ['https://www.webtoons.com'] }, imageGateway: gateway });
+      const listing = await adapter.chapters('manga', 'anilist:1');
+      const pages = await adapter.pages('anilist:1', listing.chapters[0].id);
+      expect(pages.pages[0]).toMatch(/^\/api\/content\/image\/[0-9a-f-]{36}$/);
+      expect(calls.some(call => call.pathname.endsWith('/manga/pages'))).toBe(true);
+      const image = await gateway.image(pages.pages[0].split('/').at(-1)!);
+      expect(image.bytes).toEqual(new Uint8Array([255, 216]));
+      await expect(adapter.pages('anilist:2', listing.chapters[0].id)).rejects.toMatchObject({ code: 'CHAPTER_NOT_FOUND' });
+    });
+  });
+
   it('lists permitted providers with explicit languages, natural order and bounded public chapter identities', async () => {
     await fixture({ chapters: () => ({ chapterCount: 6, chapters: [
       chapter('one', 10), chapter('one', 2, 'pt-br', { scanlator: 'Equipe', translator: 'Equipe' }),

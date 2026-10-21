@@ -100,6 +100,41 @@ describe('explicit local Tatakai source host', () => {
     await expect(startSourceHost({ extensionsFile: configFile, port: 0, logger: quiet })).rejects.toThrow('must name a local file');
   });
 
+  it('runs optional browser bundles with HTTP only and limits every exported registry before invocation', async () => {
+    const { directory, configFile } = await prepareExtensions();
+    const bundle = `
+      const allowed={name:'allowed',kind:'novel'};
+      const forbidden={name:'forbidden',kind:'stream'};
+      const manga={name:'comic',kind:'manga',async getChapters(){return [{number:1,sources:[{provider:'comic',chapterKey:'comic:1'}]}];}};
+      const STREAM_PROVIDERS=[forbidden],TORRENT_PROVIDERS=[forbidden],MANGA_PROVIDERS=[manga,forbidden],NOVEL_PROVIDERS=[allowed,forbidden];
+      module.exports={STREAM_PROVIDERS,TORRENT_PROVIDERS,MANGA_PROVIDERS,NOVEL_PROVIDERS,default:class {
+        configureBrowserRuntime(){throw new Error('browser must not be configured');}
+        listProviders(){return [...STREAM_PROVIDERS,...TORRENT_PROVIDERS,...MANGA_PROVIDERS,...NOVEL_PROVIDERS];}
+        getMangaChapters(){return [];}
+        getNovelChapters(){
+          if(process.env.CF_BYPASS_ENABLED!=='false'||process.env.CF_BYPASS_AUTO_INSTALL!=='false')throw new Error('bypass must be disabled');
+          return NOVEL_PROVIDERS.map(p=>({number:1,sources:[{provider:p.name,chapterKey:p.name+':1'}]}));
+        }
+      }};`;
+    await writeFile(path.join(directory, 'fixture.cjs'), bundle);
+    await writeFile(path.join(directory, 'fixture.json'), JSON.stringify({ id: 'fixture', browserDomains: ['example.test'], apiServer: { namespace: 'fixture', contract: 'streaming-sources-v3' } }));
+    const entry = { trusted: true, manifestPath: 'fixture.json', bundlePath: 'fixture.cjs', sha256: createHash('sha256').update(bundle).digest('hex'), browserMode: 'disabled', providers: ['allowed', 'comic'], mangaTimeoutMs: 1000 };
+    await writeFile(configFile, JSON.stringify({ version: 1, extensions: [entry] }));
+    const host = await start(configFile);
+    const inventory = await (await fetch(`${host.baseUrl}/api/v3/fixture/providers`)).json();
+    expect(inventory.providers).toEqual([{ name: 'comic', kind: 'manga' }, { name: 'allowed', kind: 'novel' }]);
+    const chapters = await (await fetch(`${host.baseUrl}/api/v3/fixture/novel/chapters?title=Work`)).json();
+    expect(chapters.chapters).toEqual([expect.objectContaining({ provider: 'allowed' })]);
+    const comic = await (await fetch(`${host.baseUrl}/api/v3/fixture/manga/chapters?title=Work`)).json();
+    expect(comic.chapters).toEqual([expect.objectContaining({ provider: 'comic', chapterKey: 'comic:1' })]);
+    expect(comic.providerStatus).toEqual([expect.objectContaining({ provider: 'comic', status: 'ok' })]);
+    await writeFile(configFile, JSON.stringify({ version: 1, extensions: [{ ...entry, providers: ['unknown'] }] }));
+    const invalidHost = await start(configFile);
+    expect((await fetch(`${invalidHost.baseUrl}/api/v3/fixture/providers`)).status).toBe(502);
+    await writeFile(configFile, JSON.stringify({ version: 1, extensions: [{ ...entry, browserMode: 'enabled' }] }));
+    await expect(startSourceHost({ extensionsFile: configFile, port: 0, logger: quiet })).rejects.toThrow('browserMode only supports disabled');
+  });
+
   it('does not expose arbitrary URL probing or permit external web origins', async () => {
     const host = await start();
     expect((await fetch(`${host.baseUrl}/api/v3/probe?url=http://169.254.169.254`)).status).toBe(404);

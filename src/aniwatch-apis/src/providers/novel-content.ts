@@ -29,7 +29,7 @@ export class NovelContentProvider implements NovelProvider {
   async content(id: string, chapterId: string, query: ContentQuery = {}): Promise<NovelReadingResult> {
     validateNovelId(id);
     if (id === 'demo') return this.catalog.content(id, chapterId);
-    const metadata = await this.catalog.details(id).catch(() => undefined);
+    const metadata = query.titles?.length ? undefined : await this.catalog.details(id).catch(() => undefined);
     const context = !query.titles?.length && metadata ? { ...query, titles: [metadata.title, metadata.titleOriginal || ''].filter(Boolean) } : query;
     const content = await this.reading.text(`anilist:${id}`, chapterId, context);
     const novel: NovelTitle = metadata ?? { id, title: query.titles?.[0] ?? `Novel · AniList ${id}`, poster: '', genres: [] };

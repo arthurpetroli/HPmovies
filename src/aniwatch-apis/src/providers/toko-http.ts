@@ -14,7 +14,9 @@ export interface TokoSubtitle {
   url: string;
   label: string;
   language: string;
+  format?: string;
   default?: boolean;
+  headers?: Record<string, string>;
 }
 
 export interface TokoStream {
@@ -26,6 +28,7 @@ export interface TokoStream {
   audioLanguage?: string;
   subtitles: TokoSubtitle[];
   requiresHeaders: boolean;
+  headers?: Record<string, string>;
 }
 
 export interface TokoStreamResponse {
@@ -67,6 +70,7 @@ export interface TokoPage {
   pageNumber: number;
   imageUrl: string;
   requiresHeaders: boolean;
+  headers?: Record<string, string>;
 }
 
 export interface TokoNovelContent {
@@ -100,6 +104,17 @@ const count = (value: unknown, max = 100_000): number => {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > max) return invalid();
   return value;
 };
+
+function responseHeaders(value: unknown): Record<string, string> {
+  const raw = value === undefined || value === null ? {} : object(value);
+  if (Object.keys(raw).length > 12) return invalid();
+  const headers: Record<string, string> = {};
+  for (const [key, input] of Object.entries(raw)) {
+    if (!/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(key) || typeof input !== 'string' || input.length > 2048 || /[\r\n\0]/.test(input)) return invalid();
+    headers[key] = input;
+  }
+  return headers;
+}
 
 /**
  * Independent HTTP implementation of Toko's documented JSON interface.
@@ -276,22 +291,26 @@ export class TokoHttpClient {
         const url = text(row.url, 8_192);
         const type = text(row.type, 30);
         if (!url || !type) return invalid();
+        const headers = responseHeaders(row.headers);
         return {
           url, type,
           providerKey: text(row.providerKey, 150) ?? '',
           providerName: text(row.providerName, 150) ?? text(row.source, 150) ?? '',
           quality: text(row.quality, 50),
           audioLanguage: text(row.audioLanguage, 64),
-          requiresHeaders: !!row.headers && Object.keys(object(row.headers)).length > 0,
+          requiresHeaders: Object.keys(headers).length > 0,
+          ...(Object.keys(headers).length ? { headers } : {}),
           subtitles: (row.subtitles === undefined ? [] : list(row.subtitles, 100)).map((track) => {
             const subtitle = object(track);
-            const subtitleUrl = text(subtitle.url, 8_192);
+            const subtitleUrl = text(subtitle.url, 8_192) ?? text(subtitle.file, 8_192);
             if (!subtitleUrl) return invalid();
             return {
               url: subtitleUrl,
               label: text(subtitle.label, 100) ?? 'Legenda sem identificação',
               language: text(subtitle.language, 64) ?? 'und',
+              ...(subtitle.format !== undefined ? { format: text(subtitle.format, 30) ?? 'unsupported' } : {}),
               default: subtitle.default === true,
+              ...(subtitle.headers ? { headers: responseHeaders(subtitle.headers) } : {}),
             };
           }),
         };
@@ -369,7 +388,14 @@ export class TokoHttpClient {
       const row = object(item);
       const imageUrl = text(row.imageUrl, 8_192);
       if (!imageUrl) return invalid();
-      return { pageNumber: count(row.pageNumber, 1_000), imageUrl, requiresHeaders: !!row.headers && Object.keys(object(row.headers)).length > 0 };
+      const rawHeaders = row.headers === undefined || row.headers === null ? {} : object(row.headers);
+      if (Object.keys(rawHeaders).length > 12) return invalid();
+      const headers: Record<string, string> = {};
+      for (const [key, value] of Object.entries(rawHeaders)) {
+        if (!/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(key) || typeof value !== 'string' || value.length > 2_048 || /[\r\n\0]/.test(value)) return invalid();
+        headers[key] = value;
+      }
+      return { pageNumber: count(row.pageNumber, 1_000), imageUrl, requiresHeaders: Object.keys(headers).length > 0, ...(Object.keys(headers).length ? { headers } : {}) };
     }), 30);
   }
 

@@ -79,7 +79,8 @@ describe('Tatakai local host through HPmovies content API', () => {
   it('serves novel text through the normal reader API even when metadata is unavailable', async () => {
     const host = await actualHost();
     const { registry, content } = backend(host.baseUrl);
-    const catalog: NovelProvider = { search: async () => { throw new Error('offline'); }, genres: async () => [], details: async () => { throw new Error('offline'); }, chapters: async () => { throw new Error('unused'); }, content: async () => { throw new Error('unused'); } };
+    let metadataRequests = 0;
+    const catalog: NovelProvider = { search: async () => { throw new Error('offline'); }, genres: async () => [], details: async () => { metadataRequests++; throw new Error('offline'); }, chapters: async () => { throw new Error('unused'); }, content: async () => { throw new Error('unused'); } };
     const novels = new NovelContentProvider(catalog, content);
     const app = createApp({ registry, content, novels });
     const list = await app.request(`/api/novels/1/chapters${hints}`);
@@ -88,6 +89,7 @@ describe('Tatakai local host through HPmovies content API', () => {
     const text = await app.request(`/api/novels/1/chapters/${chapters.chapters[0].id}/content${hints}`);
     expect(text.status).toBe(200);
     expect((await text.json()).data).toMatchObject({ available: true, novel: { id: '1', title: 'Obra de teste' }, paragraphs: ['Texto original de teste do contrato.'] });
+    expect(metadataRequests).toBe(0);
   });
 
   it('rejects malformed source requests before consulting an extension', async () => {

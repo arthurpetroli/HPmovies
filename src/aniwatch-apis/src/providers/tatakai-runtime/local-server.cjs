@@ -35,7 +35,7 @@ function localPath(value, configDirectory, label) {
   return path.resolve(configDirectory, value);
 }
 
-function assertManifest(manifest, namespaces, identifiers) {
+function assertManifest(manifest, namespaces, identifiers, runtime) {
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) throw new Error('Extension manifest must be an object');
   const identifier = manifest.id;
   const namespace = manifest.apiServer?.namespace;
@@ -43,13 +43,22 @@ function assertManifest(manifest, namespaces, identifiers) {
   if (typeof namespace !== 'string' || !/^[a-zA-Z\d][a-zA-Z\d_-]{0,63}$/.test(namespace)) throw new Error(`Extension ${identifier} requires apiServer.namespace`);
   if (namespaces.has(namespace) || identifiers.has(identifier)) throw new Error(`Duplicate extension id or namespace: ${identifier}/${namespace}`);
   if (!['streaming-sources-v3', 'custom-source-v1'].includes(manifest.apiServer.contract)) throw new Error(`Unsupported API contract for ${identifier}`);
-  if (Array.isArray(manifest.browserDomains) && manifest.browserDomains.length) {
+  if (Array.isArray(manifest.browserDomains) && manifest.browserDomains.length && runtime.browserMode !== 'disabled') {
     throw new Error(`Extension ${identifier} requires Electron browser helpers, which this Node host does not provide`);
   }
   if (manifest.capabilities !== undefined && (!Array.isArray(manifest.capabilities) || manifest.capabilities.some(value => typeof value !== 'string'))) throw new Error(`Invalid capabilities for ${identifier}`);
   if (manifest.apiServer.routes !== undefined && (!Array.isArray(manifest.apiServer.routes) || manifest.apiServer.routes.some(value => typeof value !== 'string'))) throw new Error(`Invalid API routes for ${identifier}`);
   identifiers.add(identifier);
   namespaces.add(namespace);
+}
+
+function runtimeOptions(entry) {
+  if (entry.browserMode !== undefined && entry.browserMode !== 'disabled') throw new Error('browserMode only supports disabled in the local Node host');
+  if (entry.mangaTimeoutMs !== undefined && (!Number.isInteger(entry.mangaTimeoutMs) || entry.mangaTimeoutMs < 1000 || entry.mangaTimeoutMs > 60000)) throw new Error('mangaTimeoutMs must be between 1000 and 60000');
+  if (entry.providers !== undefined && (!Array.isArray(entry.providers) || !entry.providers.length || entry.providers.length > 150 || entry.providers.some(value => typeof value !== 'string' || !/^[a-z][a-z0-9-]{0,79}$/.test(value)))) {
+    throw new Error('providers must be an explicit nonempty list of provider names');
+  }
+  return { browserMode: entry.browserMode, providers: entry.providers ? [...new Set(entry.providers)] : undefined, mangaTimeoutMs: entry.mangaTimeoutMs };
 }
 
 /** Load only operator-selected, hash-pinned, self-contained CommonJS bundles. */
@@ -72,18 +81,19 @@ async function loadLocalRegistry(configFile) {
     const manifestPath = localPath(entry.manifestPath, configDirectory, 'manifestPath');
     const bundlePath = localPath(entry.bundlePath, configDirectory, 'bundlePath');
     const manifest = JSON.parse((await readBounded(manifestPath, MAX_MANIFEST_BYTES, 'Manifest')).toString('utf8'));
-    assertManifest(manifest, namespaces, identifiers);
+    const runtime = runtimeOptions(entry);
+    assertManifest(manifest, namespaces, identifiers, runtime);
     const bundle = await readBounded(bundlePath, MAX_BUNDLE_BYTES, 'Bundle');
     const actualHash = createHash('sha256').update(bundle).digest('hex');
     if (actualHash !== entry.sha256.toLowerCase()) throw new Error(`Bundle sha256 mismatch: ${bundlePath}`);
-    staged.push({ manifest, bundle });
+    staged.push({ manifest, bundle, runtime });
   }
   const stagingDirectory = await mkdtemp(path.join(tmpdir(), 'hpmovies-sources-'));
   try {
-    for (const { manifest, bundle } of staged) {
+    for (const { manifest, bundle, runtime } of staged) {
       const bundlePath = path.join(stagingDirectory, `${manifest.id}.cjs`);
       await writeFile(bundlePath, bundle, { mode: 0o600, flag: 'wx' });
-      entries.set(manifest.id, { manifest, bundlePath });
+      entries.set(manifest.id, { manifest, bundlePath, runtime });
     }
     return { registry, cleanup: () => rm(stagingDirectory, { recursive: true, force: true }) };
   } catch (error) {
@@ -104,6 +114,10 @@ function isLocalRequest(req) {
 /** Start the upstream HTTP contract with an explicit local-file registry. */
 async function startSourceHost({ port = 8099, extensionsFile, logger = console } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Source host port must be between 0 and 65535');
+  // The portable bundle supports ordinary HTTP without the optional challenge
+  // solver. This host never starts a browser or installs one on a source error.
+  process.env.CF_BYPASS_ENABLED = 'false';
+  process.env.CF_BYPASS_AUTO_INSTALL = 'false';
   const loaded = await loadLocalRegistry(extensionsFile);
   const app = createHostApp({ registry: loaded.registry, logger });
   const server = createServer((req, res) => {

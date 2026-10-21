@@ -21,5 +21,6 @@ export const runtimeConfig = {
   mangadexUrl: serviceUrl(process.env.MANGADEX_API_URL, 'https://api.mangadex.org'),
   allowedOrigins: (process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(value => new URL(value.trim()).origin),
   rateLimit: integer(process.env.API_RATE_LIMIT, 180, 1, 10000),
+  mediaRateLimit: integer(process.env.MEDIA_RATE_LIMIT, 600, 1, 10000),
   rateWindowMs: integer(process.env.API_RATE_WINDOW_MS, 60000, 1000, 3600000),
 };

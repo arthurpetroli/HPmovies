@@ -16,6 +16,7 @@ import { MangaDexProvider, validateMangaId, validateMangaQuery, validateMangaLan
 import { ContentRegistry, contentQuery, titleHints, validateWorkId } from './providers/content-registry.js';
 import { NovelContentProvider } from './providers/novel-content.js';
 import { AniListNovelProvider, validateNovelId, validateNovelQuery } from './providers/novels.js';
+import { streamMediaGateway } from './providers/stream-media.js';
 
 interface AppOptions {
   catalog?: AnimeCatalogProvider;
@@ -24,6 +25,7 @@ interface AppOptions {
   manga?: MangaCatalogProvider & MangaChapterProvider & Partial<MangaImageProvider>;
   novels?: NovelProvider;
   rateLimit?: number;
+  mediaRateLimit?: number;
   registry?: StreamingRegistry;
   content?: ContentRegistry;
 }
@@ -40,13 +42,16 @@ export function createApp(options: AppOptions = {}) {
 
   const ordinaryHeaders = secureHeaders();
   const imageHeaders = secureHeaders({ crossOriginResourcePolicy: 'cross-origin' });
-  app.use('*', (c, next) => (c.req.path.startsWith('/api/manga/image/') ? imageHeaders : ordinaryHeaders)(c, next));
+  app.use('*', (c, next) => (c.req.path.startsWith('/api/manga/image/') || c.req.path.startsWith('/api/content/image/') || c.req.path.startsWith('/api/streaming/media/') ? imageHeaders : ordinaryHeaders)(c, next));
   app.use('*', cors({
     origin: runtimeConfig.allowedOrigins,
-    allowHeaders: ['Content-Type', 'Accept'],
+    allowHeaders: ['Content-Type', 'Accept', 'Range'],
+    exposeHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges'],
     allowMethods: ['GET', 'OPTIONS'],
   }));
-  app.use('/api/*', apiLimit(options.rateLimit ?? runtimeConfig.rateLimit, runtimeConfig.rateWindowMs));
+  const requestLimit = apiLimit(options.rateLimit ?? runtimeConfig.rateLimit, runtimeConfig.rateWindowMs);
+  const mediaLimit = apiLimit(options.mediaRateLimit ?? runtimeConfig.mediaRateLimit, runtimeConfig.rateWindowMs);
+  app.use('/api/*', (c, next) => (c.req.path.startsWith('/api/manga/image/') || c.req.path.startsWith('/api/content/image/') || c.req.path.startsWith('/api/streaming/media/') ? mediaLimit : requestLimit)(c, next));
   app.get('/health', (c) => c.json({
     status: 'OK', catalogProvider: 'anilist', streamingProvider: 'registry', mangaProvider: 'mangadex',
     legacyEnabled, timestamp: new Date().toISOString(),
@@ -79,6 +84,11 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ data: await streaming.episodes(id, titleHints(new URL(c.req.url).searchParams)) });
   });
   app.get('/api/streaming/episodes/:id', async (c) => c.json({ data: await streaming.playback(c.req.param('id'), titleHints(new URL(c.req.url).searchParams)) }));
+  app.get('/api/streaming/media/:token', async c => {
+    if (new URL(c.req.url).search) throw new ApiError(400, 'INVALID_MEDIA_QUERY', 'A mídia aceita somente o identificador emitido pela fonte.');
+    const media = await streamMediaGateway.media(c.req.param('token'), c.req.header('range'));
+    return new Response(media.bytes as Uint8Array<ArrayBuffer>, { status: media.status, headers: media.headers });
+  });
 
   app.get('/api/content/anime/:id/episodes/:episode', async c => {
     const id = validateWorkId(c.req.param('id')).slice('anilist:'.length);
@@ -88,6 +98,10 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ data: await registry.resolve(id, Number(episode), params.get('source') || undefined, titleHints(params)) });
   });
   app.get('/api/content/stremio/:imdb/:season/:episode', async c => c.json({ data: await registry.stremio.playback({ imdbId: c.req.param('imdb'), season: Number(c.req.param('season')), episode: Number(c.req.param('episode')), provider: c.req.query('provider') || undefined }) }));
+  app.get('/api/content/image/:token', async c => {
+    const image = await content.image(c.req.param('token'));
+    return new Response(image.bytes as Uint8Array<ArrayBuffer>, { headers: { 'Content-Type': image.contentType, 'Cache-Control': image.cacheControl, 'X-Content-Type-Options': 'nosniff' } });
+  });
   app.get('/api/content/:kind/:workId/chapters', async c => {
     const kind = c.req.param('kind');
     if (kind !== 'manga' && kind !== 'novel') throw new ApiError(400, 'INVALID_CONTENT_KIND', 'Escolha manga ou novel.');

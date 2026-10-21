@@ -8,6 +8,7 @@ export interface TokoConfig {
   contentAuthorized: boolean;
   allowedProviders: string[];
   allowedMediaHosts: string[];
+  allowedRequestOrigins?: string[];
 }
 
 export interface TatakaiConfig {
@@ -17,6 +18,7 @@ export interface TatakaiConfig {
   contentAuthorized?: boolean;
   allowedProviders?: string[];
   allowedMediaHosts?: string[];
+  allowedRequestOrigins?: string[];
   timeoutMs?: number;
   retries?: number;
 }
@@ -71,6 +73,17 @@ function mediaHosts(raw: string | undefined): string[] {
   });
 }
 
+function requestOrigins(raw: string | undefined): string[] {
+  return [...new Set((raw ?? '').split(',').map(value => value.trim()).filter(Boolean))].map(value => {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.port || parsed.pathname !== '/' || parsed.search || parsed.hash
+      || !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/.test(parsed.hostname)) {
+      throw new Error('ALLOWED_REQUEST_ORIGINS deve conter origens HTTPS exatas, sem caminho, credenciais ou porta.');
+    }
+    return parsed.origin;
+  });
+}
+
 /** Backend configuration only; these values must never use the VITE_ prefix. */
 export function loadIntegrationsConfig(env: NodeJS.ProcessEnv = process.env): IntegrationsConfig {
   return {
@@ -82,6 +95,7 @@ export function loadIntegrationsConfig(env: NodeJS.ProcessEnv = process.env): In
       contentAuthorized: boolean(env.TOKO_CONTENT_AUTHORIZED, false, 'TOKO_CONTENT_AUTHORIZED'),
       allowedProviders: [...new Set((env.TOKO_ALLOWED_PROVIDERS ?? '').split(',').map(normalizeProviderKey).filter(Boolean))],
       allowedMediaHosts: mediaHosts(env.TOKO_ALLOWED_MEDIA_HOSTS),
+      allowedRequestOrigins: requestOrigins(env.TOKO_ALLOWED_REQUEST_ORIGINS),
     },
     tatakai: {
       enabled: boolean(env.TATAKAI_ENABLED, true, 'TATAKAI_ENABLED'),
@@ -90,7 +104,8 @@ export function loadIntegrationsConfig(env: NodeJS.ProcessEnv = process.env): In
       contentAuthorized: boolean(env.TATAKAI_CONTENT_AUTHORIZED, false, 'TATAKAI_CONTENT_AUTHORIZED'),
       allowedProviders: [...new Set((env.TATAKAI_ALLOWED_PROVIDERS ?? '').split(',').map(normalizeProviderKey).filter(Boolean))],
       allowedMediaHosts: mediaHosts(env.TATAKAI_ALLOWED_MEDIA_HOSTS),
-      timeoutMs: integer(env.TATAKAI_TIMEOUT_MS, 8000, 250, 30000, 'TATAKAI_TIMEOUT_MS'),
+      allowedRequestOrigins: requestOrigins(env.TATAKAI_ALLOWED_REQUEST_ORIGINS),
+      timeoutMs: integer(env.TATAKAI_TIMEOUT_MS, 8000, 250, 60000, 'TATAKAI_TIMEOUT_MS'),
       retries: integer(env.TATAKAI_RETRIES, 0, 0, 2, 'TATAKAI_RETRIES'),
     },
   };
