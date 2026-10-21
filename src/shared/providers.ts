@@ -107,8 +107,8 @@ export interface StreamingAvailability {
 }
 
 export interface AnimeStreamingProvider {
-  episodes(animeId: string): Promise<StreamingAvailability>;
-  playback(episodeId: string): Promise<Playback>;
+  episodes(animeId: string, titles?: string[]): Promise<StreamingAvailability>;
+  playback(episodeId: string, titles?: string[]): Promise<Playback>;
 }
 
 export type ProviderState = 'available' | 'unavailable' | 'checking' | 'empty' | 'unauthorized' | 'connection_error';

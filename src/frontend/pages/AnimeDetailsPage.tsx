@@ -17,9 +17,10 @@ export function AnimeDetailsPage() {
   const [expandedAnime, setExpandedAnime] = useState('');
   const expanded = expandedAnime === animeId;
   const loader = useCallback(() => catalogService.details(animeId), [animeId]);
-  const streamLoader = useCallback(() => streamingService.episodes(animeId), [animeId]);
   const { data: anime, loading, error } = useCatalogRequest(`details:${animeId}:${retry}`, loader);
-  const { data: availability, error: streamError } = useCatalogRequest(`episodes:${animeId}:${retry}`, streamLoader);
+  const titleKey = JSON.stringify([anime?.title, anime?.titleOriginal].filter(Boolean));
+  const streamLoader = useCallback(() => streamingService.episodes(animeId, JSON.parse(titleKey) as string[]), [animeId, titleKey]);
+  const { data: availability, error: streamError } = useCatalogRequest(`episodes:${animeId}:${titleKey}:${retry}`, streamLoader);
   const { list } = useLibrary();
   const entry = list.find((saved) => saved.anime.id === animeId);
   if (loading) return <main id="main-content" className="details-page" aria-busy="true" aria-label="Carregando detalhes"><div className="details-banner skeleton" /><div className="content-width details-body"><div className="details-main"><div className="details-poster skeleton" /><div className="details-content"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-meta" /><div className="skeleton skeleton-description" /></div></div></div></main>;

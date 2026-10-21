@@ -13,6 +13,12 @@ export interface TokoConfig {
 export interface TatakaiConfig {
   enabled: boolean;
   baseUrl?: string;
+  namespace?: string;
+  contentAuthorized?: boolean;
+  allowedProviders?: string[];
+  allowedMediaHosts?: string[];
+  timeoutMs?: number;
+  retries?: number;
 }
 
 export interface IntegrationsConfig {
@@ -47,6 +53,11 @@ function serviceUrl(raw: string, key: string): string {
   return parsed.toString().replace(/\/+$/, '');
 }
 
+function namespace(value: string): string {
+  if (!/^[a-z][a-z0-9-]{0,63}$/.test(value)) throw new Error('TATAKAI_NAMESPACE inválido.');
+  return value;
+}
+
 export function normalizeProviderKey(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
 }
@@ -73,8 +84,14 @@ export function loadIntegrationsConfig(env: NodeJS.ProcessEnv = process.env): In
       allowedMediaHosts: mediaHosts(env.TOKO_ALLOWED_MEDIA_HOSTS),
     },
     tatakai: {
-      enabled: boolean(env.TATAKAI_ENABLED, false, 'TATAKAI_ENABLED'),
-      ...(env.TATAKAI_API_URL ? { baseUrl: serviceUrl(env.TATAKAI_API_URL, 'TATAKAI_API_URL') } : {}),
+      enabled: boolean(env.TATAKAI_ENABLED, true, 'TATAKAI_ENABLED'),
+      baseUrl: serviceUrl(env.TATAKAI_API_URL || 'http://127.0.0.1:8099', 'TATAKAI_API_URL'),
+      namespace: namespace(env.TATAKAI_NAMESPACE || 'toko'),
+      contentAuthorized: boolean(env.TATAKAI_CONTENT_AUTHORIZED, false, 'TATAKAI_CONTENT_AUTHORIZED'),
+      allowedProviders: [...new Set((env.TATAKAI_ALLOWED_PROVIDERS ?? '').split(',').map(normalizeProviderKey).filter(Boolean))],
+      allowedMediaHosts: mediaHosts(env.TATAKAI_ALLOWED_MEDIA_HOSTS),
+      timeoutMs: integer(env.TATAKAI_TIMEOUT_MS, 8000, 250, 30000, 'TATAKAI_TIMEOUT_MS'),
+      retries: integer(env.TATAKAI_RETRIES, 0, 0, 2, 'TATAKAI_RETRIES'),
     },
   };
 }

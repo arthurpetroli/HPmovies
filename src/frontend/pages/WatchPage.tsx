@@ -28,7 +28,7 @@ function WatchEpisode({ episodeId, anime }: { episodeId: string; anime?: Catalog
 
   useEffect(() => {
     let active = true;
-    void streamingService.playback(episodeId).then(playback => {
+    void streamingService.playback(episodeId, anime ? [anime.title, anime.titleOriginal || ''].filter(Boolean) : undefined).then(playback => {
       if (!active) return;
       if (!playback.sources.length) throw new Error('A reprodução ainda não está disponível para este episódio.');
       const previous = libraryService.getProgress(episodeId);
@@ -44,7 +44,7 @@ function WatchEpisode({ episodeId, anime }: { episodeId: string; anime?: Catalog
       setError(cause instanceof Error ? cause.message : 'Não foi possível carregar o vídeo. Tente novamente em instantes.');
     });
     return () => { active = false; };
-  }, [episodeId, attempt]);
+  }, [episodeId, attempt, anime]);
 
   const saveProgress = useCallback((currentTime: number, duration: number) => {
     if (!session) return;

@@ -11,6 +11,8 @@ import type { TokoStream } from './toko-http.js';
 export interface TokoStreamingOptions {
   config?: TokoConfig;
   client?: TokoHttpClient;
+  id?: string;
+  name?: string;
 }
 
 /** Only explicit language metadata is trusted. A label such as "sub" is unknown. */
@@ -66,10 +68,15 @@ function errorState(error: unknown): ProviderState {
 }
 
 export class TokoStreamingProvider implements AnimeStreamingProvider {
+  readonly id: string;
+  readonly name: string;
   readonly config: TokoConfig;
   readonly client: TokoHttpClient;
 
   constructor(options: TokoStreamingOptions = {}) {
+    this.id = options.id ?? 'toko';
+    if (!['toko', 'tatakai'].includes(this.id)) throw new Error('Identidade de provedor inválida.');
+    this.name = options.name ?? 'Toko HTTP';
     this.config = options.config ?? options.client?.config ?? integrationsConfig.toko;
     this.client = options.client ?? new TokoHttpClient(this.config);
   }
@@ -80,7 +87,7 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
 
   private status(state: ProviderState, technicalAvailable: boolean, message: string): ProviderDiagnostic {
     return {
-      id: 'toko', name: 'Toko HTTP', enabled: this.config.enabled,
+      id: this.id, name: this.name, enabled: this.config.enabled,
       state, technicalAvailable, authorized: this.contentPermitted,
       checkedAt: new Date().toISOString(), message,
       capabilities: ['anime-streams', 'languages', 'episode-index', 'manga-http-contract', 'novel-http-contract'],
@@ -99,12 +106,12 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
     }
   }
 
-  async episodes(animeId: string): Promise<StreamingAvailability> {
+  async episodes(animeId: string, titles?: string[]): Promise<StreamingAvailability> {
     if (!/^[1-9]\d{0,9}$/.test(animeId) || Number(animeId) > 2_147_483_647) throw new ApiError(400, 'INVALID_ANIME_ID', 'Informe um identificador AniList válido.');
     const diagnostic = await this.diagnostic();
     if (diagnostic.state !== 'available') return { available: false, episodes: [], state: diagnostic.state, message: diagnostic.message, diagnostics: [diagnostic] };
     try {
-      const index = await this.client.episodes(Number(animeId));
+      const index = await this.client.episodes(Number(animeId), titles);
       const indexed = [...new Map(index.episodes.map((episode) => [episode.number, episode])).values()].sort((a, b) => a.number - b.number);
       if (!indexed.length) {
         const empty = this.status('empty', true, 'O Toko está disponível, mas não retornou episódios para este título.');
@@ -112,11 +119,11 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
       }
       // A provider's episode index alone is not evidence of authorized playback.
       const first = indexed[0];
-      const probe = await this.resolveSources(Number(animeId), first.number);
+      const probe = await this.resolveSources(Number(animeId), first.number, titles);
       const available = probe.sources.length > 0;
       const state = available ? 'available' : probe.returnedSources > 0 ? 'unauthorized' : 'empty';
       const episodes: StreamingEpisode[] = indexed.map((episode) => ({
-        id: `toko:${animeId}:${episode.number}`, number: episode.number,
+        id: `${this.id}:${animeId}:${episode.number}`, number: episode.number,
         title: episode.title || `Episódio ${episode.number}`,
         ...(episode.number === first.number ? { available } : {}),
       }));
@@ -132,8 +139,8 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
     }
   }
 
-  private async resolveSources(anilistId: number, episode: number) {
-    const result = await this.client.streams(anilistId, episode);
+  private async resolveSources(anilistId: number, episode: number, titles?: string[]) {
+    const result = await this.client.streams(anilistId, episode, titles);
     const sources = result.sources.flatMap((source, index) => {
       const normalized = normalizeTokoSource(source, this.config, index);
       return normalized ? [normalized] : [];
@@ -141,15 +148,17 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
     return { sources, returnedSources: result.sources.length };
   }
 
-  async playback(episodeId: string): Promise<Playback> {
-    const match = /^toko:([1-9]\d{0,9}):((?:0|[1-9]\d{0,5})(?:\.\d{1,3})?)$/.exec(episodeId);
+  async playback(episodeId: string, titles?: string[]): Promise<Playback> {
+    const prefix = `${this.id}:`;
+    const token = episodeId.startsWith(prefix) ? episodeId.slice(prefix.length) : '';
+    const match = /^([1-9]\d{0,9}):((?:0|[1-9]\d{0,5})(?:\.\d{1,3})?)$/.exec(token);
     if (!match || Number(match[1]) > 2_147_483_647 || Number(match[2]) <= 0 || Number(match[2]) > 100_000) throw new ApiError(400, 'INVALID_EPISODE_ID', 'Identificador de episódio Toko inválido.');
     if (!this.config.enabled) throw new ApiError(503, 'TOKO_DISABLED', 'A integração Toko está desativada.');
     if (!this.contentPermitted) throw new ApiError(503, 'TOKO_UNAUTHORIZED', 'Nenhuma fonte autorizada foi configurada para reprodução no Toko.');
     await this.client.ready();
     const [result, episodeIndex] = await Promise.all([
-      this.resolveSources(Number(match[1]), Number(match[2])),
-      this.client.episodes(Number(match[1])).catch(() => null),
+      this.resolveSources(Number(match[1]), Number(match[2]), titles),
+      this.client.episodes(Number(match[1]), titles).catch(() => null),
     ]);
     if (!result.sources.length) {
       if (result.returnedSources > 0) throw new ApiError(503, 'TOKO_UNAUTHORIZED', 'As fontes retornadas não atendem às permissões ou exigem cabeçalhos de acesso incompatíveis com a reprodução direta.');
@@ -166,8 +175,8 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
       sources: result.sources, subtitles,
       audioLanguages: [...new Set(result.sources.map((source) => source.audioLanguage).filter((language): language is string => !!language && language !== 'und'))],
       isDemo: false,
-      ...(previous ? { previousEpisodeId: `toko:${match[1]}:${previous.number}` } : {}),
-      ...(next ? { nextEpisodeId: `toko:${match[1]}:${next.number}` } : {}),
+      ...(previous ? { previousEpisodeId: `${this.id}:${match[1]}:${previous.number}` } : {}),
+      ...(next ? { nextEpisodeId: `${this.id}:${match[1]}:${next.number}` } : {}),
       diagnostics: [this.status('available', true, 'Reprodução direta de fonte e domínio de mídia explicitamente permitidos.')],
     };
   }

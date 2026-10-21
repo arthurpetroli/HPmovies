@@ -1,14 +1,16 @@
 import type { AnimeStreamingProvider, Playback, StreamingAvailability } from '../../shared/providers';
 import { requestData } from './http';
 
+const hints = (titles?: string[]) => { const params = new URLSearchParams(); titles?.filter(Boolean).slice(0, 5).forEach(title => params.append('titles[]', title)); return params.size ? `?${params}` : ''; };
+
 export const streamingService: AnimeStreamingProvider = {
-  episodes: (animeId) => requestData(`/streaming/anime/${encodeURIComponent(animeId)}/episodes`,
+  episodes: (animeId, titles) => requestData(`/streaming/anime/${encodeURIComponent(animeId)}/episodes${hints(titles)}`,
     (value): value is StreamingAvailability => {
       const availability = value as StreamingAvailability | null;
       return !!availability && typeof availability.available === 'boolean' && Array.isArray(availability.episodes)
         && availability.episodes.every((episode) => !!episode && typeof episode.id === 'string' && typeof episode.title === 'string');
     }),
-  playback: (episodeId) => requestData(`/streaming/episodes/${encodeURIComponent(episodeId)}`,
+  playback: (episodeId, titles) => requestData(`/streaming/episodes/${encodeURIComponent(episodeId)}${hints(titles)}`,
     (value): value is Playback => {
       const playback = value as Playback | null;
       return !!playback && typeof playback.episode?.id === 'string'

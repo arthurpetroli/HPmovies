@@ -13,6 +13,8 @@ import { apiLimit } from './middleware/apiLimit.js';
 import type { MangaCatalogProvider, MangaChapterProvider, MangaImageProvider } from '../../shared/manga.js';
 import type { NovelProvider } from '../../shared/novel.js';
 import { MangaDexProvider, validateMangaId, validateMangaQuery, validateMangaLanguage, validateMangaPage } from './providers/mangadex.js';
+import { ContentRegistry, contentQuery, titleHints, validateWorkId } from './providers/content-registry.js';
+import { NovelContentProvider } from './providers/novel-content.js';
 import { AniListNovelProvider, validateNovelId, validateNovelQuery } from './providers/novels.js';
 
 interface AppOptions {
@@ -22,16 +24,19 @@ interface AppOptions {
   manga?: MangaCatalogProvider & MangaChapterProvider & Partial<MangaImageProvider>;
   novels?: NovelProvider;
   rateLimit?: number;
+  registry?: StreamingRegistry;
+  content?: ContentRegistry;
 }
 
 export function createApp(options: AppOptions = {}) {
   const app = new Hono<ServerContext>();
   const catalog = options.catalog ?? new AniListCatalogProvider();
-  const registry = new StreamingRegistry();
+  const registry = options.registry ?? new StreamingRegistry();
   const streaming = options.streaming ?? registry;
   const legacyEnabled = options.legacyEnabled ?? process.env.ENABLE_LEGACY_HIANIME === 'true';
   const manga = options.manga ?? new MangaDexProvider();
-  const novels = options.novels ?? new AniListNovelProvider();
+  const content = options.content ?? new ContentRegistry(registry);
+  const novels = options.novels ?? new NovelContentProvider(new AniListNovelProvider(), content);
 
   const ordinaryHeaders = secureHeaders();
   const imageHeaders = secureHeaders({ crossOriginResourcePolicy: 'cross-origin' });
@@ -58,7 +63,7 @@ export function createApp(options: AppOptions = {}) {
     const data = await cache.getOrSet(() => Promise.all([
       probe('anilist', 'AniList', () => catalog.genres(), ['anime-catalog', 'novel-catalog']),
       probe('mangadex', 'MangaDex', () => manga.tags(), ['manga-catalog', 'manga-chapters']),
-      registry.toko.diagnostic(), registry.tatakai.diagnostic(),
+      registry.toko.diagnostic(), registry.tatakai.diagnostic(), registry.stremio.diagnostic(),
       Promise.resolve<ProviderDiagnostic>({ id: 'demo', name: 'Demonstrações locais', enabled: true, state: 'available', technicalAvailable: true, authorized: true, checkedAt: new Date().toISOString(), message: 'Vídeo de demonstração com licença CC BY e texto original para testar os leitores.', capabilities: ['video-demo', 'novel-demo'] }),
     ]), 'providers:diagnostics', 20);
     return c.json({ data });
@@ -71,9 +76,25 @@ export function createApp(options: AppOptions = {}) {
   app.get('/api/streaming/anime/:id/episodes', async (c) => {
     const id = c.req.param('id');
     if (id !== 'demo') validateAnimeId(id);
-    return c.json({ data: await streaming.episodes(id) });
+    return c.json({ data: await streaming.episodes(id, titleHints(new URL(c.req.url).searchParams)) });
   });
-  app.get('/api/streaming/episodes/:id', async (c) => c.json({ data: await streaming.playback(c.req.param('id')) }));
+  app.get('/api/streaming/episodes/:id', async (c) => c.json({ data: await streaming.playback(c.req.param('id'), titleHints(new URL(c.req.url).searchParams)) }));
+
+  app.get('/api/content/anime/:id/episodes/:episode', async c => {
+    const id = validateWorkId(c.req.param('id')).slice('anilist:'.length);
+    const episode = c.req.param('episode');
+    if (!/^(?:[1-9]\d{0,5}|0)(?:\.\d{1,3})?$/.test(episode)) throw new ApiError(400, 'INVALID_EPISODE', 'Episódio inválido.');
+    const params = new URL(c.req.url).searchParams;
+    return c.json({ data: await registry.resolve(id, Number(episode), params.get('source') || undefined, titleHints(params)) });
+  });
+  app.get('/api/content/stremio/:imdb/:season/:episode', async c => c.json({ data: await registry.stremio.playback({ imdbId: c.req.param('imdb'), season: Number(c.req.param('season')), episode: Number(c.req.param('episode')), provider: c.req.query('provider') || undefined }) }));
+  app.get('/api/content/:kind/:workId/chapters', async c => {
+    const kind = c.req.param('kind');
+    if (kind !== 'manga' && kind !== 'novel') throw new ApiError(400, 'INVALID_CONTENT_KIND', 'Escolha manga ou novel.');
+    return c.json({ data: await content.chapters(kind, c.req.param('workId'), contentQuery(new URL(c.req.url).searchParams)) });
+  });
+  app.get('/api/content/manga/:workId/chapters/:chapterId/pages', async c => c.json({ data: await content.pages(c.req.param('workId'), c.req.param('chapterId'), contentQuery(new URL(c.req.url).searchParams)) }));
+  app.get('/api/content/novel/:workId/chapters/:chapterId/content', async c => c.json({ data: await content.text(c.req.param('workId'), c.req.param('chapterId'), contentQuery(new URL(c.req.url).searchParams)) }));
 
   app.get('/api/manga/image/:token', async (c) => {
     if (!manga.image) throw new ApiError(404, 'IMAGE_UNAVAILABLE', 'Imagem indisponível.');
@@ -88,8 +109,8 @@ export function createApp(options: AppOptions = {}) {
   app.get('/api/manga/:id', async (c) => c.json({ data: await manga.details(validateMangaId(c.req.param('id'))) }));
   app.get('/api/novels/search', async (c) => c.json({ data: await novels.search(validateNovelQuery(c.req.query())) }));
   app.get('/api/novels/genres', async (c) => c.json({ data: await novels.genres() }));
-  app.get('/api/novels/:id/chapters/:chapterId/content', async (c) => c.json({ data: await novels.content(validateNovelId(c.req.param('id')), c.req.param('chapterId')) }));
-  app.get('/api/novels/:id/chapters', async (c) => c.json({ data: await novels.chapters(validateNovelId(c.req.param('id'))) }));
+  app.get('/api/novels/:id/chapters/:chapterId/content', async (c) => c.json({ data: await novels.content(validateNovelId(c.req.param('id')), c.req.param('chapterId'), contentQuery(new URL(c.req.url).searchParams)) }));
+  app.get('/api/novels/:id/chapters', async (c) => c.json({ data: await novels.chapters(validateNovelId(c.req.param('id')), contentQuery(new URL(c.req.url).searchParams)) }));
   app.get('/api/novels/:id', async (c) => c.json({ data: await novels.details(validateNovelId(c.req.param('id'))) }));
 
   // This route remains blocked even when compatibility scraping is enabled.

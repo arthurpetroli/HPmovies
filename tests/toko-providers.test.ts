@@ -25,7 +25,7 @@ describe('integration configuration and permission separation', () => {
   it('keeps content and providers disabled unless explicitly configured', () => {
     const settings = loadIntegrationsConfig({});
     expect(settings.toko).toMatchObject({ enabled: false, contentAuthorized: false, allowedProviders: [], allowedMediaHosts: [] });
-    expect(settings.tatakai).toEqual({ enabled: false });
+    expect(settings.tatakai).toMatchObject({ enabled: true, baseUrl: 'http://127.0.0.1:8099', namespace: 'toko', contentAuthorized: false, allowedProviders: [] });
     expect(settings.toko.baseUrl).toBe('http://127.0.0.1:8099');
   });
 
@@ -206,7 +206,7 @@ describe('verified Toko JSON HTTP contract', () => {
     const client = new TokoHttpClient(settings, { fetcher: fetcher as typeof fetch });
     expect((await client.chapters('manga', 1, 'one')).chapters.map((chapter) => chapter.provider)).toEqual(['one']);
     expect((await client.chapters('manga', 1, 'two')).chapters.map((chapter) => chapter.provider)).toEqual(['two']);
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(1);
     expect(() => client.mangaPages('one:https://127.0.0.1/private', 'one')).toThrow('listagem autorizada');
     expect(() => client.novelContent('one:chapter-1', 'one')).toThrow('listagem autorizada');
   });

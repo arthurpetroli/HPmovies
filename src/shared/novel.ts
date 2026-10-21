@@ -1,3 +1,5 @@
+import type { ChapterQuery } from './content.js';
+
 /** Novel metadata and permitted text are deliberately independent. */
 export interface NovelTitle {
   id: string;
@@ -66,6 +68,6 @@ export interface NovelProvider {
   search(query: NovelQuery): Promise<NovelPage>;
   genres(): Promise<string[]>;
   details(id: string): Promise<NovelTitle>;
-  chapters(id: string): Promise<NovelChapterList>;
-  content(id: string, chapterId: string): Promise<NovelReadingResult>;
+  chapters(id: string, query?: ChapterQuery): Promise<NovelChapterList>;
+  content(id: string, chapterId: string, query?: ChapterQuery): Promise<NovelReadingResult>;
 }

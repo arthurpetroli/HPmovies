@@ -7,6 +7,7 @@ export interface TokoHealth {
   ok: boolean;
   service: string;
   toko: boolean;
+  namespaces?: Array<{ namespace: string; extensionId: string; contract?: string; capabilities: string[] }>;
 }
 
 export interface TokoSubtitle {
@@ -58,6 +59,8 @@ export interface TokoChapter {
 export interface TokoChapterList {
   chapters: TokoChapter[];
   chapterCount: number;
+  partial?: boolean;
+  providerStatus?: Array<{ provider: string; status: string; error?: string }>;
 }
 
 export interface TokoPage {
@@ -76,6 +79,8 @@ export interface TokoClientOptions {
   fetcher?: typeof fetch;
   cache?: AniwatchAPICache;
   retryDelayMs?: number;
+  apiMode?: 'standalone' | 'extension-host';
+  namespace?: string;
 }
 
 function invalid(): never {
@@ -105,9 +110,14 @@ export class TokoHttpClient {
   private readonly cache: AniwatchAPICache;
   private readonly retryDelayMs: number;
   private activeRequests = 0;
-  private readonly issuedChapters = new Map<string, number>();
+  private readonly apiMode: 'standalone' | 'extension-host';
+  private readonly namespace: string;
+  private readonly issuedChapters = new Map<string, { expiresAt: number; anilistId: number; providerChapterId?: string }>();
 
   constructor(readonly config: TokoConfig, options: TokoClientOptions = {}) {
+    this.apiMode = options.apiMode ?? 'standalone';
+    this.namespace = options.namespace ?? 'toko';
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(this.namespace)) throw new Error('Namespace de extensão inválido.');
     this.fetcher = options.fetcher ?? fetch;
     this.cache = options.cache ?? new AniwatchAPICache({ maxEntries: 128 });
     this.retryDelayMs = Math.max(0, Math.min(options.retryDelayMs ?? 150, 1_000));
@@ -117,7 +127,8 @@ export class TokoHttpClient {
     if (!this.config.enabled) throw new ApiError(503, 'TOKO_DISABLED', 'A integração HTTP do Toko está desativada.');
     // Paths are constants from verified endpoints; untrusted values only enter query parameters.
     const base = this.config.baseUrl.replace(/\/api\/v3\/?$/, '');
-    const url = new URL(`${base}${path}`);
+    const endpoint = this.apiMode === 'extension-host' ? path === '/api/v3/health' ? '/health' : path.replace('/api/v3/toko/', `/api/v3/${this.namespace}/`) : path;
+    const url = new URL(`${base}${endpoint}`);
     params.sort();
     url.search = params.toString();
     return this.cache.getOrSet(async () => {
@@ -188,16 +199,30 @@ export class TokoHttpClient {
     }, `toko:http:${scope}:${url.toString()}`, ttl);
   }
 
-  private query(anilistId: number): URLSearchParams {
+  private query(anilistId: number, titles: string[] = []): URLSearchParams {
     if (!Number.isSafeInteger(anilistId) || anilistId <= 0 || anilistId > 2_147_483_647) {
       throw new ApiError(400, 'INVALID_ANIME_ID', 'Informe um identificador AniList válido.');
     }
-    return new URLSearchParams({ anilistId: String(anilistId), stream: '0' });
+    if (!Array.isArray(titles) || titles.length > 5 || titles.some(title => typeof title !== 'string' || !title.trim() || title.length > 200 || [...title].some(char => char.charCodeAt(0) < 32))) throw new ApiError(400, 'INVALID_TITLE_HINT', 'Informe até cinco títulos válidos de até 200 caracteres.');
+    const params = new URLSearchParams({ anilistId: String(anilistId), stream: '0' });
+    for (const title of [...new Set(titles.map(value => value.trim()))]) params.append('titles[]', title);
+    if (titles.length) params.set('title', titles[0].trim());
+    return params;
   }
 
   health(): Promise<TokoHealth> {
     return this.json('/api/v3/health', new URLSearchParams(), (input) => {
       const data = object(input);
+      if (this.apiMode === 'extension-host') {
+        if (typeof data.ok !== 'boolean' || data.service !== 'extension-api-host') return invalid();
+        const namespaces = list(data.namespaces, 100).map(value => {
+          const entry = object(value);
+          const name = text(entry.namespace, 64), extensionId = text(entry.extensionId, 150);
+          if (!name || !extensionId) return invalid();
+          return { namespace: name, extensionId, contract: text(entry.contract, 100), capabilities: list(entry.capabilities ?? [], 100).map(capability => { if (typeof capability !== 'string') return invalid(); return capability; }) };
+        });
+        return { ok: data.ok, service: data.service, toko: namespaces.some(entry => entry.namespace === this.namespace && ['toko', 'streaming-sources-v3'].includes(entry.contract ?? '')), namespaces };
+      }
       if (typeof data.ok !== 'boolean' || typeof data.toko !== 'boolean' || data.service !== 'toko-api') return invalid();
       return { ok: data.ok, toko: data.toko, service: data.service };
     }, 15);
@@ -208,8 +233,8 @@ export class TokoHttpClient {
     if (!health.ok || !health.toko) throw new ApiError(503, 'TOKO_NOT_READY', 'O HTTP do Toko está ativo, mas seu bundle de provedores não está pronto.');
   }
 
-  episodes(anilistId: number): Promise<TokoEpisodeIndex> {
-    return this.json('/api/v3/toko/index/episodes', this.query(anilistId), (input) => {
+  episodes(anilistId: number, titles?: string[]): Promise<TokoEpisodeIndex> {
+    return this.json('/api/v3/toko/index/episodes', this.query(anilistId, titles), (input) => {
       const data = object(input);
       return {
         provider: text(data.provider) ?? null,
@@ -223,8 +248,8 @@ export class TokoHttpClient {
     }, 120);
   }
 
-  languages(anilistId: number): Promise<TokoLanguage[]> {
-    return this.json('/api/v3/toko/languages', this.query(anilistId), (input) => list(object(input).languages, 300).map((item) => {
+  languages(anilistId: number, titles?: string[]): Promise<TokoLanguage[]> {
+    return this.json('/api/v3/toko/languages', this.query(anilistId, titles), (input) => list(object(input).languages, 300).map((item) => {
       const row = object(item);
       const language = text(row.language, 64);
       const label = text(row.label, 100);
@@ -233,12 +258,12 @@ export class TokoHttpClient {
     }), 120);
   }
 
-  streams(anilistId: number, episode: number): Promise<TokoStreamResponse> {
+  streams(anilistId: number, episode: number, titles?: string[]): Promise<TokoStreamResponse> {
     if (!this.config.contentAuthorized || !this.config.allowedProviders.length || !this.config.allowedMediaHosts.length) {
       throw new ApiError(503, 'TOKO_UNAUTHORIZED', 'Nenhuma fonte autorizada foi configurada para reprodução no Toko.');
     }
     if (!Number.isFinite(episode) || episode <= 0 || episode > 100_000) throw new ApiError(400, 'INVALID_EPISODE', 'Episódio inválido.');
-    const params = this.query(anilistId);
+    const params = this.query(anilistId, titles);
     params.set('episode', String(episode));
     // The verified API supports these bounded runner controls, but no provider filter.
     params.set('maxConcurrency', '2');
@@ -288,11 +313,11 @@ export class TokoHttpClient {
   }
 
   /** Available to future permitted adapters; never activated by catalog metadata alone. */
-  async chapters(kind: 'manga' | 'novel', anilistId: number, permittedProvider: string): Promise<TokoChapterList> {
+  async chapters(kind: 'manga' | 'novel', anilistId: number, permittedProvider: string, titles?: string[]): Promise<TokoChapterList> {
     this.requireContentProvider(permittedProvider);
-    const result = await this.json(`/api/v3/toko/${kind}/chapters`, this.query(anilistId), (input) => {
+    const result = await this.json(`/api/v3/toko/${kind}/chapters`, this.query(anilistId, titles), (input) => {
       const data = object(input);
-      const chapterCount = count(data.chapterCount);
+      const chapterCount = count(this.apiMode === 'extension-host' ? data.count ?? data.chapterCount : data.chapterCount);
       const chapters = list(data.chapters).map((item): TokoChapter => {
         const row = object(item);
         const chapterKey = text(row.chapterKey, 4_096);
@@ -305,31 +330,42 @@ export class TokoHttpClient {
           title: text(row.title), language: text(row.language, 64),
           scanlator: text(row.scanlator), translator: text(row.translator),
         };
-      }).filter((chapter) => chapter.provider === permittedProvider);
-      return { chapters, chapterCount: chapters.length < chapterCount ? chapters.length : chapterCount };
-    }, 120, permittedProvider);
+      });
+      const providerStatus = data.providerStatus === undefined ? undefined : list(data.providerStatus, 500).map(value => {
+        const item = object(value), provider = text(item.provider, 150), status = text(item.status, 64);
+        if (!provider || !status) return invalid();
+        return { provider, status, error: text(item.error, 500) };
+      });
+      return { chapters, chapterCount, partial: data.partial === true, providerStatus };
+    }, 120);
+    const permitted = result.chapters.filter(chapter => chapter.provider === permittedProvider);
     // A chapter request must refer to a key actually issued by this provider's
     // listing, so this interface cannot turn a caller-supplied URL into a fetch.
     const now = Date.now();
-    for (const [key, expiresAt] of this.issuedChapters) if (expiresAt <= now) this.issuedChapters.delete(key);
-    for (const chapter of result.chapters) this.issuedChapters.set(`${kind}:${permittedProvider}:${chapter.chapterKey}`, now + 600_000);
+    for (const [key, issued] of this.issuedChapters) if (issued.expiresAt <= now) this.issuedChapters.delete(key);
+    for (const chapter of permitted) this.issuedChapters.set(JSON.stringify([kind, permittedProvider, chapter.chapterKey, anilistId]), { expiresAt: now + 600_000, anilistId, providerChapterId: chapter.providerChapterId });
     while (this.issuedChapters.size > 20_000) this.issuedChapters.delete(this.issuedChapters.keys().next().value!);
-    return result;
+    return { chapters: permitted, chapterCount: permitted.length, partial: result.partial, providerStatus: result.providerStatus };
   }
 
-  private chapterQuery(kind: 'manga' | 'novel', chapterKey: string, provider: string): URLSearchParams {
+  private chapterQuery(kind: 'manga' | 'novel', chapterKey: string, provider: string, anilistId?: number): URLSearchParams {
     this.requireContentProvider(provider);
-    if (chapterKey.length > 4_096 || !chapterKey.startsWith(`${provider}:`) || chapterKey.length <= provider.length + 1) {
+    if (!chapterKey || chapterKey.length > 4_096 || this.apiMode === 'standalone' && (!chapterKey.startsWith(`${provider}:`) || chapterKey.length <= provider.length + 1)) {
       throw new ApiError(400, 'INVALID_CHAPTER_KEY', 'Identificador de capítulo inválido.');
     }
-    if ((this.issuedChapters.get(`${kind}:${provider}:${chapterKey}`) ?? 0) <= Date.now()) {
-      throw new ApiError(400, 'UNKNOWN_CHAPTER_KEY', 'O capítulo deve ser obtido primeiro na listagem autorizada deste provedor.');
-    }
-    return new URLSearchParams({ chapterKey, provider, stream: '0' });
+    const matching = [...this.issuedChapters.entries()].filter(([key, issued]) => {
+      const [rowKind, rowProvider, rowKey] = JSON.parse(key) as string[];
+      return rowKind === kind && rowProvider === provider && rowKey === chapterKey && (anilistId === undefined || issued.anilistId === anilistId) && issued.expiresAt > Date.now();
+    });
+    if (matching.length !== 1) throw new ApiError(400, 'UNKNOWN_CHAPTER_KEY', 'O capítulo deve ser obtido primeiro na listagem autorizada deste provedor e desta obra.');
+    const issued = matching[0][1];
+    const params = new URLSearchParams({ chapterKey, provider, stream: '0', anilistId: String(issued.anilistId) });
+    if (issued.providerChapterId) params.set('providerChapterId', issued.providerChapterId);
+    return params;
   }
 
-  mangaPages(chapterKey: string, provider: string): Promise<TokoPage[]> {
-    return this.json('/api/v3/toko/manga/pages', this.chapterQuery('manga', chapterKey, provider), (input) => list(object(input).pages, 1_000).map((item) => {
+  mangaPages(chapterKey: string, provider: string, anilistId?: number): Promise<TokoPage[]> {
+    return this.json('/api/v3/toko/manga/pages', this.chapterQuery('manga', chapterKey, provider, anilistId), (input) => list(object(input).pages, 1_000).map((item) => {
       const row = object(item);
       const imageUrl = text(row.imageUrl, 8_192);
       if (!imageUrl) return invalid();
@@ -337,10 +373,10 @@ export class TokoHttpClient {
     }), 30);
   }
 
-  novelContent(chapterKey: string, provider: string): Promise<TokoNovelContent> {
-    return this.json('/api/v3/toko/novel/content', this.chapterQuery('novel', chapterKey, provider), (input) => {
+  novelContent(chapterKey: string, provider: string, anilistId?: number): Promise<TokoNovelContent> {
+    return this.json('/api/v3/toko/novel/content', this.chapterQuery('novel', chapterKey, provider, anilistId), (input) => {
       const data = object(input);
-      if (data.provider !== undefined && data.provider !== null && data.provider !== provider) return invalid();
+      if (data.provider !== undefined && data.provider !== null && data.provider !== provider && !(this.apiMode === 'extension-host' && data.provider === this.namespace)) return invalid();
       return {
         title: text(data.title), provider,
         paragraphs: list(data.paragraphs, 10_000).map((item) => {
