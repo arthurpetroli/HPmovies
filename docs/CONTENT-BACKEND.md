@@ -19,7 +19,7 @@ O host é código real do [Tatakai](https://github.com/Snozxyx/Tatakai), sob MPL
 
 ## Configurar uma extensão local
 
-Consulte [LOCAL-SOURCE-HOST.md](LOCAL-SOURCE-HOST.md) para o arquivo com manifesto, bundle CJS, confiança explícita e SHA-256. Esse arquivo fica fora do Git, por exemplo `.local/sources/sources.json`. Bundles dependentes de Electron não são suportados pelo host Node.
+Consulte [LOCAL-SOURCE-HOST.md](LOCAL-SOURCE-HOST.md) para o arquivo com manifesto, bundle CJS, confiança explícita e SHA-256. Esse arquivo fica fora do Git, por exemplo `.local/sources/sources.json`. Recursos Electron não são suportados; bundles com navegador opcional podem usar `browserMode: "disabled"` para executar os provedores HTTP originais.
 
 ```dotenv
 HPMOVIES_EXTENSIONS_FILE=.local/sources/sources.json
@@ -32,7 +32,7 @@ TATAKAI_ALLOWED_PROVIDERS=identificador-real-do-provedor
 TATAKAI_ALLOWED_MEDIA_HOSTS=host-real-da-midia.example.com
 ```
 
-Substitua os valores pelos dados da fonte escolhida, com permissão de uso. Os nomes não são uma lista de provedores já instalados. Novels com texto não exigem host de mídia; páginas de mangá e fontes de vídeo exigem hosts HTTPS exatos. O backend rejeita mídia que exige autenticação/cabeçalhos adicionais ou não atende aos destinos configurados. Ele não reintroduz o proxy aberto antigo.
+Substitua os valores pelos dados da fonte escolhida, com permissão de uso. Os nomes não são uma lista de provedores já instalados. Novels com texto não exigem host de mídia; páginas de mangá e fontes de vídeo exigem hosts HTTPS exatos. O backend rejeita autenticação e destinos não configurados. Referer/Origin permitidos usam tickets opacos de imagens e vídeo; não há reenvio de cookies ou desafios de navegador. Ele não reintroduz o proxy aberto antigo.
 
 O cliente Toko independente continua disponível em paralelo. Use `TOKO_API_URL` para um servidor Toko separado e outra porta caso o host Tatakai ocupe 8099. A configuração de permissão por provedor/domínio permanece independente.
 
@@ -43,6 +43,8 @@ Todas as respostas de sucesso usam `{ "data": ... }`. `source` seleciona o adapt
 | Operação | Rota |
 | --- | --- |
 | Diagnósticos | `GET /api/providers` |
+| Imagem emitida por capítulo | `GET /api/content/image/:token` |
+| Mídia emitida por fonte/manifesto HLS | `GET /api/streaming/media/:token` |
 | Resolver episódio explícito | `GET /api/content/anime/:anilistId/episodes/:numero` |
 | Reabrir reprodução normalizada | `GET /api/streaming/episodes/:episodeId` |
 | Capítulos de mangá | `GET /api/content/manga/:workId/chapters` |
@@ -61,7 +63,7 @@ curl 'http://127.0.0.1:4000/api/content/manga/anilist:30001/chapters?source=tata
 curl 'http://127.0.0.1:4000/api/content/novel/anilist:30001/chapters?source=tatakai&title=Titulo%20da%20obra'
 ```
 
-Depois de listar capítulos, use o `id` retornado para pedir páginas ou texto. Esse ID é um hash estável; não contém a URL upstream. A API reconstrói a associação pela fonte após um reinício, verifica obra/tipo/provedor e transmite `providerChapterId` somente a partir da listagem validada. Idiomas e créditos são preservados. A lista prioriza PT-BR explícito, registra resultados parciais e isola falhas por fonte. Um capítulo com páginas que exigem um transporte não suportado recebe erro integral, evitando leitura incompleta silenciosa.
+Depois de listar capítulos, use o `id` retornado para pedir páginas ou texto. Esse ID é um hash estável; não contém a URL upstream. A API reconstrói a associação pela fonte após um reinício, verifica obra/tipo/provedor e transmite `providerChapterId` somente a partir da listagem validada. Idiomas e créditos são preservados. A lista prioriza PT-BR explícito, registra resultados parciais e isola falhas por fonte. Um capítulo com páginas que exigem cabeçalhos ou hosts sem configuração recebe erro integral. Os cabeçalhos autorizados são aplicados no transporte de imagens, com limite de bytes, DNS público fixado na conexão TLS e sem redirecionamentos.
 
 O host Tatakai não fornece um índice de episódios automaticamente. A rota de resolução explícita funciona com extensões que retornam mídia para o episódio pedido; a listagem não inventa episódios com base em quantidade do catálogo. O player existente reconhece IDs `tatakai:<AniListId>:<episodio>` e `toko:<AniListId>:<episodio>`. Podem ser abertos em `/watch/<id>` quando a fonte estiver configurada.
 
@@ -75,7 +77,7 @@ STREMIO_ADDONS_JSON=[{"id":"minha-fonte","name":"Minha fonte HTTP","manifestUrl"
 
 O manifesto precisa declarar `stream`, o tipo `series` e um prefixo compatível com IMDb. Catálogos como Cinemeta não oferecem vídeo só por responderem a metadados. A resolução usa IMDb/temporada/episódio explícitos e aceita apenas HLS/MP4 diretos permitidos, sem torrents, embeds ou redirecionamentos. Nenhum addon de conteúdo é incluído automaticamente.
 
-## O que foi validado
+## Validação inicial do contrato
 
 - Host Node real, manifesto/hash/registro explícito e resposta de saúde.
 - Bundle original de teste executado no host, atravessando a API HPmovies para streaming, mangá e novel.
@@ -84,8 +86,14 @@ O manifesto precisa declarar `stream`, o tipo `series` e um prefixo compatível 
 - Contratos Stremio, permissões, cache, falha isolada e descarte de fontes incompatíveis.
 - Build, TypeScript, lint e suíte de navegador.
 
-Os testes de runtime usam conteúdo original de teste. Isso valida a execução e os contratos, sem afirmar que existe uma extensão externa instalada. O próximo passo para mídia real é configurar um pacote de fonte ou endpoint permitido: essa peça não está no repositório Tatakai atual.
+Os testes de runtime usam conteúdo original de teste. Isso valida a execução e os contratos, sem afirmar que existe uma extensão externa instalada. A validação externa posterior usou o pacote oficial Toko4.5.5 instalado fora do Git; veja [REAL-CONTENT-VALIDATION.md](REAL-CONTENT-VALIDATION.md).
 
 Resultado desta etapa em 21/10/2026: **182 testes automatizados em 21 arquivos**, **10 testes de navegador desktop/mobile**, TypeScript, lint, build e `git diff --check` aprovados. O host local real respondeu HTTP 200; como nenhuma extensão externa foi configurada, retornou a lista vazia de namespaces. Os testes integrados usaram somente um bundle original de teste e não afirmam reprodução de animes de terceiros.
 
 Arquivos principais: `providers/tatakai-runtime/*` e `scripts/start-source-host.cjs` (motor reaproveitado/licença); `providers/tatakai.ts`, `toko-http.ts`, `toko-reading.ts`, `content-registry.ts`, `novel-content.ts`, `stremio.ts` (resolução/adaptação); `app.ts`, `shared/content.ts`, configuração de integrações e exemplos `.env` (rotas/contratos); serviços de streaming e páginas de detalhe/player (títulos por requisição). Nenhum deploy ou push foi realizado.
+
+## Conteúdo real e interface
+
+A tela `/sources` consulta diretamente as rotas acima e reutiliza o player e os leitores existentes, preservando título/fonte/idioma nas URLs. Ela permite acesso enquanto os catálogos estão em manutenção. [REAL-CONTENT-VALIDATION.md](REAL-CONTENT-VALIDATION.md) contém a instalação local e os resultados externos atuais, separados dos testes automatizados.
+
+A etapa de fontes reais encerrou com **214 testes automatizados em 24 arquivos e 18 testes de navegador**, além de lint, TypeScript, build e verificação de whitespace aprovados. O [relatório atual](REAL-CONTENT-VALIDATION.md) substitui as pendências de instalação externa do relatório inicial acima.

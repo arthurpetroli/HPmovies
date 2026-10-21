@@ -1,6 +1,6 @@
 # Fontes de conteúdo e runtime Tatakai
 
-Verificação: 21/10/2026. Esta consulta usou arquivos públicos dos repositórios e requisições HTTP de leitura. Nenhuma extensão foi instalada ou executada.
+Verificação: 21/10/2026. Esta consulta usou arquivos públicos dos repositórios e requisições HTTP de leitura. A primeira consulta não instalou extensões. Na implementação posterior, o usuário pediu as mesmas fontes: o artefato Toko4.5.5 foi instalado localmente fora do Git e executado no host Node; resultados reais estão em [REAL-CONTENT-VALIDATION.md](REAL-CONTENT-VALIDATION.md).
 
 ## O que existe no repositório Tatakai
 

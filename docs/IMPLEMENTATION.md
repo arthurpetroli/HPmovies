@@ -90,3 +90,7 @@ Os testes de contrato usam fixtures e falhas simuladas. Os testes de navegador d
 3. Configurar um serviço Toko permitido, comprovar bundle/health, provedores autorizados, mídia, idiomas e episódios reais.
 4. Manter TatakaiAPI desativada até obter documentação e condições verificáveis; conectar textos de novels apenas com permissão.
 5. Tratar a migração de ferramentas Tailwind para remover os alertas restantes e, depois, preparar o deploy em uma etapa autorizada separada.
+
+## Fontes reais no ambiente local — 21/10/2026
+
+O Toko 4.5.5 original foi instalado fora do Git a pedido do usuário. Nebula, Webtoons e Syosetu agora atravessam o host Tatakai, a API e os leitores/player do HPmovies. A tela `/sources` permite consulta direta durante a indisponibilidade dos catálogos. O [relatório de conteúdo real](REAL-CONTENT-VALIDATION.md) identifica os arquivos, as fontes, os idiomas, a instalação, a evidência externa e as limitações. A suíte final passou com 214 testes automatizados em 24 arquivos e 18 testes de navegador; lint, TypeScript e build também passaram.

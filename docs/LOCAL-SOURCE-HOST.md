@@ -15,7 +15,7 @@ O host usa somente `127.0.0.1`. `HPMOVIES_SOURCE_HOST_PORT` altera a porta. Uma 
 
 O [repositório Tatakai](https://github.com/Snozxyx/Tatakai/blob/80bfc190603868effd81a138b6ee07af0b94ec0d/src/core/extensions/defaultExtensions.ts) contém o mecanismo de execução, mas suas listas de extensões incluídas estão vazias. Por isso o host inicia com `namespaces: []`; sua saúde indica que o serviço está rodando, enquanto a disponibilidade de conteúdo depende de uma fonte configurada.
 
-O HPmovies não baixa ou instala código executável de catálogos automaticamente. Bundles CJS autocontidos, selecionados pelo operador e com licença/permissão aplicável, podem ser registrados por arquivo local. Extensões executam dentro do processo Node com as permissões do usuário. Bundles que dependem de `browserDomains`/Electron recebem um erro explícito neste host.
+O HPmovies não baixa ou instala código executável de catálogos automaticamente. Bundles CJS autocontidos, selecionados pelo operador e com licença/permissão aplicável, podem ser registrados por arquivo local. Extensões executam dentro do processo Node com as permissões do usuário. O host não implementa Electron. Um manifesto com `browserDomains` pode ser registrado explicitamente com `browserMode: "disabled"` para usar seus provedores HTTP; os recursos que exigem navegador continuam indisponíveis. O launcher força `CF_BYPASS_ENABLED=false` e `CF_BYPASS_AUTO_INSTALL=false`.
 
 ## Configuração explícita de bundles locais
 
@@ -67,7 +67,7 @@ HPMOVIES_EXTENSIONS_FILE=.local/sources/sources.json
 HPMOVIES_SOURCE_HOST_PORT=8099
 ```
 
-Reinicie o host após alterar a lista. Ele valida todos os manifestos e hashes antes de admitir qualquer extensão e executa uma cópia privada dos bytes verificados. Para atualizar um bundle, revise os novos bytes e atualize o hash.
+Reinicie o host após alterar a lista. Ele valida todos os manifestos e hashes antes de admitir qualquer extensão e executa uma cópia privada dos bytes verificados. Para atualizar um bundle, revise os novos bytes e atualize o hash. O campo opcional `providers` limita os registros exportados antes de qualquer chamada agregada, inclusive mangá; nomes ausentes no bundle causam erro. `mangaTimeoutMs` permite um orçamento de 1.000 a 60.000 ms para o catálogo paginado, usando os mesmos métodos dos provedores originais.
 
 ## Contrato HTTP
 
@@ -107,8 +107,21 @@ As rotas abaixo usam o prefixo `/api/v3/minha-fonte`:
 
 Streaming usa SSE por padrão. `stream=0` pede JSON. `refresh=1` ignora o cache. Rotas de leitura sem método correspondente retornam `501`, preservando a distinção entre fonte incompatível e capítulo ausente. A rota de sondagem de URLs arbitrárias do upstream fica desabilitada no wrapper do HPmovies.
 
-Este host mantém os cabeçalhos fornecidos pelas fontes nas respostas; o backend HPmovies aplica sua validação de destinos e o acesso direto antes de expor os recursos ao player/leitor. Fontes que exigem cabeçalhos de reprodução adicionais recebem um erro explícito; nenhum proxy arbitrário foi reintroduzido.
+Este host mantém os cabeçalhos fornecidos pelas fontes nas respostas; o backend HPmovies aplica sua validação de destinos e o acesso direto antes de expor os recursos ao player/leitor. Referer/Origin explicitamente permitidos usam tickets opacos emitidos para fontes já resolvidas. Hosts e origens precisam estar nas allowlists privadas; cookies, autenticação, redirecionamentos e destinos DNS privados são recusados. Não há parâmetro de URL arbitrária no transporte de mídia.
 
 ## Licença e verificação
 
 O [aviso de origem](../src/aniwatch-apis/src/providers/tatakai-runtime/vendor/NOTICE.md) identifica o arquivo incorporado, a revisão e suas alterações locais. A licença MPL-2.0 completa está ao lado do arquivo. Testes do contrato e da configuração explícita estão em `tests/source-host.test.ts`.
+
+## Pacote Toko usado neste ambiente
+
+A pedido do usuário, o artefato oficial [toko.kai 4.5.5](https://github.com/Snozxyx/Toko/releases/tag/toko-v4.5.5) foi instalado **somente em `.local/sources/toko-4.5.5/`**, fora do Git. Nenhum arquivo de sua fonte ou bundle é redistribuído pelo HPmovies; a licença MPL do host não se estende ao Toko atual. O pacote publicado mantém seu README e avisos originais.
+
+- SHA-256 do arquivo `.kai`: `04ad5be6438591fc0ad6e4c904c45343562b7d4468433ecabe00f5525145f8a2`.
+- SHA-256 do `bundle.js` intacto: `2802a9497ccafa1b00998e78dc10275da328bd1bcb654937a5cf68984c0f808e`.
+- Configuração privada: `.local/sources/sources.json`; namespace `toko`, `browserMode: "disabled"`, `providers: ["nebula", "webtoons", "syosetu"]`, `mangaTimeoutMs: 55000`.
+- `.env` aponta ao registro e contém os hosts/origens exatos usados pelas respostas observadas. A configuração não é incluída no bundle frontend.
+
+Essas são três fontes do **próprio pacote original**, selecionadas para esta validação; a instalação não afirma que todos os outros provedores do Toko funcionam. A extensão permanece inalterada no disco; o host limita seus registros em memória. Não existe download de extensões ao executar `npm ci` ou `npm run dev`.
+
+Para reproduzir em outra máquina, obtenha essa release do autor, confira o SHA-256, extraia `manifest.json` e `bundle.js` localmente e registre os caminhos/hashes conforme o exemplo acima. Preserve os avisos da distribuição. Consulte [a validação real de conteúdo](REAL-CONTENT-VALIDATION.md) para os títulos e as limitações observadas.
