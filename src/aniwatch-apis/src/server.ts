@@ -1,58 +1,28 @@
-import { Hono } from "hono";
-import { cors } from "hono/cors";
-import { serveStatic } from "@hono/node-server/serve-static";
-import { serve } from "@hono/node-server";
-import dotenv from "dotenv";
-dotenv.config();
+import { serve } from '@hono/node-server';
+import app from './app.js';
+import { cache } from './config/cache.js';
+import { runtimeConfig } from './config/runtime.js';
 
-import { hianimeRouter } from "./routes/hianime.js";
-
-const app = new Hono<{ Variables: { CACHE_CONFIG: { key: string; duration: number } } }>();
-
-app.use(
-  "*",
-  cors({
-    origin: [
-      "http://localhost:5173",
-      "https://hp-movies-five.vercel.app",
-      "https://hp-movies-five.vercel.app/"
-    ],
-    allowHeaders: ["Content-Type", "Authorization", "Accept"],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  })
-);
-
-// Middleware que inicializa CACHE_CONFIG antes dos routers
-app.use("*", async (c, next) => {
-  // Ajuste conforme sua lógica real (ex: chave baseada na URL ou user)
-  c.set("CACHE_CONFIG", {
-    key: "global-cache",
-    duration: 60_000 // 60s exemplo
-  });
-  await next();
-});
-
-app.get("/public/*", serveStatic({ root: "./public" }));
-app.route("/api/v2/hianime", hianimeRouter);
-
-app.get("/health", c =>
-  c.json({
-    status: "OK",
-    message: "API is running",
-    timestamp: new Date().toISOString()
-  })
-);
-
-app.onError((err, c) => {
-  console.error(err);
-  return c.json({ error: err.message }, 500);
-});
-
-// Inicia somente em ambiente não serverless (ex: local)
-if (process.env.VERCEL !== "1") {
-  const port = Number(process.env.PORT) || 4000;
-  serve({ fetch: app.fetch, port });
-  console.log(`🚀 Hono rodando em http://localhost:${port}`);
+const port = runtimeConfig.port;
+const hostname = runtimeConfig.host;
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  throw new Error('A porta da API deve estar entre 1 e 65535.');
 }
+
+const server = serve({ fetch: app.fetch, port, hostname }, () => {
+  console.log(`HPmovies API local: http://${hostname}:${port}`);
+});
+
+let shuttingDown = false;
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  server.close(() => {
+    void cache.closeConnection().finally(() => process.exit(0));
+  });
+  setTimeout(() => process.exit(1), 5000).unref();
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 export default app;

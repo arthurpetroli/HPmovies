@@ -1,4 +1,4 @@
-import app from "../src/server.js";
+import app from "../src/app.js";
 
-// Vercel/Node: export default o app Express
+// Compatibility entry point exports the Hono app without opening a listener.
 export default app;

@@ -17,21 +17,25 @@ export const cacheControl: MiddlewareHandler = async (c, next) => {
     await next();
 };
 
-export function cacheConfigSetter(keySliceIndex: number): MiddlewareHandler {
+export function cacheConfigSetter(): MiddlewareHandler {
     return async (c, next) => {
-        const { pathname, search } = new URL(c.req.url);
+        const url = new URL(c.req.url);
+        url.searchParams.sort();
 
-        const duration = Number(
+        const requestedDuration = Number(
             c.req.header(AniwatchAPICache.CACHE_EXPIRY_HEADER_NAME) ||
                 AniwatchAPICache.DEFAULT_CACHE_EXPIRY_SECONDS
         );
+        const duration = Number.isFinite(requestedDuration)
+            ? Math.min(3600, Math.max(1, Math.floor(requestedDuration)))
+            : AniwatchAPICache.DEFAULT_CACHE_EXPIRY_SECONDS;
         c.set("CACHE_CONFIG", {
-            key: `${pathname.slice(keySliceIndex) + search}`,
+            key: `legacy:${url.pathname}${url.search}`,
             duration,
         });
 
         if (AniwatchAPICache.enabled) {
-            c.res.headers.set(
+            c.header(
                 AniwatchAPICache.CACHE_EXPIRY_HEADER_NAME,
                 duration.toString()
             );

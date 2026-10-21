@@ -1,17 +1,18 @@
 {
-  "extends": "./tsconfig.json",
   "compilerOptions": {
     "module": "NodeNext",
-    "target": "ES2020",
+    "target": "ES2022",
     "outDir": "./dist/backend",
-    "rootDir": "./src/aniwatch-apis/src",
+    "rootDir": "./src",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "NodeNext",
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "noEmit": false
+    "noEmit": false,
+    "strict": true,
+    "types": ["node"]
   },
-  "include": ["src/aniwatch-apis/src/**/*"],
+  "include": ["src/aniwatch-apis/src/**/*", "src/shared/**/*"],
   "exclude": ["node_modules", "dist"]
 }

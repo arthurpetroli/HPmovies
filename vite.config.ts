@@ -1,16 +1,21 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      '/api': {
-        target: 'https://comparable-robyn-petroli-58d47e57.koyeb.app',
-        changeOrigin: true,
-        secure: false,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  return {
+    plugins: [react()],
+    server: {
+      host: '127.0.0.1',
+      port: 5173,
+      strictPort: true,
+      proxy: {
+        '/api': {
+          target: env.DEV_API_PROXY_URL || `http://127.0.0.1:${env.BACKEND_PORT || env.PORT || 4000}`,
+          changeOrigin: true,
+        },
       },
     },
-  },
+    preview: { host: '127.0.0.1', port: 5173, strictPort: true },
+  };
 });

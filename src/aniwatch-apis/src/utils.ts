@@ -11,7 +11,7 @@ export function execGracefulShutdown(server: ServerType) {
     cache.closeConnection();
     server.close((err) => {
         process.stdout.write("\naniwatch-api SHUTDOWN complete.\n");
-        err ? console.error(err) : null;
+        if (err) console.error(err);
         process.exit(err ? 1 : 0);
     });
     process.exit(0);
