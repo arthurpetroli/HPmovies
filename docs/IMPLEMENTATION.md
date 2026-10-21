@@ -1,3 +1,5 @@
+> Etapa posterior de backend: o host Tatakai local e as rotas de conteúdo foram implementados e validados com 182 testes + 10 testes de navegador. Veja [CONTENT-BACKEND.md](CONTENT-BACKEND.md). O relatório abaixo preserva a entrega anterior.
+
 # Entrega local HPmovies V2 — 21/10/2026
 
 ## Escopo e estado final

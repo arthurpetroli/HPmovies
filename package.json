@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently --kill-others --names API,WEB \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently --kill-others --names FONTES,API,WEB \"npm run dev:source-host\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "tsx watch src/aniwatch-apis/src/server.ts",
     "dev:frontend": "vite",
     "build": "npm run typecheck && vite build && npm run build:backend",
@@ -16,7 +16,8 @@
     "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json && tsc -p tsconfig.backend.json --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "diagnose:aniwatch": "node scripts/diagnose-aniwatch.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "dev:source-host": "node scripts/start-source-host.cjs"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
