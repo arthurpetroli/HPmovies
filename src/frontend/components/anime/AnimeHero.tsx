@@ -1,81 +1,32 @@
-import React from 'react';
-import { Play, Info } from 'lucide-react';
+import { ArrowUpRight, Bookmark, Check, ChevronLeft, ChevronRight, Sparkles, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { Anime } from '../../types/anime';
+import type { CatalogAnime } from '../../../shared/providers';
+import { libraryService, useLibrary } from '../../services/library';
+import { genreLabel } from '../filters/genreLabels';
 
-interface AnimeHeroProps {
-  anime: Anime;
-}
-
-export const AnimeHero: React.FC<AnimeHeroProps> = ({ anime }) => {
+export function AnimeHero({ anime, index = 0, total = 1, onSelect }: { anime: CatalogAnime; index?: number; total?: number; onSelect?: (index: number) => void }) {
+  const { list } = useLibrary();
+  const saved = list.some((entry) => entry.anime.id === anime.id);
   return (
-    <div className="relative h-[70vh] w-full">
-      {/* Background Image */}
-      <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{
-          backgroundImage: `url(${anime.poster})`,
-        }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-gray-900 via-transparent to-transparent" />
-      </div>
-
-      {/* Content */}
-      <div className="relative h-full flex items-center px-8 md:px-16">
-        <div className="max-w-2xl">
-          <h1 className="text-5xl md:text-7xl font-bold text-white mb-4">
-            {anime.name}
-          </h1>
-          
-          {anime.jname && (
-            <p className="text-xl text-gray-300 mb-4">{anime.jname}</p>
-          )}
-
-          <div className="flex gap-4 mb-6 text-sm text-gray-300">
-            {anime.rating && (
-              <span className="flex items-center gap-1">
-                <span className="text-yellow-500">⭐</span>
-                {anime.rating}
-              </span>
-            )}
-            {anime.type && (
-              <span className="uppercase font-semibold">{anime.type}</span>
-            )}
-            {anime.episodes && (
-              <>
-                {anime.episodes.sub > 0 && (
-                  <span className="bg-blue-600 px-2 py-1 rounded">
-                    SUB {anime.episodes.sub}
-                  </span>
-                )}
-                {anime.episodes.dub > 0 && (
-                  <span className="bg-green-600 px-2 py-1 rounded">
-                    DUB {anime.episodes.dub}
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-
-          <div className="flex gap-4">
-            <Link
-              to={`/anime/${anime.id}`}
-              className="flex items-center gap-2 bg-white text-black px-8 py-3 rounded-md font-semibold hover:bg-gray-200 transition"
-            >
-              <Play size={20} fill="currentColor" />
-              Assistir
-            </Link>
-            <Link
-              to={`/anime/${anime.id}`}
-              className="flex items-center gap-2 bg-gray-700/80 text-white px-8 py-3 rounded-md font-semibold hover:bg-gray-600/80 transition"
-            >
-              <Info size={20} />
-              Mais Informações
-            </Link>
-          </div>
+    <section className="anime-hero" aria-label="Anime em destaque">
+      <img key={anime.id} className={`hero-image ${anime.banner ? '' : 'hero-image-poster'}`} src={anime.banner || anime.poster} alt="" fetchPriority="high" />
+      <div className="hero-gradient" />
+      <div className="hero-content content-width">
+        <div className="hero-eyebrow"><span className="live-dot" /><Sparkles size={13} /> EM DESTAQUE</div>
+        <div className="hero-metadata">{anime.score != null && <span className="hero-score"><Star size={14} fill="currentColor" />{(anime.score / 10).toFixed(1)}</span>}{anime.year && <span>{anime.year}</span>}{anime.format && <span>{anime.format.replace('_', ' ')}</span>}{anime.episodeCount != null && <span>{anime.episodeCount} episódios</span>}</div>
+        <h1>{anime.title}</h1>
+        {anime.titleOriginal && anime.titleOriginal !== anime.title && <p className="hero-original">{anime.titleOriginal}</p>}
+        {anime.description && <p className="hero-description">{anime.description}</p>}
+        <div className="hero-genres">{anime.genres.slice(0, 3).map((genre) => <Link key={genre} to={`/explore?genre=${encodeURIComponent(genre)}`}>{genreLabel(genre)}</Link>)}</div>
+        <div className="hero-buttons">
+          <Link className="button-primary" to={`/anime/${anime.id}`}>Explorar anime <ArrowUpRight size={18} /></Link>
+          <button className="button-secondary" onClick={() => libraryService.toggle(anime)} aria-pressed={saved}>{saved ? <Check size={17} /> : <Bookmark size={17} />}{saved ? 'Na minha lista' : 'Minha lista'}</button>
         </div>
       </div>
-    </div>
+      {total > 1 && onSelect && <div className="hero-bottom content-width">
+        <div className="hero-pagination"><span className="hero-page-current">{String(index + 1).padStart(2, '0')}</span><span className="hero-page-divider" /><span>{String(total).padStart(2, '0')}</span><div className="hero-dots">{Array.from({ length: total }, (_, position) => <button key={position} className={position === index ? 'active' : ''} aria-label={`Destaque ${position + 1}`} aria-current={position === index ? 'true' : undefined} onClick={() => onSelect(position)} />)}</div></div>
+        <div className="hero-arrows"><button className="icon-button" aria-label="Destaque anterior" onClick={() => onSelect((index - 1 + total) % total)}><ChevronLeft size={20} /></button><button className="icon-button" aria-label="Próximo destaque" onClick={() => onSelect((index + 1) % total)}><ChevronRight size={20} /></button></div>
+      </div>}
+    </section>
   );
-};
+}
