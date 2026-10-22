@@ -21,6 +21,8 @@ Neste ambiente, o pacote original Toko 4.5.5 foi instalado localmente a pedido d
 
 O foco atual é português: abra o [catálogo de mangás PT-BR](http://127.0.0.1:5173/manga?language=pt-br). A busca informou 12.114 títulos marcados com esse idioma; os capítulos disponíveis variam por obra. O player também consulta legendas externas PT-BR/PT do OpenSubtitles, com prioridade para PT-BR e sincronização ajustável. Foram baixadas legendas reais para sete animes, incluindo One Piece e Naruto. Veja [a validação em português e a pesquisa do GoAnime](docs/PORTUGUESE-SOURCES.md).
 
+A falha de vídeo nas recomendações seguintes foi reproduzida: os segmentos HLS passaram a usar hosts de CDN ausentes da configuração local. O backend agora verifica o manifesto e o primeiro trecho antes de oferecer a fonte; o player tenta outra URL quando a atual falha ou para de avançar. A [validação da correção de streaming](docs/STREAMING-FIX-VALIDATION.md) registra a causa, as amostras reais e a comparação com Tatakai/GoAnime.
+
 Você também pode testar, independentemente dessas APIs:
 
 - [Player HLS autorizado](http://127.0.0.1:5173/watch/demo).
@@ -33,12 +35,12 @@ O vídeo precisa de conexão com o servidor de demonstração. Os textos origina
 ## Funcionalidades implementadas
 
 - **Animes:** início com destaque cinematográfico e carrosséis; pesquisa e sugestões; gênero, ano, temporada, formato, status, ordem e paginação; detalhes com personagens, relações, recomendações e links oficiais. Dados via AniList; disponibilidade de reprodução consultada separadamente.
-- **Player:** HLS adaptativo com níveis reais do manifesto, seleção manual, MP4 alternativo, velocidade, volume, mute, tela cheia, atalhos, buffering, erros e retomada; navegação anterior/próximo quando fornecida pelo índice. Aberturas só podem ser puladas com intervalos válidos do provedor.
+- **Player:** HLS adaptativo com níveis reais do manifesto, seleção manual, MP4 alternativo, velocidade, volume, mute, tela cheia, atalhos, buffering, erros e retomada; navegação anterior/próximo quando fornecida pelo índice. Fontes Toko/Tatakai passam por verificação do primeiro trecho; falhas definitivas ou 15 segundos sem avanço acionam a próxima URL disponível, preservando posição e intenção de reprodução. Aberturas só podem ser puladas com intervalos válidos do provedor.
 - **Legendas:** WebVTT, conversão SRT e diálogo simples ASS, seleção/desativação, prioridade por código explícito `pt-BR`, tamanho, fundo, contorno e sincronização persistentes. Busca externa PT-BR/PT por identidade de série, temporada e episódio; download da faixa selecionada, com falha independente do vídeo. ASS não renderiza karaoke, desenhos, fontes anexadas nem efeitos de composição.
 - **Mangás:** contrato MangaDex v5, seleções populares/em publicação/notas/atualizações, busca, filtros, detalhes, capítulos por idioma e créditos dos grupos. PT-BR é o padrão do catálogo e da leitura; português agregado e outros idiomas são escolhas explícitas, preservadas na URL e nas preferências. Leitor vertical, página única ou dupla adaptativa, zoom, largura/altura, temas, tela cheia, teclado/gestos, carregamento progressivo, retry por imagem e retomada. O leitor também recebe capítulos/páginas das extensões em `/sources`, com idioma, créditos e progresso. MangaDex PT-BR e Webtoons foram validados com imagens reais; fixtures de teste ficam somente nos testes.
 - **Novels:** catálogo AniList `MANGA`/`NOVEL`, filtros e detalhes; leitor textual com fonte, tamanho, espaçamento, temas, capítulos e progresso. Três capítulos de uma história original permitem testar o leitor. Fontes de texto também usam o host Toko/Tatakai; a leitura do original japonês de Bookworm foi validada através do Syosetu.
 - **Biblioteca:** animes, mangás e novels; listas, favoritos, conclusão manual e históricos de reprodução/leitura. Persistência local com dados limitados, validação e avisos se o navegador bloquear o armazenamento. Serviços separados permitem futura sincronização por conta.
-- **Provedores:** contratos independentes, cliente HTTP Toko com configuração, timeout/retry/cache e permissões por provedor/domínio; host local Tatakai, resolução de leitura e addons Stremio por HTTP; tela de diagnóstico. Imagens, HLS, segmentos, MP4 e legendas que exigem Referer/Origin configurados usam tickets opacos; a saúde técnica não comprova conteúdo disponível.
+- **Provedores:** contratos independentes, cliente HTTP Toko com configuração, timeout/retry/cache e permissões por provedor/domínio; host local Tatakai, resolução de leitura e addons Stremio por HTTP; tela de diagnóstico. HLS e MP4 Toko/Tatakai usam tickets opacos no transporte local, com verificação inicial de mídia. Imagens e legendas que exigem Referer/Origin configurados também usam tickets; a saúde técnica não comprova conteúdo disponível.
 
 AniList fornece metadados e não vídeos. O player de demonstração usa **Big Buck Bunny, CC BY 3.0**, com atribuição na interface. Sua faixa PT-BR é um guia original do player. Não é uma tradução de diálogos do filme. Títulos do catálogo sem fonte validada não recebem botão de reprodução.
 
@@ -72,6 +74,14 @@ npm run test:e2e
 ```
 
 O Playwright inicia a aplicação ou reutiliza uma instância local. Para usar um Chromium compatível já instalado, informe `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/caminho/do/chrome`. Em Linux, as bibliotecas nativas necessárias ao navegador também precisam estar disponíveis.
+
+Com `npm run dev` e as fontes reais já configuradas, verifique separadamente vídeo, áudio, legenda PT-BR e seek nos cinco títulos da amostra:
+
+```bash
+npm run test:streaming:real
+```
+
+Esse comando não usa fixtures, depende dos serviços externos e salva JSON/capturas em `/tmp/hpmovies-playback-<timestamp>/`. IDs opcionais limitam a amostra, por exemplo `npm run test:streaming:real -- 20 1535`. Critérios e limites estão em [STREAMING-FIX-VALIDATION.md](docs/STREAMING-FIX-VALIDATION.md).
 
 Os testes antigos de scraping em `src/aniwatch-apis/__tests__` são históricos e não fazem parte da suíte local ativa.
 

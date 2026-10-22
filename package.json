@@ -17,6 +17,7 @@
     "test": "vitest run --config vitest.config.ts",
     "diagnose:aniwatch": "node scripts/diagnose-aniwatch.mjs",
     "test:e2e": "playwright test",
+    "test:streaming:real": "node scripts/check-real-playback.mjs",
     "dev:source-host": "node scripts/start-source-host.cjs"
   },
   "dependencies": {
