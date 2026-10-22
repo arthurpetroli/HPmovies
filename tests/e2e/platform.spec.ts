@@ -142,7 +142,7 @@ test('captions load on demand, recover after a failed track and preserve sync', 
       { id: 'en-broken', url: '/qa-broken.ass', language: 'en', label: 'Faixa indisponível de teste', format: 'ass' },
     ], audioLanguages: [], isDemo: true,
   } } }));
-  await page.route('**/qa-captions.srt', route => route.fulfill({ contentType: 'text/plain', body: '1\n00:00:00,000 --> 00:01:00,000\nLegenda SRT de teste\n' }));
+  await page.route('**/qa-captions.srt', route => route.fulfill({ contentType: 'text/plain', body: '1\n00:00:00,000 --> 00:01:00,000\nLegenda SRT de teste\n\n2\n00:01:01,000 --> 00:01:01,000\nEntrada inválida de teste\n' }));
   await page.route('**/qa-broken.ass', route => { brokenRequests++; return route.fulfill({ status: 503, body: 'unavailable' }); });
   await page.goto('/watch/demo');
   await page.getByRole('button', { name: 'Reproduzir vídeo', exact: true }).click();

@@ -5,7 +5,7 @@ import type { CatalogAnime, Playback, StreamSource } from '../../shared/provider
 import { streamingService } from '../services/streaming';
 import { libraryService } from '../services/library';
 import { VideoPlayer } from '../components/player/VideoPlayer';
-import type { VideoPlayerHandle } from '../components/player/VideoPlayer';
+import type { VideoPlayerHandle, VideoSourceError } from '../components/player/VideoPlayer';
 import { orderedPlaybackSources, portugueseCaptionRank, subtitlesForSource } from '../components/player/playbackUtils';
 import { sourceQuery, sourceSuffix, sourceTitles } from '../services/content';
 
@@ -29,6 +29,11 @@ function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
+  const failedSourcesRef = useRef(new Set<string>());
+  const [sourceAttempt, setSourceAttempt] = useState(0);
+  const [continuePlaying, setContinuePlaying] = useState(false);
+  const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
+  const [exhausted, setExhausted] = useState(false);
   const sourceEpisode = /^(tatakai|toko):([1-9]\d*):(\d+(?:\.\d+)?)$/.exec(episodeId);
   const sourceBack = new URLSearchParams(hints);
   if (sourceEpisode) { sourceBack.set('kind', 'anime'); sourceBack.set('id', sourceEpisode[2]); sourceBack.set('episode', sourceEpisode[3]); }
@@ -45,6 +50,10 @@ function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: 
       const previous = libraryService.getProgress(episodeId);
       setSession({ playback, resumeTime: previous && !previous.completed ? previous.currentTime : 0 });
       setSource(orderedPlaybackSources(playback)[0]);
+      failedSourcesRef.current.clear();
+      setRecoveryNotice(null);
+      setExhausted(false);
+      setContinuePlaying(false);
       setError(null);
       setLoading(false);
     }).catch((cause: unknown) => {
@@ -61,6 +70,35 @@ function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: 
     if (!session) return;
     libraryService.saveProgress({ episodeId, title: session.playback.episode.title, anime, currentTime, duration });
   }, [episodeId, session, anime]);
+
+  const recoverSource = useCallback((failure: VideoSourceError) => {
+    if (!session || !source) return;
+    failedSourcesRef.current.add(source.url);
+    // Each distinct URL is tried once per cycle. A source can appear more than
+    // once with different labels, so indexes alone cannot bound recovery.
+    const next = orderedPlaybackSources(session.playback).find(item => !failedSourcesRef.current.has(item.url));
+    if (!next) {
+      setExhausted(true);
+      setRecoveryNotice('Todas as fontes disponíveis falharam. Você pode escolher uma fonte manualmente ou tentar as fontes novamente.');
+      return;
+    }
+    setSession({ playback: session.playback, resumeTime: failure.currentTime });
+    setContinuePlaying(failure.playRequested);
+    setRecoveryNotice(`A fonte anterior não respondeu. Tentando ${next.label || 'outra fonte disponível'}…`);
+    setSource(next);
+  }, [session, source]);
+
+  const chooseSource = (chosen: StreamSource) => {
+    if (!session) return;
+    const currentPosition = playerRef.current?.getPosition() ?? session.resumeTime;
+    setSession({ playback: session.playback, resumeTime: currentPosition });
+    setContinuePlaying(playerRef.current?.getPlayRequested() ?? false);
+    failedSourcesRef.current.clear();
+    setExhausted(false);
+    setRecoveryNotice(null);
+    setSource(chosen);
+    setSourceAttempt(value => value + 1);
+  };
 
   if (loading) return <main id="main-content" className="mx-auto flex min-h-[70vh] max-w-7xl items-center justify-center px-5 pt-24 text-white"><div role="status" className="flex items-center gap-3"><Loader2 className="h-6 w-6 animate-spin text-teal-400" />Preparando o player...</div></main>;
   if (error || !session || !source) return <main id="main-content" className="mx-auto flex min-h-[75vh] max-w-4xl flex-col items-center justify-center gap-6 px-6 pt-24 text-center">
@@ -79,7 +117,8 @@ function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: 
       <Link to={backPath} className="mb-6 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={16} />{backPath.startsWith('/sources') ? 'Voltar às fontes' : 'Voltar ao catálogo'}</Link>
       <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0">
-          <VideoPlayer ref={playerRef} key={`${episodeId}:${source.url}`} source={source} poster={playback.episode.thumbnail} subtitles={activeSubtitles} intro={playback.intro} initialTime={resumeTime} onProgress={saveProgress} />
+          <VideoPlayer ref={playerRef} key={`${episodeId}:${source.url}:${sourceAttempt}`} source={source} poster={playback.episode.thumbnail} subtitles={activeSubtitles} intro={playback.intro} initialTime={resumeTime} onProgress={saveProgress} onSourceError={recoverSource} onSourcePlaying={() => setRecoveryNotice(null)} autoPlay={continuePlaying} />
+          {recoveryNotice && <div role="status" className={`mt-3 rounded-lg border px-4 py-3 text-sm ${exhausted ? 'border-amber-400/20 bg-amber-400/5 text-amber-200' : 'border-teal-400/20 bg-teal-400/5 text-slate-300'}`}><p>{recoveryNotice}</p>{exhausted && <button type="button" className="mt-3 rounded-lg bg-teal-400 px-4 py-2 font-semibold text-slate-950 hover:bg-teal-300" onClick={() => { setLoading(true); setAttempt(value => value + 1); }}>Tentar fontes novamente</button>}</div>}
           <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
             <div><div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-300"><Film size={13} />{playback.isDemo ? 'Demonstração do player' : 'Agora assistindo'}</div><h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{playback.episode.title}</h1></div>
             {playback.previousEpisodeId && <Link to={`/watch/${encodeURIComponent(playback.previousEpisodeId)}${hints}`} state={{ anime }} className="button-secondary"><ArrowLeft size={16} />Episódio anterior</Link>}
@@ -100,10 +139,7 @@ function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: 
           <label className="mt-6 block"><span className="mb-2 block text-xs font-medium text-slate-400">Fonte de vídeo</span><select className="w-full rounded-lg border border-white/15 bg-[#151d25] px-3 py-2.5 text-sm text-white focus:border-teal-400 focus:outline-none" value={source.url} onChange={event => {
             const chosen = playback.sources.find(item => item.url === event.target.value);
             if (!chosen || chosen.url === source.url) return;
-            const previous = libraryService.getProgress(episodeId);
-            const currentPosition = playerRef.current?.getPosition();
-            setSession({ playback, resumeTime: currentPosition ?? (previous && !previous.completed ? previous.currentTime : 0) });
-            setSource(chosen);
+            chooseSource(chosen);
           }}>{orderedPlaybackSources(playback).map((item, index) => {
             const rank = Math.min(4, ...subtitlesForSource(playback, item).map(track => portugueseCaptionRank(track.language)));
             return <option key={`${item.url}:${index}`} value={item.url}>{item.label ?? (item.type === 'hls' ? 'HLS · qualidade automática' : 'MP4 · original')}{rank === 0 ? ' · legendas PT-BR' : rank < 4 ? ' · legendas em português' : ''}</option>;

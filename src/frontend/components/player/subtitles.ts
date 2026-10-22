@@ -57,13 +57,18 @@ export function subtitleToVtt(input: string, format: 'srt' | 'ass' | 'vtt'): str
     return text;
   }
   const cues: string[] = [];
+  let lastCueError: unknown;
+  const addCue = (start: string, end: string, dialogue: string) => {
+    try { cues.push(`${cueInterval(start, end)}\n${dialogue}`); }
+    catch (error) { lastCueError = error; }
+  };
   if (format === 'srt') {
     for (const block of text.trim().split(/\n\s*\n/)) {
       const lines = block.split('\n');
       if (/^\d+$/.test(lines[0]?.trim())) lines.shift();
       const interval = lines.shift()?.trim().match(/^(\S+)\s+-->\s+(\S+)(?:\s+.*)?$/);
       if (!interval || !lines.length) continue;
-      cues.push(`${cueInterval(interval[1], interval[2])}\n${lines.join('\n')}`);
+      addCue(interval[1], interval[2], lines.join('\n'));
     }
   } else {
     let inEvents = false;
@@ -82,10 +87,10 @@ export function subtitleToVtt(input: string, format: 'srt' | 'ass' | 'vtt'): str
       const dialogue = rawDialogue.replace(/\{[^}]*\}/g, '').replace(/\\[Nn]/g, '\n').replace(/\\h/g, ' ');
       if (!dialogue.trim()) continue;
       const escaped = dialogue.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      cues.push(`${cueInterval(values[fields.indexOf('start')] || '', values[fields.indexOf('end')] || '')}\n${escaped}`);
+      addCue(values[fields.indexOf('start')] || '', values[fields.indexOf('end')] || '', escaped);
     }
   }
-  if (!cues.length) throw new Error('Nenhuma fala válida encontrada na legenda.');
+  if (!cues.length) throw lastCueError instanceof Error ? lastCueError : new Error('Nenhuma fala válida encontrada na legenda.');
   return `WEBVTT\n\n${cues.join('\n\n')}\n`;
 }
 

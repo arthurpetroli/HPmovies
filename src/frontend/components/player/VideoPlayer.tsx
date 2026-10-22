@@ -14,11 +14,14 @@ interface VideoPlayerProps {
   intro?: { start: number; end: number };
   initialTime?: number;
   onProgress?: (currentTime: number, duration: number) => void;
+  onSourceError?: (failure: VideoSourceError) => void;
+  onSourcePlaying?: () => void;
   autoPlay?: boolean;
   className?: string;
 }
 
-export interface VideoPlayerHandle { getPosition: () => number }
+export interface VideoSourceError { message: string; currentTime: number; playRequested: boolean }
+export interface VideoPlayerHandle { getPosition: () => number; getPlayRequested: () => boolean }
 
 interface QualityLevel { index: number; height: number; bitrate: number }
 
@@ -35,11 +38,14 @@ const formatTime = (seconds: number) => {
 const buttonClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/90 transition hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-400';
 const selectClass = 'w-full rounded-lg border border-white/15 bg-[#202831] px-3 py-2 text-sm text-white focus:border-teal-400 focus:outline-none';
 
-export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, intro, initialTime = 0, onProgress, autoPlay = false, className = '' }: VideoPlayerProps) {
+export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, intro, initialTime = 0, onProgress, onSourceError, onSourcePlaying, autoPlay = false, className = '' }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const progressCallbackRef = useRef(onProgress);
+  const sourceErrorCallbackRef = useRef(onSourceError);
+  const sourcePlayingCallbackRef = useRef(onSourcePlaying);
+  const playRequestedRef = useRef(autoPlay);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const lastSavedRef = useRef(0);
   const progressSnapshotRef = useRef<{ currentTime: number; duration: number } | null>(null);
@@ -75,6 +81,8 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => { progressCallbackRef.current = onProgress; }, [onProgress]);
+  useEffect(() => { sourceErrorCallbackRef.current = onSourceError; }, [onSourceError]);
+  useEffect(() => { sourcePlayingCallbackRef.current = onSourcePlaying; }, [onSourcePlaying]);
   useEffect(() => {
     saveCaptionPreferences({ language: captionLanguage, size: captionSize, background: captionBackground, offset: captionOffset });
   }, [captionLanguage, captionSize, captionBackground, captionOffset]);
@@ -96,7 +104,13 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
     })).finally(() => clearTimeout(timer));
     return () => { active = false; controller.abort(); clearTimeout(timer); blobs.forEach(url => URL.revokeObjectURL(url)); };
   }, [conversionSignature]);
-  useImperativeHandle(ref, () => ({ getPosition: () => videoRef.current?.currentTime ?? 0 }), []);
+  useImperativeHandle(ref, () => ({
+    getPosition: () => {
+      const video = videoRef.current;
+      return video && (video.readyState >= 1 || video.currentTime > 0) ? video.currentTime : startPositionRef.current;
+    },
+    getPlayRequested: () => playRequestedRef.current,
+  }), []);
 
   const saveProgress = useCallback((force = false, video = videoRef.current) => {
     if (video && Number.isFinite(video.duration) && video.duration > 0 && video.currentTime > 0) {
@@ -125,16 +139,36 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
     let networkRecoveries = 0;
     let mediaRecoveries = 0;
     let resumed = false;
+    let metadataReceived = false;
+    let failed = false;
+    let lastPosition = 0;
+    let lastAdvance = Date.now();
+    const startedAt = Date.now();
     let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
     const fail = (message: string) => {
+      if (failed || destroyed) return;
+      failed = true;
+      const failure = { message, currentTime: Number.isFinite(video.currentTime) && (metadataReceived || video.currentTime > 0) ? video.currentTime : startPositionRef.current, playRequested: playRequestedRef.current };
       setError(message);
       setBuffering(false);
+      clearTimeout(recoveryTimer);
+      hlsRef.current?.stopLoad();
       video.pause();
+      sourceErrorCallbackRef.current?.(failure);
     };
     const playIfRequested = () => {
-      if (autoPlay && !destroyed) void video.play().catch(() => setControlsVisible(true));
+      if (autoPlay && !destroyed && !failed) {
+        playRequestedRef.current = true;
+        lastAdvance = Date.now();
+        void video.play().catch(() => {
+          playRequestedRef.current = false;
+          setNotice('Clique em reproduzir para continuar nesta fonte.');
+          setControlsVisible(true);
+        });
+      }
     };
     const metadata = () => {
+      metadataReceived = true;
       if (Number.isFinite(video.duration)) setDuration(video.duration);
       if (!resumed && startPositionRef.current > 0 && Number.isFinite(video.duration)) {
         resumed = true;
@@ -142,27 +176,46 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
       }
       setBuffering(false);
     };
-    const updateTime = () => { setTime(video.currentTime); saveProgress(); };
+    const updateTime = () => {
+      if (video.currentTime > lastPosition + 0.05) lastAdvance = Date.now();
+      lastPosition = video.currentTime;
+      setTime(video.currentTime); saveProgress();
+    };
     const updateDuration = () => { if (Number.isFinite(video.duration)) setDuration(video.duration); };
     const waiting = () => setBuffering(true);
     const ready = () => setBuffering(false);
-    const play = () => { setPlaying(true); setError(null); setNotice(null); };
-    const pause = () => { setPlaying(false); setControlsVisible(true); saveProgress(true); };
-    const ended = () => { setPlaying(false); setControlsVisible(true); saveProgress(true); };
+    const play = () => { playRequestedRef.current = true; lastAdvance = Date.now(); setPlaying(true); setError(null); setNotice(null); };
+    const actuallyPlaying = () => { ready(); sourcePlayingCallbackRef.current?.(); };
+    const pause = () => { if (!failed && !video.error) playRequestedRef.current = false; setPlaying(false); setControlsVisible(true); saveProgress(true); };
+    const ended = () => { playRequestedRef.current = false; setPlaying(false); setControlsVisible(true); saveProgress(true); };
     const volumeChanged = () => { setVolume(video.volume); setMuted(video.muted); };
     const rateChanged = () => setSpeed(video.playbackRate);
     const nativeError = () => fail('Não foi possível reproduzir esta fonte. Confira sua conexão ou escolha outra fonte disponível.');
     const events: Array<[keyof HTMLMediaElementEventMap, () => void]> = [
       ['loadedmetadata', metadata], ['durationchange', updateDuration], ['timeupdate', updateTime],
-      ['waiting', waiting], ['seeking', waiting], ['playing', ready], ['canplay', ready], ['seeked', ready],
+      ['waiting', waiting], ['seeking', () => { lastAdvance = Date.now(); waiting(); }], ['playing', actuallyPlaying], ['canplay', ready], ['seeked', ready],
       ['play', play], ['pause', pause], ['ended', ended], ['volumechange', volumeChanged], ['ratechange', rateChanged], ['error', nativeError],
     ];
     events.forEach(([event, listener]) => video.addEventListener(event, listener));
+    // A healthy manifest is not enough: bounded preparation/stall detection also
+    // covers child playlists, unavailable fragments and a pending play promise.
+    const watchdog = setInterval(() => {
+      if (failed || destroyed) return;
+      if (video.readyState < 1 && Date.now() - startedAt >= 15000) {
+        fail('Esta fonte demorou para preparar o vídeo. Escolha outra fonte ou tente novamente.');
+      } else if (playRequestedRef.current && !video.ended && Date.now() - lastAdvance >= 15000) {
+        fail('Esta fonte parou de enviar vídeo por 15 segundos. Escolha outra fonte ou tente novamente.');
+      }
+    }, 500);
 
     if (source.type === 'hls' && Hls.isSupported()) {
       // The provider supplies external, language-verified WebVTT tracks.
       // Keep HLS subtitle controllers from disabling or clearing those native tracks.
-      const hls = new Hls({ enableWorker: true, maxBufferLength: 30, maxMaxBufferLength: 60, maxBufferSize: 20 * 1024 * 1024, backBufferLength: 30,
+      const loadPolicy = { default: { maxTimeToFirstByteMs: 6000, maxLoadTimeMs: 8000,
+        timeoutRetry: { maxNumRetry: 1, retryDelayMs: 500, maxRetryDelayMs: 500 },
+        errorRetry: { maxNumRetry: 1, retryDelayMs: 500, maxRetryDelayMs: 500 } } };
+      const hls = new Hls({ enableWorker: true, startLevel: 0, maxBufferLength: 30, maxMaxBufferLength: 60, maxBufferSize: 20 * 1024 * 1024, backBufferLength: 30,
+        manifestLoadPolicy: loadPolicy, playlistLoadPolicy: loadPolicy, fragLoadPolicy: loadPolicy,
         subtitleTrackController: undefined, subtitleStreamController: undefined, timelineController: undefined });
       hlsRef.current = hls;
       hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
@@ -171,12 +224,12 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
       });
       hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => setActiveHeight(hls.levels[data.level]?.height));
       hls.on(Hls.Events.ERROR, (_, data) => {
-        if (!data.fatal || destroyed) return;
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRecoveries < 2) {
+        if (!data.fatal || destroyed || failed) return;
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && hls.levels.length > 0 && networkRecoveries < 1) {
           networkRecoveries += 1;
           setBuffering(true);
           clearTimeout(recoveryTimer);
-          recoveryTimer = setTimeout(() => { if (!destroyed) hls.startLoad(); }, networkRecoveries * 1000);
+          recoveryTimer = setTimeout(() => { if (!destroyed && !failed) hls.startLoad(); }, 500);
         } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries < 1) {
           mediaRecoveries += 1;
           hls.recoverMediaError();
@@ -196,6 +249,7 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
 
     return () => {
       destroyed = true;
+      clearInterval(watchdog);
       clearTimeout(recoveryTimer);
       saveProgress(true, video);
       events.forEach(([event, listener]) => video.removeEventListener(event, listener));
@@ -275,8 +329,10 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) void video.play().catch(() => { setNotice('O navegador não iniciou o vídeo. Tente novamente pelo botão de reprodução.'); setControlsVisible(true); });
-    else video.pause();
+    if (video.paused) {
+      playRequestedRef.current = true;
+      void video.play().catch(() => { playRequestedRef.current = false; setNotice('O navegador não iniciou o vídeo. Tente novamente pelo botão de reprodução.'); setControlsVisible(true); });
+    } else { playRequestedRef.current = false; video.pause(); }
   }, []);
   const seek = (seconds: number) => {
     const video = videoRef.current;

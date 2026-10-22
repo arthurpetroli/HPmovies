@@ -11,6 +11,15 @@ describe('subtitle normalization', () => {
     const ass = '[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.20,0:00:04.50,Default,,0,0,0,,{\\an8}Olá, mundo\\N<b>Texto</b>';
     expect(subtitleToVtt(ass, 'ass')).toContain('00:00:01.200 --> 00:00:04.500\nOlá, mundo\n&lt;b&gt;Texto&lt;/b&gt;');
   });
+  it('keeps valid SRT and ASS dialogue when a single cue has a broken interval', () => {
+    const srt = '1\n00:00:01,000 --> 00:00:03,000\nFala válida\n\n2\n00:00:04,000 --> 00:00:04,000\nIntervalo vazio\n\n3\n00:00:05,000 --> 00:00:06,000\nOutra fala válida';
+    const converted = subtitleToVtt(srt, 'srt');
+    expect(converted).toContain('Fala válida'); expect(converted).toContain('Outra fala válida');
+    expect(converted).not.toContain('Intervalo vazio'); expect(converted.match(/-->/g)).toHaveLength(2);
+    const ass = '[Events]\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Fala ASS válida\nDialogue: 0,0:00:03.00,0:00:02.00,Default,,0,0,0,,Fala ASS inválida';
+    expect(subtitleToVtt(ass, 'ass')).toContain('Fala ASS válida');
+    expect(subtitleToVtt(ass, 'ass')).not.toContain('Fala ASS inválida');
+  });
   it('rejects invalid times, empty files and excessive contents', () => {
     expect(() => subtitleToVtt('1\n00:99:01,000 --> 00:00:03,000\nTexto', 'srt')).toThrow();
     expect(() => subtitleToVtt('[Events]', 'ass')).toThrow('Nenhuma fala');
