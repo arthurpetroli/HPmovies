@@ -132,7 +132,8 @@ test('HLS playback uses real demo media, subtitles, quality and progress', async
   expect(errors).toEqual([]);
 });
 
-test('SRT captions stay visible when another track fails and sync persists', async ({ page }) => {
+test('captions load on demand, recover after a failed track and preserve sync', async ({ page }) => {
+  let brokenRequests = 0;
   await page.route('**/api/streaming/episodes/demo', route => route.fulfill({ json: { data: {
     episode: { id: 'demo', title: 'Teste de conversão de legendas' },
     sources: [{ url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8', type: 'hls' }],
@@ -142,11 +143,18 @@ test('SRT captions stay visible when another track fails and sync persists', asy
     ], audioLanguages: [], isDemo: true,
   } } }));
   await page.route('**/qa-captions.srt', route => route.fulfill({ contentType: 'text/plain', body: '1\n00:00:00,000 --> 00:01:00,000\nLegenda SRT de teste\n' }));
-  await page.route('**/qa-broken.ass', route => route.fulfill({ status: 503, body: 'unavailable' }));
+  await page.route('**/qa-broken.ass', route => { brokenRequests++; return route.fulfill({ status: 503, body: 'unavailable' }); });
   await page.goto('/watch/demo');
   await page.getByRole('button', { name: 'Reproduzir vídeo', exact: true }).click();
   await expect(page.getByText('Legenda SRT de teste', { exact: true })).toBeVisible();
+  expect(brokenRequests).toBe(0);
   await page.getByRole('button', { name: 'Abrir configurações' }).click();
+  await page.getByRole('combobox', { name: 'Idioma das legendas' }).selectOption('en-broken');
+  await expect(page.getByRole('alert')).toContainText('Não foi possível converter');
+  expect(brokenRequests).toBe(1);
+  await page.getByRole('combobox', { name: 'Idioma das legendas' }).selectOption('pt-srt');
+  await expect(page.getByText('Legenda SRT de teste', { exact: true })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
   await page.getByRole('slider', { name: 'Sincronização da legenda' }).fill('1.5');
   await page.reload();
   await page.getByRole('button', { name: 'Abrir configurações' }).click();

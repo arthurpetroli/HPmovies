@@ -6,7 +6,7 @@ import { streamingService } from '../services/streaming';
 import { libraryService } from '../services/library';
 import { VideoPlayer } from '../components/player/VideoPlayer';
 import type { VideoPlayerHandle } from '../components/player/VideoPlayer';
-import { preferredSubtitleId } from '../components/player/playbackUtils';
+import { orderedPlaybackSources, portugueseCaptionRank, subtitlesForSource } from '../components/player/playbackUtils';
 import { sourceQuery, sourceSuffix, sourceTitles } from '../services/content';
 
 interface WatchSession { playback: Playback; resumeTime: number }
@@ -44,7 +44,7 @@ function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: 
       sourceTitles.save('anime', episodeId, titles);
       const previous = libraryService.getProgress(episodeId);
       setSession({ playback, resumeTime: previous && !previous.completed ? previous.currentTime : 0 });
-      setSource(playback.sources[0]);
+      setSource(orderedPlaybackSources(playback)[0]);
       setError(null);
       setLoading(false);
     }).catch((cause: unknown) => {
@@ -72,8 +72,8 @@ function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: 
   </main>;
 
   const { playback, resumeTime } = session;
-  const activeSubtitles = source.subtitles ?? playback.subtitles;
-  const brazilianPortuguese = preferredSubtitleId(activeSubtitles) !== 'off';
+  const activeSubtitles = subtitlesForSource(playback, source);
+  const portugueseRank = Math.min(4, ...activeSubtitles.map(track => portugueseCaptionRank(track.language)));
   return (
     <main id="main-content" className="mx-auto max-w-[1440px] px-4 pb-20 pt-24 sm:px-8 lg:px-12">
       <Link to={backPath} className="mb-6 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={16} />{backPath.startsWith('/sources') ? 'Voltar às fontes' : 'Voltar ao catálogo'}</Link>
@@ -87,9 +87,10 @@ function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: 
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-400">
             <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-teal-400" />Fonte autorizada</span>
-            <span className="flex items-center gap-1.5"><Subtitles size={14} />{brazilianPortuguese ? 'Faixa PT-BR disponível' : activeSubtitles.length ? 'Outros idiomas de legenda disponíveis' : 'Sem legendas disponíveis'}</span>
+            <span className="flex items-center gap-1.5"><Subtitles size={14} />{portugueseRank === 0 ? 'Faixa PT-BR disponível' : portugueseRank < 4 ? 'Legenda em português disponível' : activeSubtitles.length ? 'Outros idiomas de legenda disponíveis' : 'Sem legendas disponíveis'}</span>
             {playback.audioLanguages.length > 0 && <span>Áudio: {playback.audioLanguages.join(', ')}</span>}
           </div>
+          {activeSubtitles.some(track => track.id.startsWith('opensubtitles-')) && <p className="mt-4 text-xs leading-relaxed text-slate-400">Legendas externas do OpenSubtitles para este episódio. Se a versão tiver tempos diferentes, escolha outra faixa ou ajuste a sincronização nas configurações do player.</p>}
           {playback.isDemo && <div className="mt-6 flex gap-3 rounded-xl border border-teal-400/15 bg-teal-400/5 p-4 text-sm leading-relaxed text-slate-300"><Info className="mt-0.5 h-5 w-5 shrink-0 text-teal-300" /><p>Este vídeo autorizado permite testar a reprodução, a qualidade e os controles. A faixa PT-BR contém orientações originais sobre o player. O catálogo de animes é separado da disponibilidade de episódios licenciados.</p></div>}
           {playback.attribution && <p className="mt-5 text-xs leading-relaxed text-slate-500">Conteúdo: <a href={playback.attribution.url} target="_blank" rel="noreferrer" className="text-slate-300 underline decoration-white/20 underline-offset-4 hover:text-teal-300">{playback.attribution.label}</a> · {playback.attribution.license}</p>}
         </section>
@@ -103,7 +104,10 @@ function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: 
             const currentPosition = playerRef.current?.getPosition();
             setSession({ playback, resumeTime: currentPosition ?? (previous && !previous.completed ? previous.currentTime : 0) });
             setSource(chosen);
-          }}>{playback.sources.map((item, index) => <option key={`${item.url}:${index}`} value={item.url}>{item.label ?? (item.type === 'hls' ? 'HLS · qualidade automática' : 'MP4 · original')}</option>)}</select></label>
+          }}>{orderedPlaybackSources(playback).map((item, index) => {
+            const rank = Math.min(4, ...subtitlesForSource(playback, item).map(track => portugueseCaptionRank(track.language)));
+            return <option key={`${item.url}:${index}`} value={item.url}>{item.label ?? (item.type === 'hls' ? 'HLS · qualidade automática' : 'MP4 · original')}{rank === 0 ? ' · legendas PT-BR' : rank < 4 ? ' · legendas em português' : ''}</option>;
+          })}</select></label>
           <div className="mt-6 border-t border-white/10 pt-5"><h3 className="text-xs font-semibold text-slate-300">Controles rápidos</h3><dl className="mt-3 space-y-3 text-xs text-slate-500"><div className="flex justify-between gap-4"><dt>Reproduzir / pausar</dt><dd className="text-slate-300">Espaço ou K</dd></div><div className="flex justify-between gap-4"><dt>Avançar / voltar 10s</dt><dd className="text-slate-300">← / →</dd></div><div className="flex justify-between gap-4"><dt>Tela cheia / som</dt><dd className="text-slate-300">F / M</dd></div></dl><p className="mt-3 text-[11px] leading-relaxed text-slate-600">Os atalhos funcionam com o foco no player.</p></div>
           <div className="mt-6 rounded-lg bg-white/5 p-3 text-xs leading-relaxed text-slate-400">Seu progresso é salvo neste navegador. Use a página inicial para continuar assistindo depois.</div>
           {playback.attribution && <a className="mt-5 flex items-center justify-between gap-2 text-xs text-slate-400 transition hover:text-teal-300" href={playback.attribution.url} target="_blank" rel="noreferrer">Conhecer o projeto do vídeo<ExternalLink size={13} /></a>}

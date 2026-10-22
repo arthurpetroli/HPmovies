@@ -8,7 +8,7 @@ import { MangaError, MangaLoading } from '../components/manga/MangaState';
 import '../manga.css';
 
 function MangaDetails({ id }: { id: string }) {
-  const [query] = useSearchParams();
+  const [query, setQuery] = useSearchParams();
   const requestedLanguage = query.get('language') || 'pt-br';
   const initialLanguage = /^[a-z]{2,3}(?:-[a-z]{2,4})?$/.test(requestedLanguage) ? requestedLanguage : 'pt-br';
   const [retry, setRetry] = useState(0); const [feedRetry, setFeedRetry] = useState(0); const [language, setLanguage] = useState(initialLanguage); const [page, setPage] = useState(1);
@@ -19,7 +19,7 @@ function MangaDetails({ id }: { id: string }) {
   const { saved, history, storageError } = useMangaLibrary();
   const entry = saved.find((entry) => entry.manga.id === id); const progress = history.find((entry) => entry.manga.id === id);
   const manga = detail.data;
-  const languages = [...new Set(['pt-br', language, ...(manga?.availableLanguages ?? [])])];
+  const languages = [...new Set(['pt-br', 'pt', language, ...(manga?.availableLanguages ?? [])])];
   return <main id="main-content" className="manga-page content-width page-shell">
     <Link className="manga-back" to="/manga"><ArrowLeft size={16} />Explorar mangás</Link>
     {detail.loading ? <MangaLoading /> : detail.error ? <MangaError message={detail.error} retry={() => setRetry((value) => value + 1)} /> : manga && <>
@@ -27,7 +27,7 @@ function MangaDetails({ id }: { id: string }) {
         {progress ? <Link className="button-primary" to={`/manga/${id}/read/${progress.chapterId}`}><BookOpen size={18} />Retomar · página {progress.page + 1}</Link> : feed.data?.items.find((chapter) => chapter.pages > 0 && !chapter.externalUrl) ? <Link className="button-primary" to={`/manga/${id}/read/${feed.data.items.find((chapter) => chapter.pages > 0 && !chapter.externalUrl)!.id}`}><BookOpen size={18} />Começar a ler</Link> : null}
         <button className={entry ? 'button-primary' : 'button-secondary'} onClick={() => mangaLibrary.toggle(manga)} aria-pressed={!!entry}><Bookmark size={17} fill={entry ? 'currentColor' : 'none'} />{entry ? 'Na minha lista' : 'Minha lista'}</button><button className={`button-secondary ${entry?.favorite ? 'manga-is-favorite' : ''}`} onClick={() => mangaLibrary.toggleFavorite(manga)} aria-pressed={!!entry?.favorite}><Heart size={17} fill={entry?.favorite ? 'currentColor' : 'none'} />Favoritar</button><a className="manga-source" href={manga.sourceUrl} target="_blank" rel="noopener noreferrer">MangaDex <ExternalLink size={14} /></a>
       </div>{storageError && <p className="manga-notice" role="status">{storageError}</p>}</div></section>
-      <section className="manga-chapters"><div className="section-heading"><div><span className="eyebrow">SUA PRÓXIMA LEITURA</span><h2>Capítulos e edições</h2><p>Escolha o idioma e o grupo de tradução de cada capítulo.</p></div><label className="manga-language">Idioma<select value={language} onChange={(event) => { setLanguage(event.target.value); setPage(1); }}>{languages.map((lang) => <option key={lang} value={lang}>{mangaLanguageLabel(lang)}{lang === 'pt-br' ? ' · preferencial' : ''}</option>)}</select></label></div>
+      <section className="manga-chapters"><div className="section-heading"><div><span className="eyebrow">SUA PRÓXIMA LEITURA</span><h2>Capítulos e edições</h2><p>Escolha o idioma e o grupo de tradução de cada capítulo.</p></div><label className="manga-language">Idioma<select value={language} onChange={(event) => { setLanguage(event.target.value); setPage(1); const next = new URLSearchParams(query); next.set('language', event.target.value); setQuery(next, { replace: true }); }}>{languages.map((lang) => <option key={lang} value={lang}>{mangaLanguageLabel(lang)}{lang === 'pt-br' ? ' · preferencial' : ''}</option>)}</select></label></div>
         {!manga.availableLanguages.includes('pt-br') && <p className="manga-notice">O catálogo não informa uma tradução PT-BR disponível para esta obra. Você pode selecionar outro idioma acima.</p>}
         {feed.loading ? <p className="manga-feed-loading" aria-busy="true">Buscando capítulos em {mangaLanguageLabel(language)}…</p> : feed.error ? <MangaError message={feed.error} retry={() => setFeedRetry((value) => value + 1)} /> : feed.data?.items.length ? <><p className="manga-chapter-count">{feed.data.total} edições · {mangaLanguageLabel(language)}</p><div className="manga-chapter-list">{feed.data.items.map((chapter) => {
           const destination = chapter.externalUrl || `/manga/${id}/read/${chapter.id}`;

@@ -32,7 +32,7 @@ describe('subtitle normalization', () => {
 });
 
 describe('caption preferences', () => {
-  const defaults = { size: 'medium', background: true, offset: 0 };
+  const defaults = { language: 'pt-br', size: 'medium', background: true, offset: 0 };
   it('validates stored types, bounds sync, and keeps actual language subtags', () => {
     expect(normalizeCaptionPreferences({ size: 'huge', background: 'false', offset: '3', language: '<script>' })).toMatchObject(defaults);
     expect(normalizeCaptionPreferences({ size: 'large', background: false, offset: 400, language: ' PT_BR ' })).toEqual({ size: 'large', background: false, offset: 10, language: 'pt-br' });
@@ -56,7 +56,7 @@ describe('caption preferences', () => {
     saveCaptionPreferences({ size: 'small', background: false, offset: Infinity, language: 'x'.repeat(5000) });
     const [key, raw] = setItem.mock.calls[0];
     expect(key).toBe('hpmovies.captions.v1');
-    expect(JSON.parse(raw)).toEqual({ size: 'small', background: false, offset: 0 });
+    expect(JSON.parse(raw)).toEqual({ language: 'pt-br', size: 'small', background: false, offset: 0 });
     expect(raw.length).toBeLessThan(200);
     setItem.mockImplementation(() => { throw new Error('Quota exceeded'); });
     expect(() => saveCaptionPreferences({ size: 'medium', background: true, offset: 1.5, language: 'off' })).not.toThrow();

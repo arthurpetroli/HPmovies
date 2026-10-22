@@ -43,11 +43,13 @@ test('manual source manga uses the existing reader and preserves title, progress
   await page.getByRole('textbox', { name: 'Título da obra' }).fill(title);
   await page.getByRole('combobox', { name: 'Fonte', exact: true }).selectOption('tatakai');
   await page.getByRole('button', { name: 'Consultar fontes' }).click();
+  expect(new URL(page.url()).searchParams.get('language')).toBe('pt-BR');
   await page.getByRole('link', { name: /Primeiro capítulo QA/ }).click();
   await expect(page.getByAltText('Página 1', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Preferências de leitura' }).click();
   await page.getByRole('combobox', { name: 'Modo', exact: true }).selectOption('single');
   await page.getByRole('button', { name: 'Fechar preferências' }).click();
+  await page.getByRole('combobox', { name: 'Página', exact: true }).selectOption('0');
   await page.getByRole('button', { name: 'Próxima página', exact: true }).click();
   await expect(page.getByAltText('Página 2', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => localStorage.getItem('hpmovies.source-manga:12345:tatakai:fixture'))).toContain('"page":1');
@@ -56,6 +58,8 @@ test('manual source manga uses the existing reader and preserves title, progress
   await page.getByRole('button', { name: 'Próximo capítulo', exact: false }).click();
   await expect(page).toHaveURL(new RegExp(nextChapterId));
   expect(new URL(page.url()).searchParams.get('title')).toBe(title);
+  expect(new URL(page.url()).searchParams.get('provider')).toBe('fixture');
+  expect(new URL(page.url()).searchParams.get('language')).toBe('pt-BR');
   expect(requests.filter(url => url.pathname.includes('/pages')).every(url => url.searchParams.get('title') === title)).toBe(true);
   expect(catalogRequests).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
@@ -71,9 +75,34 @@ test('source novel opens the existing text reader and keeps source hints after r
   await page.getByRole('link', { name: 'Próximo', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Segundo capítulo QA' })).toBeVisible();
   expect(new URL(page.url()).searchParams.get('title')).toBe(title);
+  expect(new URL(page.url()).searchParams.get('provider')).toBe('fixture');
+  expect(new URL(page.url()).searchParams.get('language')).toBe('pt-BR');
   expect(requests.filter(url => url.pathname.endsWith('/content')).every(url => url.searchParams.get('title') === title)).toBe(true);
   expect(catalogRequests).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+});
+
+test('Portuguese is the default and other languages require an explicit choice without losing provider filters', async ({ page }) => {
+  await mockSources(page);
+  const requests: URL[] = [];
+  await page.route(`**/api/content/manga/${id}/chapters?**`, async route => {
+    const url = new URL(route.request().url()); requests.push(url);
+    const portuguese = url.searchParams.get('language') === 'pt-BR';
+    return route.fulfill({ json: { data: { available: !portuguese, state: portuguese ? 'empty' : 'available', message: portuguese ? 'Esta fonte retornou somente inglês.' : 'Capítulos em inglês.', chapters: portuguese ? [] : [{ ...chapter, language: 'en' }], languages: ['en'], diagnostics: [] } } });
+  });
+  await page.goto(`/sources?${new URLSearchParams({ kind: 'manga', id, title, source: 'tatakai', provider: 'fixture', open: '1' })}`);
+  await expect(page.getByRole('combobox', { name: 'Idioma dos capítulos' })).toHaveValue('pt-BR');
+  await expect(page.getByText('Esta fonte retornou somente inglês.')).toBeVisible();
+  await expect(page.getByRole('link', { name: /Primeiro capítulo QA/ })).toHaveCount(0);
+  expect(requests[0].searchParams.get('language')).toBe('pt-BR');
+  await page.getByRole('button', { name: 'Ver capítulos em outros idiomas' }).click();
+  await expect(page.getByRole('link', { name: /Primeiro capítulo QA/ })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get('language')).toBe('all');
+  expect(requests.at(-1)?.searchParams.has('language')).toBe(false);
+  expect(requests.at(-1)?.searchParams.get('provider')).toBe('fixture');
+  await page.reload();
+  await expect(page.getByRole('combobox', { name: 'Idioma dos capítulos' })).toHaveValue('all');
+  await expect(page.getByRole('textbox', { name: 'Provedor específico (opcional)' })).toHaveValue('fixture');
 });
 
 test('a source without a stream shows its real failure without opening a demo', async ({ page }) => {

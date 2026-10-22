@@ -10,7 +10,7 @@ export function sourceQuery(params: URLSearchParams): SourceQuery {
   return {
     source: source === 'tatakai' || source === 'toko' ? source : undefined,
     provider: params.get('provider') || undefined,
-    language: params.get('language') || undefined,
+    language: params.get('language') === 'all' ? undefined : params.get('language') || undefined,
     titles: [...params.getAll('title'), ...params.getAll('titles[]')].filter(Boolean).slice(0, 5),
   };
 }

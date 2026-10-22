@@ -9,12 +9,12 @@ const KEY = 'hpmovies.captions.v1';
 const MAX_SUBTITLE_BYTES = 2_000_000;
 
 export function normalizeCaptionPreferences(input: unknown): CaptionPreferences {
-  const defaults: CaptionPreferences = { size: 'medium', background: true, offset: 0 };
+  const defaults: CaptionPreferences = { language: 'pt-br', size: 'medium', background: true, offset: 0 };
   if (!input || typeof input !== 'object' || Array.isArray(input)) return defaults;
   const value = input as Record<string, unknown>;
   const language = typeof value.language === 'string' ? value.language.trim().replace(/_/g, '-').toLowerCase() : '';
   return {
-    language: language.length <= 39 && /^(?:off|[a-z]{2,8}(?:-[a-z0-9]{1,8})*)$/.test(language) ? language : undefined,
+    language: language.length <= 39 && /^(?:off|[a-z]{2,8}(?:-[a-z0-9]{1,8})*)$/.test(language) ? language : defaults.language,
     size: value.size === 'small' || value.size === 'large' ? value.size : defaults.size,
     background: typeof value.background === 'boolean' ? value.background : true,
     offset: typeof value.offset === 'number' && Number.isFinite(value.offset) ? Math.max(-10, Math.min(10, value.offset)) : 0,

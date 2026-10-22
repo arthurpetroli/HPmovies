@@ -4,7 +4,7 @@ import Hls from 'hls.js';
 import { Check, Loader2, Maximize, Minimize, Pause, Play, RotateCcw, Settings, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
 import type { StreamSource, StreamSubtitle } from '../../../shared/providers';
 import { loadConvertedSubtitle, readCaptionPreferences, saveCaptionPreferences } from './subtitles';
-import { hasValidIntro, preferredSubtitleId } from './playbackUtils';
+import { hasValidIntro, orderedSubtitles, preferredSubtitleId } from './playbackUtils';
 
 interface VideoPlayerProps {
   ref?: Ref<VideoPlayerHandle>;
@@ -58,10 +58,9 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
   const [activeHeight, setActiveHeight] = useState<number | undefined>();
   const [speed, setSpeed] = useState(1);
   const [captionPreferences] = useState(readCaptionPreferences);
-  const [subtitleId, setSubtitleId] = useState(() => captionPreferences.language === 'off' ? 'off'
-    : subtitles.find(track => track.language.toLowerCase() === captionPreferences.language?.toLowerCase())?.id ?? preferredSubtitleId(subtitles));
+  const [subtitleId, setSubtitleId] = useState(() => preferredSubtitleId(subtitles, captionPreferences.language));
   const [captionLanguage, setCaptionLanguage] = useState(captionPreferences.language);
-  const conversionSignature = JSON.stringify(subtitles.filter(track => track.format === 'srt' || track.format === 'ass').map(({ id, url, label, format }) => ({ id, url, label, format })));
+  const conversionSignature = JSON.stringify(subtitles.filter(track => track.id === subtitleId && (track.format === 'srt' || track.format === 'ass')).map(({ id, url, label, format }) => ({ id, url, label, format })));
   const [conversion, setConversion] = useState<{ signature: string; tracks: Record<string, string>; errors: Record<string, string> }>({ signature: '', tracks: {}, errors: {} });
   const convertedTracks = conversion.signature === conversionSignature ? conversion.tracks : EMPTY_CONVERTED_TRACKS;
   const conversionError = conversion.signature === conversionSignature ? conversion.errors[subtitleId] : undefined;
@@ -349,7 +348,7 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
           {qualities.map(level => <option key={level.index} value={level.index}>{level.height ? `${level.height}p` : `${Math.round(level.bitrate / 1000)} kbps`}</option>)}
         </select>{source.type === 'hls' && qualities.length === 0 && <span className="block text-xs text-white/40">A qualidade é gerenciada pelo navegador nesta fonte.</span>}</label>
         <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Velocidade</span><select aria-label="Velocidade de reprodução" className={selectClass} value={speed} onChange={event => { if (videoRef.current) videoRef.current.playbackRate = Number(event.target.value); }}>{[0.5, 0.75, 1, 1.25, 1.5, 2].map(value => <option key={value} value={value}>{value === 1 ? 'Normal (1×)' : `${value}×`}</option>)}</select></label>
-        <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Legendas</span><select aria-label="Idioma das legendas" className={selectClass} value={subtitleId} onChange={event => { const selected = event.target.value; setSubtitleId(selected); setCaptionLanguage(selected === 'off' ? 'off' : subtitles.find(track => track.id === selected)?.language); setCaptionError(null); }}><option value="off">Desativadas</option>{subtitles.map(track => <option key={track.id} value={track.id}>{track.label} · {track.language}</option>)}</select></label>
+        <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Legendas</span><select aria-label="Idioma das legendas" className={selectClass} value={subtitleId} onChange={event => { const selected = event.target.value; setSubtitleId(selected); setCaptionLanguage(selected === 'off' ? 'off' : subtitles.find(track => track.id === selected)?.language); setCaptionError(null); }}><option value="off">Desativadas</option>{orderedSubtitles(subtitles).map(track => <option key={track.id} value={track.id}>{track.label} · {track.language}</option>)}</select></label>
         {selectedSubtitle && <>
           <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Tamanho da legenda</span><select aria-label="Tamanho da legenda" className={selectClass} value={captionSize} onChange={event => setCaptionSize(event.target.value as 'small' | 'medium' | 'large')}><option value="small">Pequena</option><option value="medium">Média</option><option value="large">Grande</option></select></label>
           <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Sincronização · {captionOffset > 0 ? '+' : ''}{captionOffset.toFixed(1)}s</span><input aria-label="Sincronização da legenda" className="w-full accent-teal-400" type="range" min={-10} max={10} step={0.1} value={captionOffset} onChange={event => setCaptionOffset(Number(event.target.value))} /><span className="block text-xs text-white/40">Valores positivos atrasam a legenda. ASS usa apenas texto, sem efeitos.</span></label>

@@ -27,7 +27,7 @@ export function isMangaChapter(value: unknown): value is MangaChapter {
     && uint(value.pages) && stringList(value.groups) && (value.externalUrl === undefined || https(value.externalUrl));
 }
 export const mangaService = {
-  home: () => requestData<MangaHome>('/manga/home', (value): value is MangaHome => object(value)
+  home: (language = 'pt-br') => requestData<MangaHome>(`/manga/home?${new URLSearchParams({ language })}`, (value): value is MangaHome => object(value)
     && ['popular', 'topRated', 'ongoing', 'latest'].every((key) => Array.isArray(value[key]) && value[key].every(isManga)) && stringList(value.warnings)).then((value) => ({ ...value, popular: value.popular.map(resolveCard), topRated: value.topRated.map(resolveCard), ongoing: value.ongoing.map(resolveCard), latest: value.latest.map(resolveCard) })),
   search: (query: MangaQuery) => {
     const params = new URLSearchParams();
@@ -43,5 +43,5 @@ export const mangaService = {
     && isMangaChapter(value.chapter) && Array.isArray(value.pages) && value.pages.every(imageSource) && https(value.sourceUrl)
     && (value.navigation === undefined || object(value.navigation) && (value.navigation.previousId === undefined || uuid(value.navigation.previousId)) && (value.navigation.nextId === undefined || uuid(value.navigation.nextId)))).then((value) => ({ ...value, pages: value.pages.map(resolveImage) })),
 };
-export const mangaLanguageLabel = (language: string) => ({ 'pt-br': 'Português brasileiro', pt: 'Português', en: 'Inglês', es: 'Espanhol', 'es-la': 'Espanhol (América Latina)', ja: 'Japonês', fr: 'Francês', ko: 'Coreano', zh: 'Chinês' }[language] ?? language.toUpperCase());
+export const mangaLanguageLabel = (language: string) => ({ 'pt-br': 'Português brasileiro', pt: 'Português · todas as variantes', 'pt-pt': 'Português (Portugal)', all: 'Todos os idiomas', en: 'Inglês', es: 'Espanhol', 'es-la': 'Espanhol (América Latina)', ja: 'Japonês', fr: 'Francês', ko: 'Coreano', zh: 'Chinês' }[language] ?? language.toUpperCase());
 export const mangaStatusLabel = (status?: string) => ({ ongoing: 'Em publicação', completed: 'Concluído', hiatus: 'Em pausa', cancelled: 'Cancelado' }[status ?? ''] ?? status ?? 'Mangá');
