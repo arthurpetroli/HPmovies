@@ -2,6 +2,8 @@
 
 Verificação local em **21/10/2026**. Esta etapa investiga a falha de reprodução informada após as recomendações de Naruto, Death Note, Cowboy Bebop e Attack on Titan. Os [resultados anteriores em português](PORTUGUESE-SOURCES.md) preservam a amostra inicial de One Piece; disponibilidade de legenda e resposta do manifesto, isoladamente, não comprovam que outro episódio reproduz.
 
+**Revisão de legendas em 22/10/2026:** a falha posterior ao selecionar PT-BR, as mudanças no ciclo de carregamento do player e a entrega de WebVTT nativo estão em [SUBTITLE-LOADING-FIX.md](SUBTITLE-LOADING-FIX.md). Este relatório preserva a validação de vídeo e os totais de testes da etapa de 21/10.
+
 ## Causa reproduzida
 
 Nos quatro títulos, a fonte devolvia um manifesto HLS com HTTP 200. Esse manifesto apontava para outra playlist, cujos segmentos usavam novos domínios de CDN. Como esses domínios não estavam na lista exata de hosts permitidos, o gateway recusava os descendentes. A rota local da playlist retornava HTTP 503 com `CONTENT_IMAGE_NOT_PERMITTED`, embora a URL inicial existisse.

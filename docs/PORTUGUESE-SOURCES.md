@@ -2,6 +2,8 @@
 
 Verificação externa em **21/10/2026**, no ambiente local. Esta etapa amplia as fontes já instaladas; não houve push nem deploy. O [relatório anterior](REAL-CONTENT-VALIDATION.md) preserva os testes iniciais do Toko, Webtoons e Syosetu.
 
+**Revisão de legendas em 22/10/2026:** o [relatório de carregamento](SUBTITLE-LOADING-FIX.md) registra a entrega atual como WebVTT nativo, a troca manual de inglês para todas as opções portuguesas da amostra e a correção dos IDs AniList acima de 100.000. Os formatos e totais abaixo pertencem à verificação histórica de 21/10.
+
 **Atualização da reprodução:** as recomendações posteriores de Naruto, Death Note, Cowboy Bebop e Attack on Titan expuseram uma rotação de CDN fora dos hosts permitidos. A causa, a correção, a verificação de segmentos e as novas tentativas automáticas estão em [STREAMING-FIX-VALIDATION.md](STREAMING-FIX-VALIDATION.md). Este relatório mantém os resultados históricos de catálogo e legendas; eles não garantem que qualquer vídeo atualmente resolvido reproduza.
 
 ## Como acessar
