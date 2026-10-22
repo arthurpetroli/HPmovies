@@ -4,8 +4,9 @@ import { integrationsConfig } from '../config/integrations.js';
 import type { TatakaiConfig, TokoConfig } from '../config/integrations.js';
 import { TokoHttpClient } from './toko-http.js';
 import { TokoStreamingProvider } from './toko.js';
+import type { TokoStreamingOptions } from './toko.js';
 
-interface TatakaiOptions { client?: TokoHttpClient }
+interface TatakaiOptions { client?: TokoHttpClient; probe?: TokoStreamingOptions['probe'] }
 
 /** The documented local extension host from Tatakai, rather than its unrelated public website API. */
 export class TatakaiStreamingProvider implements AnimeStreamingProvider {
@@ -25,7 +26,7 @@ export class TatakaiStreamingProvider implements AnimeStreamingProvider {
       allowedRequestOrigins: config.allowedRequestOrigins ?? [],
     };
     this.client = options.client ?? new TokoHttpClient(this.contentConfig, { apiMode: 'extension-host', namespace: config.namespace ?? 'toko' });
-    this.adapter = new TokoStreamingProvider({ client: this.client, config: this.contentConfig, id: 'tatakai', name: 'Tatakai local' });
+    this.adapter = new TokoStreamingProvider({ client: this.client, config: this.contentConfig, id: 'tatakai', name: 'Tatakai local', probe: options.probe });
   }
 
   async diagnostic(): Promise<ProviderDiagnostic> {

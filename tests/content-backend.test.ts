@@ -39,7 +39,7 @@ async function actualHost() {
 }
 
 function backend(baseUrl: string) {
-  const tatakai = new TatakaiStreamingProvider({ enabled: true, baseUrl, namespace: 'fixture', contentAuthorized: true, allowedProviders: ['allowed'], allowedMediaHosts: ['media.example.com'], retries: 0 });
+  const tatakai = new TatakaiStreamingProvider({ enabled: true, baseUrl, namespace: 'fixture', contentAuthorized: true, allowedProviders: ['allowed'], allowedMediaHosts: ['media.example.com'], retries: 0 }, { probe: async () => {} });
   const registry = new StreamingRegistry({ tatakai });
   const content = new ContentRegistry(registry);
   return { app: createApp({ registry, content }), registry, content };
@@ -54,7 +54,7 @@ describe('Tatakai local host through HPmovies content API', () => {
     expect(await registry.tatakai.diagnostic()).toMatchObject({ state: 'available', technicalAvailable: true });
     const response = await app.request(`/api/content/anime/anilist:1/episodes/1${hints}`);
     expect(response.status).toBe(200);
-    expect((await response.json()).data).toMatchObject({ episode: { id: 'tatakai:1:1' }, sources: [{ url: 'https://media.example.com/episode.mp4', type: 'mp4' }], isDemo: false });
+    expect((await response.json()).data).toMatchObject({ episode: { id: 'tatakai:1:1' }, sources: [{ url: expect.stringMatching(/^\/api\/streaming\/media\/[0-9a-f-]{36}$/), type: 'mp4' }], isDemo: false });
     const playback = await app.request('/api/streaming/episodes/tatakai:1:1?title=Obra%20de%20teste');
     expect(playback.status).toBe(200);
   });

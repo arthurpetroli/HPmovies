@@ -23,11 +23,20 @@ const RANGE_BYTES = 8_000_000;
 const BINARY_MEDIA_MIME = new Set(['video/mp2t', 'video/mp4', 'audio/mp4', 'audio/aac', 'audio/mpeg', 'application/octet-stream', 'text/vtt']);
 const denied = () => new ApiError(503, 'STREAM_MEDIA_NOT_PERMITTED', 'A mídia exige um domínio ou cabeçalhos não permitidos para esta fonte.');
 const unavailable = () => new ApiError(502, 'STREAM_MEDIA_UNAVAILABLE', 'A fonte não disponibilizou esta mídia. Escolha outra fonte ou tente novamente.');
+const mediaError = (error: unknown): unknown => error instanceof ApiError && error.code === 'CONTENT_IMAGE_NOT_PERMITTED' ? denied() : error;
+const isTransportStream = (bytes: Uint8Array): boolean => bytes.length >= 188 * 3 && bytes.length % 188 === 0
+  && bytes.every((value, index) => index % 188 !== 0 || value === 0x47);
+const isMp4 = (bytes: Uint8Array, fragment = false): boolean => {
+  if (bytes.length < 12) return false;
+  const size = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0);
+  const type = new TextDecoder().decode(bytes.subarray(4, 8));
+  return size >= 8 && (type === 'ftyp' || fragment && ['styp', 'moof'].includes(type));
+};
 
 /** A browser user agent is never impersonated. Cookies and authentication headers are refused. */
 export function streamRequestHeaders(input: Record<string, string>, config: TokoConfig): Record<string, string> {
   const filtered = Object.fromEntries(Object.entries(input).filter(([key]) => key.toLowerCase() !== 'user-agent'));
-  return permittedContentHeaders(filtered, config);
+  try { return permittedContentHeaders(filtered, config); } catch (error) { throw mediaError(error); }
 }
 
 /** Only source results and descendants of a verified HLS playlist can issue these tickets. */
@@ -37,6 +46,8 @@ export class StreamMediaGateway {
   private readonly pending = new Map<string, Promise<StreamMedia>>();
   private readonly cache = new Map<string, { value: StreamMedia; expiresAt: number }>();
   private cacheBytes = 0;
+  private readonly probes = new Map<string, { expiresAt: number; error?: unknown }>();
+  private readonly pendingProbes = new Map<string, Promise<void>>();
   private readonly resolver: NonNullable<GatewayOptions['resolver']>;
   private readonly transport: NonNullable<GatewayOptions['transport']>;
   private readonly timeoutMs: number;
@@ -47,7 +58,8 @@ export class StreamMediaGateway {
   }
   issue(config: TokoConfig, provider: string, source: string, kind: MediaKind, inputHeaders: Record<string, string> = {}, expiresAt = Date.now() + 2 * 60 * 60_000): string {
     if (!config.enabled || !config.contentAuthorized || !config.allowedProviders.includes(provider)) throw denied();
-    const url = permittedContentUrl(source, config);
+    let url: URL;
+    try { url = permittedContentUrl(source, config); } catch (error) { throw mediaError(error); }
     const headers = streamRequestHeaders(inputHeaders, config);
     const key = createHash('sha256').update(JSON.stringify([provider, url.href, kind, headers, config.allowedMediaHosts, config.allowedRequestOrigins])).digest('hex');
     const previous = this.sources.get(key); const remembered = previous && this.tickets.get(previous);
@@ -80,7 +92,7 @@ export class StreamMediaGateway {
     if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end < start) throw new ApiError(416, 'INVALID_MEDIA_RANGE', 'Intervalo de bytes inválido.');
     return `bytes=${start}-${Math.min(end, start + RANGE_BYTES - 1)}`;
   }
-  media(token: string, requestedRange?: string): Promise<StreamMedia> {
+  media(token: string, requestedRange?: string, signal?: AbortSignal): Promise<StreamMedia> {
     const ticket = TOKEN.test(token) && this.tickets.get(token);
     if (!ticket || ticket.expiresAt <= Date.now()) {
       if (ticket) this.remove(token, ticket);
@@ -91,12 +103,12 @@ export class StreamMediaGateway {
       if (!ticket.config.enabled || !ticket.config.contentAuthorized || !ticket.config.allowedProviders.includes(ticket.provider)) throw denied();
       permittedContentUrl(ticket.source, ticket.config); streamRequestHeaders(ticket.headers, ticket.config);
       range = this.range(ticket.kind, requestedRange);
-    } catch (error) { return Promise.reject(error); }
+    } catch (error) { return Promise.reject(mediaError(error)); }
     const key = `${token}:${range ?? ''}`; const cached = this.cache.get(key);
     if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.value);
     const existing = this.pending.get(key); if (existing) return existing;
     if (this.pending.size >= 12) return Promise.reject(new ApiError(503, 'STREAM_MEDIA_BUSY', 'Há muitas mídias carregando. Tente novamente em instantes.'));
-    const task = this.load(ticket, range).then(value => {
+    const task = this.load(ticket, range, signal).then(value => {
       const current = this.cache.get(key);
       if (current) { this.cacheBytes -= current.value.bytes.byteLength; this.cache.delete(key); }
       while (this.cache.size >= 24 || this.cacheBytes + value.bytes.byteLength > 32_000_000) {
@@ -108,6 +120,58 @@ export class StreamMediaGateway {
       this.cacheBytes += value.bytes.byteLength; return value;
     }).finally(() => this.pending.delete(key));
     this.pending.set(key, task); return task;
+  }
+  /** Verify actual media, rather than treating a returned URL or master as playable. */
+  probe(path: string, signal?: AbortSignal): Promise<void> {
+    const match = /^\/api\/streaming\/media\/([^/?#]+)$/.exec(path);
+    const token = match?.[1]; const ticket = token && TOKEN.test(token) && this.tickets.get(token);
+    if (!ticket || ticket.expiresAt <= Date.now() || !['hls', 'mp4'].includes(ticket.kind)) return Promise.reject(unavailable());
+    try {
+      if (!ticket.config.enabled || !ticket.config.contentAuthorized || !ticket.config.allowedProviders.includes(ticket.provider)) throw denied();
+      permittedContentUrl(ticket.source, ticket.config); streamRequestHeaders(ticket.headers, ticket.config);
+    } catch (error) { return Promise.reject(mediaError(error)); }
+    const cached = this.probes.get(path);
+    if (cached && cached.expiresAt > Date.now()) return cached.error ? Promise.reject(cached.error) : Promise.resolve();
+    const pending = this.pendingProbes.get(path); if (pending) return pending;
+    if (this.pendingProbes.size >= 12) return Promise.reject(new ApiError(503, 'STREAM_MEDIA_BUSY', 'Há muitas fontes sendo verificadas. Tente novamente em instantes.'));
+    if (signal?.aborted) return Promise.reject(unavailable());
+    const controller = new AbortController(); const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    const deadline = setTimeout(abort, 8_000);
+    const aborted = new Promise<never>((_resolve, reject) => controller.signal.addEventListener('abort', () => reject(unavailable()), { once: true }));
+    const task = Promise.race([this.probeTicket(token!, ticket.kind === 'mp4', controller.signal), aborted]).then(() => {
+      this.probes.set(path, { expiresAt: Math.min(ticket.expiresAt, Date.now() + 30_000) });
+    }, error => {
+      this.probes.set(path, { expiresAt: Date.now() + 5_000, error }); throw error;
+    }).finally(() => {
+      clearTimeout(deadline); signal?.removeEventListener('abort', abort); this.pendingProbes.delete(path);
+      while (this.probes.size > 512) this.probes.delete(this.probes.keys().next().value!);
+    });
+    this.pendingProbes.set(path, task); return task;
+  }
+  private async probeTicket(token: string, mp4: boolean, signal: AbortSignal): Promise<void> {
+    if (mp4) {
+      const content = await this.media(token, 'bytes=0-65535', signal);
+      if (!isMp4(content.bytes)) throw unavailable();
+      return;
+    }
+    for (let depth = 0; depth < 4; depth++) {
+      if (signal.aborted) throw unavailable();
+      const content = await this.media(token, undefined, signal);
+      const lines = new TextDecoder().decode(content.bytes).split(/\r?\n/).map(line => line.trim());
+      const reference = lines.find(line => line && !line.startsWith('#'));
+      const child = reference && /^\/api\/streaming\/media\/([^/?#]+)$/.exec(reference)?.[1];
+      const ticket = child && this.tickets.get(child);
+      if (!ticket) throw unavailable();
+      if (ticket.kind === 'hls') { token = child!; continue; }
+      if (ticket.kind !== 'segment' || !lines.some(line => line.startsWith('#EXTINF:'))) throw unavailable();
+      const init = lines.find(line => line.startsWith('#EXT-X-MAP:'))?.match(/URI="\/api\/streaming\/media\/([^"/?#]+)"/)?.[1];
+      if (init && !isMp4((await this.media(init, undefined, signal)).bytes)) throw unavailable();
+      const segment = (await this.media(child!, undefined, signal)).bytes;
+      if (!isTransportStream(segment) && !(init && isMp4(segment, true))) throw unavailable();
+      return;
+    }
+    throw unavailable();
   }
   private playlist(text: string, ticket: Ticket): string {
     if (!text.replace(/^\uFEFF/, '').startsWith('#EXTM3U') || text.length > 1_000_000 || /\0/.test(text)) throw unavailable();
@@ -137,11 +201,16 @@ export class StreamMediaGateway {
       return rewritten;
     }).join('\n');
   }
-  private async load(ticket: Ticket, range?: string): Promise<StreamMedia> {
+  private async load(ticket: Ticket, range?: string, signal?: AbortSignal): Promise<StreamMedia> {
     const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const abort = () => controller.abort(); signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) controller.abort();
     let response: ImageResponse | undefined;
     try {
-      const aborted = new Promise<never>((_resolve, reject) => controller.signal.addEventListener('abort', () => reject(new Error('timeout')), { once: true }));
+      const aborted = new Promise<never>((_resolve, reject) => {
+        if (controller.signal.aborted) reject(new Error('timeout'));
+        else controller.signal.addEventListener('abort', () => reject(new Error('timeout')), { once: true });
+      });
       const url = permittedContentUrl(ticket.source, ticket.config);
       const records = await Promise.race([this.resolver(url.hostname), aborted]);
       if (!records.length || records.length > 32 || records.some(row => !publicImageAddress(row.address) || row.family !== isIP(row.address))) throw denied();
@@ -150,7 +219,9 @@ export class StreamMediaGateway {
         headers: { Accept: '*/*', 'Accept-Encoding': 'identity', 'User-Agent': 'HPmovies/2.0 (local media client)', ...ticket.headers, ...(range ? { Range: range } : {}) }, signal: controller.signal }), aborted]);
       const mime = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? '';
       const length = Number(response.headers.get('content-length') ?? 0);
-      const maxBytes = ticket.kind === 'hls' ? 1_000_000 : ticket.kind === 'subtitle' ? 4_000_000 : ticket.kind === 'mp4' ? RANGE_BYTES : 12_000_000;
+      const explicitRange = range && /^bytes=(\d+)-(\d+)$/.exec(range);
+      const maxBytes = ticket.kind === 'hls' ? 1_000_000 : ticket.kind === 'subtitle' ? 4_000_000
+        : ticket.kind === 'mp4' ? Math.min(RANGE_BYTES, explicitRange ? Number(explicitRange[2]) - Number(explicitRange[1]) + 1 : RANGE_BYTES) : 12_000_000;
       const goodMime = ticket.kind === 'hls' ? ['application/vnd.apple.mpegurl', 'application/x-mpegurl', 'audio/mpegurl', 'audio/x-mpegurl', 'text/plain', 'application/octet-stream'].includes(mime)
         : ticket.kind === 'subtitle' ? ['text/vtt', 'application/x-subrip', 'text/plain', 'application/octet-stream', 'text/srt'].includes(mime)
           : BINARY_MEDIA_MIME.has(mime) || ticket.kind === 'segment';
@@ -198,9 +269,9 @@ export class StreamMediaGateway {
       return { bytes: result, status: response.status as 200 | 206, headers };
     } catch (error) {
       response?.cancel();
-      if (error instanceof ApiError) throw error;
+      if (error instanceof ApiError) throw mediaError(error);
       throw new ApiError(controller.signal.aborted ? 504 : 503, 'STREAM_MEDIA_UNAVAILABLE', 'Não foi possível carregar a mídia da fonte. Escolha outra fonte ou tente novamente.');
-    } finally { clearTimeout(timeout); }
+    } finally { clearTimeout(timeout); signal?.removeEventListener('abort', abort); }
   }
 }
 

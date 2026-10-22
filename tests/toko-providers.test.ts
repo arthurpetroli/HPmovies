@@ -5,6 +5,8 @@ import { TokoHttpClient } from '../src/aniwatch-apis/src/providers/toko-http';
 import type { TokoStream } from '../src/aniwatch-apis/src/providers/toko-http';
 import { normalizeTokoLanguage, normalizeTokoSource, permittedMediaUrl, TokoStreamingProvider } from '../src/aniwatch-apis/src/providers/toko';
 import { TatakaiStreamingProvider } from '../src/aniwatch-apis/src/providers/tatakai';
+import { streamMediaGateway } from '../src/aniwatch-apis/src/providers/stream-media';
+import { ApiError } from '../src/aniwatch-apis/src/config/apiError';
 
 const config = () => loadIntegrationsConfig({
   TOKO_ENABLED: 'true', TOKO_API_URL: 'http://127.0.0.1:8099',
@@ -37,7 +39,7 @@ describe('integration configuration and permission separation', () => {
 
   it('distinguishes a responding HTTP service from a loaded provider bundle', async () => {
     const fetcher = vi.fn(async () => json({ ...health, toko: false }));
-    const provider = new TokoStreamingProvider({ client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
+    const provider = new TokoStreamingProvider({ probe: async () => {}, client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
     const diagnostic = await provider.diagnostic();
     expect(diagnostic).toMatchObject({ state: 'unavailable', technicalAvailable: false });
     expect((await provider.episodes('1')).available).toBe(false);
@@ -47,7 +49,7 @@ describe('integration configuration and permission separation', () => {
   it('allows health diagnostics without granting playback or probing sources', async () => {
     const settings = { ...config(), contentAuthorized: false };
     const fetcher = vi.fn(async () => json(health));
-    const provider = new TokoStreamingProvider({ client: new TokoHttpClient(settings, { fetcher: fetcher as typeof fetch }) });
+    const provider = new TokoStreamingProvider({ probe: async () => {}, client: new TokoHttpClient(settings, { fetcher: fetcher as typeof fetch }) });
     expect(await provider.diagnostic()).toMatchObject({ state: 'unauthorized', technicalAvailable: true, authorized: false });
     expect(await provider.episodes('1')).toMatchObject({ available: false, state: 'unauthorized', episodes: [] });
     await expect(provider.playback('toko:1:1')).rejects.toMatchObject({ code: 'TOKO_UNAUTHORIZED' });
@@ -56,7 +58,7 @@ describe('integration configuration and permission separation', () => {
 
   it('keeps disabled Toko and undocumented Tatakai adapters independent of network access', async () => {
     const fetcher = vi.fn();
-    const provider = new TokoStreamingProvider({ client: new TokoHttpClient({ ...config(), enabled: false }, { fetcher }) });
+    const provider = new TokoStreamingProvider({ probe: async () => {}, client: new TokoHttpClient({ ...config(), enabled: false }, { fetcher }) });
     expect(await provider.episodes('1')).toMatchObject({ state: 'unavailable', available: false });
     expect(fetcher).not.toHaveBeenCalled();
     const tatakai = new TatakaiStreamingProvider({ enabled: true, baseUrl: 'https://api.tatakai.me' });
@@ -99,7 +101,7 @@ describe('verified Toko JSON HTTP contract', () => {
       if (url.pathname === '/api/v3/toko/stream') return json({ sources: [{ ...stream(), audioLanguage: 'sub' }], providerStatus: [] });
       throw new Error(`Unexpected endpoint ${url.pathname}`);
     });
-    const provider = new TokoStreamingProvider({ client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
+    const provider = new TokoStreamingProvider({ probe: async () => {}, client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
     expect(await provider.episodes('1')).toMatchObject({
       available: true, state: 'available', episodes: [{ id: 'toko:1:1', number: 1, available: true }, { id: 'toko:1:2' }],
     });
@@ -122,7 +124,7 @@ describe('verified Toko JSON HTTP contract', () => {
       if (raw.includes('/index/episodes')) return json({ provider: 'permitted', episodeCount: 3, episodes: [{ number: 0.5 }, { number: 1 }, { number: 3 }] });
       return json({ sources: [stream()] });
     });
-    const provider = new TokoStreamingProvider({ client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
+    const provider = new TokoStreamingProvider({ probe: async () => {}, client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
     expect(await provider.playback('toko:1:1')).toMatchObject({ previousEpisodeId: 'toko:1:0.5', nextEpisodeId: 'toko:1:3' });
     const special = await provider.playback('toko:1:0.5');
     expect(special.nextEpisodeId).toBe('toko:1:1');
@@ -135,9 +137,50 @@ describe('verified Toko JSON HTTP contract', () => {
       if (raw.includes('/index/episodes')) return json(index);
       return json({ sources: [{ ...stream(), providerKey: 'unpermitted' }] });
     });
-    const provider = new TokoStreamingProvider({ client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
+    const provider = new TokoStreamingProvider({ probe: async () => {}, client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
     expect(await provider.episodes('1')).toMatchObject({ available: false, state: 'unauthorized' });
     await expect(provider.playback('toko:1:1')).rejects.toMatchObject({ code: 'TOKO_UNAUTHORIZED' });
+  });
+
+  it('uses scoped gateway verification by default and discards returned sources that fail it', async () => {
+    const fetcher = vi.fn(async (raw: string) => raw.includes('/health') ? json(health)
+      : raw.includes('/index/episodes') ? json(index) : json({ sources: [stream()] }));
+    const probe = vi.spyOn(streamMediaGateway, 'probe').mockRejectedValue(new ApiError(502, 'STREAM_MEDIA_UNAVAILABLE', 'Unavailable'));
+    try {
+      const provider = new TokoStreamingProvider({ client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
+      expect(await provider.episodes('1')).toMatchObject({ available: false, state: 'connection_error', episodes: [{ available: false }, {}] });
+      await expect(provider.playback('toko:1:1')).rejects.toMatchObject({ code: 'STREAM_MEDIA_UNAVAILABLE' });
+      expect(probe.mock.calls[0][0]).toMatch(/^\/api\/streaming\/media\/[0-9a-f-]{36}$/);
+      expect(probe.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
+    } finally { probe.mockRestore(); }
+  });
+
+  it('returns only verified candidates with at most two simultaneous probes', async () => {
+    const candidates = ['first.m3u8', 'broken.mp4', 'third.m3u8', 'fourth.m3u8'].map((path, i) => ({ ...stream(), url: `https://media.example.com/${path}`, quality: String(i), type: i === 1 ? 'mp4' : 'hls' }));
+    const fetcher = vi.fn(async (raw: string) => raw.includes('/health') ? json(health)
+      : raw.includes('/index/episodes') ? json(index) : json({ sources: candidates }));
+    let active = 0; let maximum = 0;
+    const probe = vi.fn(async (source: { quality?: string }) => {
+      active++; maximum = Math.max(maximum, active);
+      try { await new Promise(resolve => setTimeout(resolve, 5)); if (source.quality === '1') throw new Error('302 redirect'); }
+      finally { active--; }
+    });
+    const provider = new TokoStreamingProvider({ probe, client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
+    const playback = await provider.playback('toko:1:1');
+    expect(playback.sources.map(source => source.quality)).toEqual(['0', '2', '3']);
+    expect(maximum).toBe(2); expect(probe).toHaveBeenCalledTimes(4);
+    expect(playback.sources.every(source => source.url.startsWith('/api/streaming/media/'))).toBe(true);
+  });
+
+  it('stops stalled candidates within one shared preflight budget and cancels the active probes', async () => {
+    const candidates = Array.from({ length: 5 }, (_, i) => ({ ...stream(), url: `https://media.example.com/${i}.m3u8` }));
+    const fetcher = vi.fn(async (raw: string) => raw.includes('/health') ? json(health)
+      : raw.includes('/index/episodes') ? json(index) : json({ sources: candidates }));
+    const signals: AbortSignal[] = [];
+    const probe = vi.fn(async (_source: unknown, signal: AbortSignal) => { signals.push(signal); return new Promise<void>(() => {}); });
+    const provider = new TokoStreamingProvider({ probe, probeBudgetMs: 10, client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
+    await expect(provider.playback('toko:1:1')).rejects.toMatchObject({ code: 'STREAM_MEDIA_UNAVAILABLE' });
+    expect(probe).toHaveBeenCalledTimes(2); expect(signals.every(signal => signal.aborted)).toBe(true);
   });
 
   it('deduplicates simultaneous queries, isolates parameters and expires successful cached requests', async () => {
@@ -192,7 +235,7 @@ describe('verified Toko JSON HTTP contract', () => {
 
   it('bounds timeout retries and converts connection failures into isolated availability states', async () => {
     const fetcher = vi.fn(async () => { throw Object.assign(new Error('timeout'), { name: 'TimeoutError' }); });
-    const provider = new TokoStreamingProvider({ client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch, retryDelayMs: 0 }) });
+    const provider = new TokoStreamingProvider({ probe: async () => {}, client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch, retryDelayMs: 0 }) });
     expect(await provider.episodes('1')).toMatchObject({ available: false, state: 'connection_error' });
     expect(fetcher).toHaveBeenCalledTimes(2);
   });

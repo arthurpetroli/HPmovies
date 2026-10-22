@@ -16,6 +16,8 @@ const response = (text: string | Uint8Array, mime = 'application/vnd.apple.mpegu
 const token = (path: string) => path.split('/').at(-1)!;
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 const headers = { Referer: 'https://player.example.org/', Origin: 'https://player.example.org', 'User-Agent': 'Mozilla/5.0 provider agent' };
+const ts = () => { const bytes = new Uint8Array(188 * 3); bytes[0] = bytes[188] = bytes[376] = 0x47; return bytes; };
+const mp4 = () => new Uint8Array([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 0]);
 
 describe('scoped streaming transport', () => {
   it('rewrites master, alternate audio, relative segments and initialization URIs into opaque scoped tickets', async () => {
@@ -51,6 +53,57 @@ describe('scoped streaming transport', () => {
       await expect(gateway.media(token(path))).rejects.toHaveProperty('status');
       expect(transport).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it('remaps image permission failures to streaming errors, including nested CDN hosts', async () => {
+    const gateway = new StreamMediaGateway({ resolver, transport: async () => response('#EXTM3U\n#EXTINF:6,\nhttps://other.example.org/a.ts') });
+    expect(() => gateway.issue(config(), 'source', 'https://other.example.org/a.m3u8', 'hls')).toThrow(expect.objectContaining({ code: 'STREAM_MEDIA_NOT_PERMITTED' }));
+    expect(() => gateway.issue(config(), 'source', 'https://cdn.example.org/a.m3u8', 'hls', { Cookie: 'secret' })).toThrow(expect.objectContaining({ code: 'STREAM_MEDIA_NOT_PERMITTED' }));
+    const path = gateway.issue(config(), 'source', 'https://cdn.example.org/master.m3u8', 'hls');
+    await expect(gateway.probe(path)).rejects.toMatchObject({ code: 'STREAM_MEDIA_NOT_PERMITTED' });
+  });
+
+  it('probes the real first HLS variant and segment, then deduplicates and briefly caches verification', async () => {
+    const transport = vi.fn(async (input: ImageRequest) => {
+      if (input.url.pathname === '/master.m3u8') return response('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvideo.m3u8\n#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=1,URI="iframes.m3u8"');
+      if (input.url.pathname === '/video.m3u8') return response('#EXTM3U\n#EXTINF:6,\nsegment.html\n#EXT-X-ENDLIST');
+      expect(input.url.pathname).toBe('/segment.html'); return response(ts(), 'text/html');
+    });
+    const gateway = new StreamMediaGateway({ resolver, transport });
+    const path = gateway.issue(config(), 'source', 'https://cdn.example.org/master.m3u8', 'hls');
+    await Promise.all([gateway.probe(path), gateway.probe(path)]); await gateway.probe(path);
+    expect(transport).toHaveBeenCalledTimes(3);
+    await expect(gateway.probe('https://cdn.example.org/master.m3u8')).rejects.toMatchObject({ status: 502 });
+    await expect(gateway.probe(`${path}?url=other`)).rejects.toMatchObject({ status: 502 });
+  });
+
+  it('rejects a successful HLS master when its actual video is missing or is HTML', async () => {
+    for (const body of [response('<html>not a video</html>', 'application/octet-stream'), response('redirect', 'video/mp2t', 302)]) {
+      const gateway = new StreamMediaGateway({ resolver, transport: async input => input.url.pathname.endsWith('.m3u8')
+        ? response('#EXTM3U\n#EXTINF:6,\nsegment.ts\n#EXT-X-ENDLIST') : body });
+      const path = gateway.issue(config(), 'source', 'https://cdn.example.org/master.m3u8', 'hls');
+      await expect(gateway.probe(path)).rejects.toMatchObject({ status: 502 });
+    }
+  });
+
+  it('probes MP4 with at most 64 KiB, checks its signature and refuses redirects or ignored oversized ranges', async () => {
+    for (const body of [response(mp4(), 'video/mp4', 206, { 'Content-Range': 'bytes 0-15/100000' }),
+      response('redirect', 'video/mp4', 302), response('<html>not media</html>', 'video/mp4'), response(new Uint8Array(65537), 'video/mp4')]) {
+      const transport = vi.fn(async (input: ImageRequest) => { expect(input.headers.Range).toBe('bytes=0-65535'); return body; });
+      const gateway = new StreamMediaGateway({ resolver, transport });
+      const path = gateway.issue(config(), 'source', 'https://cdn.example.org/video.mp4', 'mp4');
+      if (body.status === 206) await gateway.probe(path);
+      else await expect(gateway.probe(path)).rejects.toMatchObject({ status: 502 });
+      expect(transport).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('cancels a stalled transport when the shared preflight budget expires', async () => {
+    let upstreamSignal: AbortSignal | undefined;
+    const gateway = new StreamMediaGateway({ resolver, transport: async input => { upstreamSignal = input.signal; return new Promise<ImageResponse>(() => {}); } });
+    const path = gateway.issue(config(), 'source', 'https://cdn.example.org/master.m3u8', 'hls');
+    await expect(gateway.probe(path, AbortSignal.timeout(10))).rejects.toMatchObject({ code: 'STREAM_MEDIA_UNAVAILABLE' });
+    expect(upstreamSignal?.aborted).toBe(true);
   });
 
   it('limits MP4 byte ranges and preserves valid partial-content headers', async () => {
@@ -108,6 +161,7 @@ describe('scoped streaming transport', () => {
       subtitles: [{ url: 'https://cdn.example.org/en.vtt', label: 'English', language: 'en' }] };
     const normalized = normalizeTokoSource(source, config());
     expect(normalized?.url).toMatch(/^\/api\/streaming\/media\/[0-9a-f-]{36}$/);
+    expect(normalizeTokoSource({ ...source, requiresHeaders: false, headers: undefined }, config())?.url).toMatch(/^\/api\/streaming\/media\/[0-9a-f-]{36}$/);
     expect(normalized?.subtitles[0].url).toMatch(/^\/api\/streaming\/media\/[0-9a-f-]{36}$/);
     expect(normalizeTokoSource({ ...source, headers: { Cookie: 'secret' } }, config())).toBeUndefined();
   });
