@@ -16,6 +16,7 @@ export interface MangaTitle {
   sourceUrl: string;
 }
 export interface MangaQuery {
+  language?: string;
   search?: string;
   tag?: string;
   status?: 'ongoing' | 'completed' | 'hiatus' | 'cancelled';
@@ -45,7 +46,7 @@ export interface MangaChapterPage {
 }
 export interface MangaChapterPages { chapter: MangaChapter; pages: string[]; sourceUrl: string; navigation?: { previousId?: string; nextId?: string } }
 export interface MangaCatalogProvider {
-  home(): Promise<MangaHome>;
+  home(language?: string): Promise<MangaHome>;
   search(query: MangaQuery): Promise<MangaPage>;
   details(id: string): Promise<MangaTitle>;
   tags(): Promise<MangaTag[]>;

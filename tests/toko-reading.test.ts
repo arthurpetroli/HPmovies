@@ -53,6 +53,16 @@ async function fixture(payloads: Payloads, run: (fixture: {
 }
 
 describe('Toko reading HTTP adapter', () => {
+  it('treats general Portuguese as its declared regional variants while keeping Brazilian requests exact', async () => {
+    await fixture({ chapters: () => ({ chapterCount: 4, chapters: [chapter('one', 1, 'pt-br'), chapter('one', 2, 'pt-pt'), chapter('one', 3, 'pt'), chapter('one', 4, 'en')] }) }, async ({ provider }) => {
+      const adapter = provider();
+      const general = await adapter.chapters('manga', 'anilist:1', { provider: 'one', language: 'pt' });
+      expect(general.chapters.map(row => row.language)).toEqual(['pt-BR', 'pt-PT', 'pt']);
+      expect(general.languages).toContain('en');
+      const brazilian = await adapter.chapters('manga', 'anilist:1', { provider: 'one', language: 'pt-BR' });
+      expect(brazilian.chapters.map(row => row.language)).toEqual(['pt-BR']);
+    });
+  });
   it('preserves permitted public-image headers and issues gateway tickets only after listing the chapter', async () => {
     await fixture({ pages: { pages: [{ pageNumber: 1, imageUrl: 'https://media.example.com/1.jpg', headers: { Referer: 'https://www.webtoons.com/' } }] } }, async ({ config, calls }) => {
       const gateway = new ContentImageGateway({ resolver: async () => [{ address: '1.1.1.1', family: 4 }], transport: async input => {

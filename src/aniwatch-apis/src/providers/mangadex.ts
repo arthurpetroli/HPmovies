@@ -37,9 +37,14 @@ export function validateMangaId(id: string): string {
   return id.toLowerCase();
 }
 export function validateMangaLanguage(language: string): string {
+  language = language.toLowerCase();
   if (!LANG.test(language) || language.length > 10) throw new ApiError(400, 'INVALID_LANGUAGE', 'Idioma de edição inválido.');
   return language;
 }
+export function validateMangaCatalogLanguage(language = 'pt-br'): string {
+  return language === 'all' ? language : validateMangaLanguage(language);
+}
+const requestedLanguages = (language: string): string[] => language === 'all' ? [] : language === 'pt' ? ['pt-br', 'pt'] : language === 'pt-pt' ? ['pt'] : [language];
 export function validateMangaPage(page: unknown, chapter = false): number {
   const value = Number(page ?? 1);
   if (!/^\d+$/.test(String(page ?? 1)) || !Number.isInteger(value) || value < 1 || value > (chapter ? 100 : 416)) {
@@ -48,9 +53,10 @@ export function validateMangaPage(page: unknown, chapter = false): number {
   return value;
 }
 export function validateMangaQuery(params: Record<string, string>): MangaQuery {
-  const allowed = new Set(['search', 'tag', 'status', 'sort', 'page']);
+  const allowed = new Set(['search', 'tag', 'status', 'sort', 'page', 'language']);
   if (Object.keys(params).some((key) => !allowed.has(key))) throw new ApiError(400, 'INVALID_FILTER', 'Filtro de mangás desconhecido.');
   const result: MangaQuery = { page: validateMangaPage(params.page) };
+  if (params.language !== undefined) result.language = validateMangaCatalogLanguage(params.language);
   const search = params.search?.trim();
   if (search && (search.length > 120 || [...search].some((character) => character.charCodeAt(0) < 32))) throw new ApiError(400, 'INVALID_FILTER', 'Título de busca inválido.');
   if (search) result.search = search;
@@ -264,6 +270,8 @@ export class MangaDexProvider implements MangaCatalogProvider, MangaChapterProvi
   }
   search(query: MangaQuery): Promise<MangaPage> {
     const page = validateMangaPage(query.page); const params = this.catalogParams();
+    const language = validateMangaCatalogLanguage(query.language);
+    if (language !== 'all') for (const code of requestedLanguages(language)) params.append('availableTranslatedLanguage[]', code);
     params.set('limit', String(PAGE_SIZE)); params.set('offset', String((page - 1) * PAGE_SIZE));
     params.set(`order[${SORTS[query.sort ?? 'popular']}]`, 'desc');
     if (query.search) params.set('title', query.search);
@@ -273,13 +281,15 @@ export class MangaDexProvider implements MangaCatalogProvider, MangaChapterProvi
       const data = await this.request('/manga', params); const total = integer(data.total);
       if (total === undefined) throw fail();
       // Respect safe catalog policy even if an upstream ignores contentRating filters.
-      const items = list(data.data).filter((value) => RATINGS.has(String(record(record(value).attributes).contentRating))).map(normalizeManga);
+      const items = list(data.data).filter((value) => RATINGS.has(String(record(record(value).attributes).contentRating))).map(normalizeManga)
+        .filter(item => language === 'all' || item.availableLanguages.some(code => requestedLanguages(language).includes(code)));
       return { items, page, total, hasNextPage: page * PAGE_SIZE < Math.min(10000, total) };
     }, `manga:mangadex:search:${params}`, 300).then((result) => ({ ...result, items: result.items.map((manga) => this.withImage(manga)) }));
   }
-  async home(): Promise<MangaHome> {
+  async home(language = 'pt-br'): Promise<MangaHome> {
+    language = validateMangaCatalogLanguage(language);
     const results = await Promise.allSettled([
-      this.search({ sort: 'popular' }), this.search({ sort: 'rating' }), this.search({ sort: 'popular', status: 'ongoing' }), this.search({ sort: 'latest' }),
+      this.search({ sort: 'popular', language }), this.search({ sort: 'rating', language }), this.search({ sort: 'popular', status: 'ongoing', language }), this.search({ sort: 'latest', language }),
     ]);
     const ok = results.some((result) => result.status === 'fulfilled');
     if (!ok) throw (results[0] as PromiseRejectedResult).reason;
@@ -304,15 +314,18 @@ export class MangaDexProvider implements MangaCatalogProvider, MangaChapterProvi
   chapters(mangaId: string, language = 'pt-br', page = 1): Promise<MangaChapterPage> {
     mangaId = validateMangaId(mangaId); language = validateMangaLanguage(language); page = validateMangaPage(page, true);
     const params = new URLSearchParams([
-      ['limit', String(CHAPTER_PAGE_SIZE)], ['offset', String((page - 1) * CHAPTER_PAGE_SIZE)], ['translatedLanguage[]', language],
-      ['order[volume]', 'asc'], ['order[chapter]', 'asc'], ['includes[]', 'scanlation_group'], ['includeExternalUrl', '1'], ['includeEmptyPages', '1'],
+      ['limit', String(CHAPTER_PAGE_SIZE)], ['offset', String((page - 1) * CHAPTER_PAGE_SIZE)],
+      // These are tri-state filters: "1" selects only external/empty editions.
+      // Omitting both keeps readable chapters alongside official external links.
+      ['order[volume]', 'asc'], ['order[chapter]', 'asc'], ['includes[]', 'scanlation_group'],
       ['contentRating[]', 'safe'], ['contentRating[]', 'suggestive'],
     ]);
+    for (const code of requestedLanguages(language)) params.append('translatedLanguage[]', code);
     return this.store.getOrSet(async () => {
       await this.details(mangaId);
       const data = await this.request(`/manga/${mangaId}/feed`, params); const total = integer(data.total);
       if (total === undefined) throw fail();
-      const items = list(data.data).filter((value) => !this.blockedChapter(value)).map(normalizeChapter).filter((item) => item.language === language && item.mangaId === mangaId);
+      const items = list(data.data).filter((value) => !this.blockedChapter(value)).map(normalizeChapter).filter((item) => (language === 'all' || requestedLanguages(language).includes(item.language)) && item.mangaId === mangaId);
       return { items, language, page, total, hasNextPage: page * CHAPTER_PAGE_SIZE < Math.min(10000, total) };
     }, `manga:mangadex:chapters:${mangaId}:${params}:policy:${[...this.blockedGroupIds].sort().join(',')}`, 120);
   }

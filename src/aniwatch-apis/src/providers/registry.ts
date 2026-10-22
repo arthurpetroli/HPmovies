@@ -6,6 +6,7 @@ import { configuredStremioAddons } from '../config/stremio.js';
 import { StremioStreamingProvider } from './stremio.js';
 import type { Playback } from '../../../shared/providers.js';
 import { ApiError } from '../config/apiError.js';
+import { portugueseSubtitles, PortugueseSubtitleProvider } from './portuguese-subtitles.js';
 
 /** A provider failure stays confined to its own availability result. */
 export class StreamingRegistry implements AnimeStreamingProvider {
@@ -13,10 +14,12 @@ export class StreamingRegistry implements AnimeStreamingProvider {
   readonly toko: TokoStreamingProvider;
   readonly tatakai: TatakaiStreamingProvider;
   readonly stremio: StremioStreamingProvider;
-  constructor(options: { toko?: TokoStreamingProvider; tatakai?: TatakaiStreamingProvider; stremio?: StremioStreamingProvider } = {}) {
+  readonly subtitles: PortugueseSubtitleProvider;
+  constructor(options: { toko?: TokoStreamingProvider; tatakai?: TatakaiStreamingProvider; stremio?: StremioStreamingProvider; subtitles?: PortugueseSubtitleProvider } = {}) {
     this.toko = options.toko ?? new TokoStreamingProvider();
     this.tatakai = options.tatakai ?? new TatakaiStreamingProvider();
     this.stremio = options.stremio ?? new StremioStreamingProvider({ addons: configuredStremioAddons() });
+    this.subtitles = options.subtitles ?? portugueseSubtitles;
   }
 
   async episodes(id: string, titles?: string[]) {
@@ -38,7 +41,7 @@ export class StreamingRegistry implements AnimeStreamingProvider {
     const providers = [this.tatakai, this.toko].filter(provider => !source || (provider === this.toko ? 'toko' : 'tatakai') === source);
     const results = await Promise.allSettled(providers.map(provider => provider.playback(`${provider === this.toko ? 'toko' : 'tatakai'}:${animeId}:${episode}`, titles)));
     const success = results.find(result => result.status === 'fulfilled');
-    if (success?.status === 'fulfilled') return success.value;
+    if (success?.status === 'fulfilled') return this.subtitles.enrich(success.value, animeId);
     const error = results.find(result => result.status === 'rejected' && result.reason instanceof ApiError && result.reason.status !== 404);
     if (error?.status === 'rejected') throw error.reason;
     throw new ApiError(404, 'EPISODE_UNAVAILABLE', 'Nenhuma fonte encontrou mídia disponível para este episódio.');
@@ -46,8 +49,8 @@ export class StreamingRegistry implements AnimeStreamingProvider {
 
   playback(id: string, titles?: string[]) {
     if (id === 'demo') return this.local.playback(id);
-    if (id.startsWith('toko:')) return this.toko.playback(id, titles);
-    if (id.startsWith('tatakai:')) return this.tatakai.playback(id, titles);
+    if (id.startsWith('toko:')) return this.toko.playback(id, titles).then(playback => this.subtitles.enrich(playback, id.split(':')[1]));
+    if (id.startsWith('tatakai:')) return this.tatakai.playback(id, titles).then(playback => this.subtitles.enrich(playback, id.split(':')[1]));
     if (id.startsWith('stremio:')) return this.stremio.playback(id);
     throw new ApiError(404, 'EPISODE_UNAVAILABLE', 'Não há uma fonte autorizada para este episódio.');
   }

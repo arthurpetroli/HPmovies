@@ -33,6 +33,29 @@ describe('MangaDex public provider', () => {
     expect(url.searchParams.get('order[rating]')).toBe('desc');
     expect(url.searchParams.getAll('contentRating[]')).toEqual(['safe', 'suggestive']);
     expect(url.searchParams.get('includedTags[]')).toBe(TAG);
+    expect(url.searchParams.getAll('availableTranslatedLanguage[]')).toEqual(['pt-br']);
+  });
+  it('keeps Brazilian, general Portuguese and all-language catalogs in separate caches and rejects an ignored upstream language filter', async () => {
+    const english = { ...manga(), id: NEXT, attributes: { ...manga().attributes, availableTranslatedLanguages: ['en'] } };
+    const fetcher = vi.fn<typeof fetch>(async () => response({ data: [manga(), english], total: 2 }));
+    const service = provider(fetcher);
+    expect((await service.search({})).items).toHaveLength(1);
+    expect((await service.search({ language: 'pt' })).items).toHaveLength(1);
+    expect((await service.search({ language: 'all' })).items).toHaveLength(2);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(new URL(String(fetcher.mock.calls[1][0])).searchParams.getAll('availableTranslatedLanguage[]')).toEqual(['pt-br', 'pt']);
+    expect(new URL(String(fetcher.mock.calls[2][0])).searchParams.has('availableTranslatedLanguage[]')).toBe(false);
+    expect(validateMangaQuery({ language: 'PT-BR' }).language).toBe('pt-br');
+    expect(() => validateMangaQuery({ language: 'pt&unsafe=1' })).toThrow();
+  });
+  it('requests both Portuguese variants in a general Portuguese chapter feed without accepting English rows', async () => {
+    const fetcher = vi.fn<typeof fetch>(async input => new URL(String(input)).pathname.endsWith('/feed')
+      ? response({ data: [chapter(), { ...chapter({ translatedLanguage: 'pt' }), id: NEXT }, { ...chapter({ translatedLanguage: 'en' }), id: TAG }], total: 3 })
+      : response({ data: manga() }));
+    const result = await provider(fetcher).chapters(MANGA, 'pt');
+    expect(result.items.map(item => item.language)).toEqual(['pt-br', 'pt']);
+    const feed = fetcher.mock.calls.find(([input]) => String(input).includes('/feed'))!;
+    expect(new URL(String(feed[0])).searchParams.getAll('translatedLanguage[]')).toEqual(['pt-br', 'pt']);
   });
   it('keeps metadata and other discovery selections available when a feed or selection fails', async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {
@@ -53,6 +76,22 @@ describe('MangaDex public provider', () => {
     expect(result).toMatchObject({ language: 'pt-br', hasNextPage: true, total: 150, items: [{ language: 'pt-br', groups: ['Grupo PT-BR'] }] });
     const feedUrl = new URL(String(fetcher.mock.calls.find(([url]) => String(url).includes('/feed?'))?.[0]));
     expect(feedUrl.searchParams.get('translatedLanguage[]')).toBe('pt-br');
+  });
+  it('keeps readable and external editions together instead of selecting only empty external chapters', async () => {
+    const readable = chapter();
+    const external = { ...chapter({ pages: 0, externalUrl: 'https://example.org/official-reader' }), id: NEXT };
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (!url.pathname.endsWith('/feed')) return response({ data: manga() });
+      // MangaDex's tri-state value 1 requires that attribute, rather than adding it.
+      const data = url.searchParams.get('includeExternalUrl') === '1' || url.searchParams.get('includeEmptyPages') === '1'
+        ? [external] : [readable, external];
+      return response({ data, total: data.length });
+    });
+    const result = await provider(fetcher).chapters(MANGA);
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0]).toMatchObject({ pages: 2, language: 'pt-br' });
+    expect(result.items[1].externalUrl).toBe('https://example.org/official-reader');
   });
   it('issues scoped image tickets with valid next chapter navigation', async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {

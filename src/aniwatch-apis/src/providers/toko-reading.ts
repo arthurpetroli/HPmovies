@@ -176,7 +176,7 @@ export class TokoReadingProvider implements ReadingContentProvider {
     }));
     const all = results.flatMap((result) => result.issued).sort((a, b) => ordered(a.chapter, b.chapter));
     const language = query.language === undefined ? undefined : normalizeTokoLanguage(query.language);
-    const issued = language ? all.filter((row) => row.chapter.language === language) : all;
+    const issued = language ? all.filter((row) => (row.chapter.language === language || language === 'pt' && row.chapter.language.startsWith('pt-'))) : all;
     const diagnostics = results.map((result) => result.diagnostic);
     const partial = results.some((result) => result.partial);
     const state: ProviderState = issued.length ? 'available'

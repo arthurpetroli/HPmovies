@@ -12,7 +12,7 @@ import { runtimeConfig } from './config/runtime.js';
 import { apiLimit } from './middleware/apiLimit.js';
 import type { MangaCatalogProvider, MangaChapterProvider, MangaImageProvider } from '../../shared/manga.js';
 import type { NovelProvider } from '../../shared/novel.js';
-import { MangaDexProvider, validateMangaId, validateMangaQuery, validateMangaLanguage, validateMangaPage } from './providers/mangadex.js';
+import { MangaDexProvider, validateMangaId, validateMangaQuery, validateMangaLanguage, validateMangaCatalogLanguage, validateMangaPage } from './providers/mangadex.js';
 import { ContentRegistry, contentQuery, titleHints, validateWorkId } from './providers/content-registry.js';
 import { NovelContentProvider } from './providers/novel-content.js';
 import { AniListNovelProvider, validateNovelId, validateNovelQuery } from './providers/novels.js';
@@ -42,7 +42,7 @@ export function createApp(options: AppOptions = {}) {
 
   const ordinaryHeaders = secureHeaders();
   const imageHeaders = secureHeaders({ crossOriginResourcePolicy: 'cross-origin' });
-  app.use('*', (c, next) => (c.req.path.startsWith('/api/manga/image/') || c.req.path.startsWith('/api/content/image/') || c.req.path.startsWith('/api/streaming/media/') ? imageHeaders : ordinaryHeaders)(c, next));
+  app.use('*', (c, next) => (c.req.path.startsWith('/api/manga/image/') || c.req.path.startsWith('/api/content/image/') || c.req.path.startsWith('/api/streaming/media/') || c.req.path.startsWith('/api/subtitles/file/') ? imageHeaders : ordinaryHeaders)(c, next));
   app.use('*', cors({
     origin: runtimeConfig.allowedOrigins,
     allowHeaders: ['Content-Type', 'Accept', 'Range'],
@@ -51,7 +51,7 @@ export function createApp(options: AppOptions = {}) {
   }));
   const requestLimit = apiLimit(options.rateLimit ?? runtimeConfig.rateLimit, runtimeConfig.rateWindowMs);
   const mediaLimit = apiLimit(options.mediaRateLimit ?? runtimeConfig.mediaRateLimit, runtimeConfig.rateWindowMs);
-  app.use('/api/*', (c, next) => (c.req.path.startsWith('/api/manga/image/') || c.req.path.startsWith('/api/content/image/') || c.req.path.startsWith('/api/streaming/media/') ? mediaLimit : requestLimit)(c, next));
+  app.use('/api/*', (c, next) => (c.req.path.startsWith('/api/manga/image/') || c.req.path.startsWith('/api/content/image/') || c.req.path.startsWith('/api/streaming/media/') || c.req.path.startsWith('/api/subtitles/file/') ? mediaLimit : requestLimit)(c, next));
   app.get('/health', (c) => c.json({
     status: 'OK', catalogProvider: 'anilist', streamingProvider: 'registry', mangaProvider: 'mangadex',
     legacyEnabled, timestamp: new Date().toISOString(),
@@ -90,6 +90,12 @@ export function createApp(options: AppOptions = {}) {
     return new Response(media.bytes as Uint8Array<ArrayBuffer>, { status: media.status, headers: media.headers });
   });
 
+  app.get('/api/subtitles/file/:token', async c => {
+    if (new URL(c.req.url).search) throw new ApiError(400, 'INVALID_SUBTITLE_QUERY', 'Use apenas o identificador da legenda emitido pelo servidor.');
+    const file = await registry.subtitles.file(c.req.param('token'));
+    return new Response(file.bytes as Uint8Array<ArrayBuffer>, { headers: { 'Content-Type': file.contentType, 'Cache-Control': file.cacheControl, 'X-Content-Type-Options': 'nosniff' } });
+  });
+
   app.get('/api/content/anime/:id/episodes/:episode', async c => {
     const id = validateWorkId(c.req.param('id')).slice('anilist:'.length);
     const episode = c.req.param('episode');
@@ -115,7 +121,7 @@ export function createApp(options: AppOptions = {}) {
     const image = await manga.image(c.req.param('token'));
     return new Response(image.bytes as Uint8Array<ArrayBuffer>, { headers: { 'Content-Type': image.contentType, 'Cache-Control': image.cacheControl, 'X-Content-Type-Options': 'nosniff' } });
   });
-  app.get('/api/manga/home', async (c) => c.json({ data: await manga.home() }));
+  app.get('/api/manga/home', async (c) => c.json({ data: await manga.home(validateMangaCatalogLanguage(c.req.query('language'))) }));
   app.get('/api/manga/search', async (c) => c.json({ data: await manga.search(validateMangaQuery(c.req.query())) }));
   app.get('/api/manga/tags', async (c) => c.json({ data: await manga.tags() }));
   app.get('/api/manga/chapter/:chapterId/pages', async (c) => c.json({ data: await manga.pages(validateMangaId(c.req.param('chapterId'))) }));
