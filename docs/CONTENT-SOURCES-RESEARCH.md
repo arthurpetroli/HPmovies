@@ -2,6 +2,8 @@
 
 Verificação: 21/10/2026. Esta consulta usou arquivos públicos dos repositórios e requisições HTTP de leitura. A primeira consulta não instalou extensões. Na implementação posterior, o usuário pediu as mesmas fontes: o artefato Toko4.5.5 foi instalado localmente fora do Git e executado no host Node; resultados reais estão em [REAL-CONTENT-VALIDATION.md](REAL-CONTENT-VALIDATION.md).
 
+**Pesquisa posterior em português:** [PORTUGUESE-SOURCES.md](PORTUGUESE-SOURCES.md) registra a revisão do GoAnime, os bloqueios HTTP observados, a integração funcional de legendas PT-BR/PT e os feeds/imagens PT-BR reais do MangaDex recuperado. As consultas abaixo preservam o estado encontrado antes dessas implementações.
+
 ## O que existe no repositório Tatakai
 
 O [Tatakai](https://github.com/Snozxyx/Tatakai) declara [MPL-2.0](https://github.com/Snozxyx/Tatakai/blob/main/LICENSE). O código de host e de adaptação pode ser avaliado para reaproveitamento com a licença e os avisos correspondentes preservados.
@@ -47,4 +49,4 @@ O endpoint de páginas devolve URLs e cabeçalhos; não entrega os bytes de imag
 - `https://extension.tatakai.me/api/extension?limit=3`: 403, erro 1010. O serviço recusou a consulta de catálogo.
 - `https://v3-cinemeta.strem.io/manifest.json`: 200, com recursos de metadados e catálogo, sem recurso `stream`. Essa resposta comprova acesso ao catálogo, sem validar reprodução.
 
-Um teste completo ainda precisa de uma extensão ou serviço de conteúdo permitido e de mídia real retornada por ele. Um teste de saúde isolado não valida reprodução, páginas ou texto.
+Na consulta inicial, um teste completo ainda precisava de uma extensão ou serviço de conteúdo permitido e de mídia real retornada por ele. Essa etapa foi realizada depois, como registrado no relatório de conteúdo real. Um teste de saúde isolado não valida reprodução, páginas ou texto.

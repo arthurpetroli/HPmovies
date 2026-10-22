@@ -2,6 +2,8 @@
 
 Verificação em 21/10/2026. A instalação e os testes abaixo foram solicitados pelo usuário para rodar localmente; não houve push, publicação nem deploy.
 
+**Atualização posterior no mesmo dia:** o MangaDex recuperou o acesso e a integração independente de legendas passou a oferecer PT-BR em episódios verificados. A tabela abaixo preserva a primeira validação, anterior a essas adições. Resultados atuais, oito feeds de mangá PT-BR e a pesquisa do GoAnime estão em [PORTUGUESE-SOURCES.md](PORTUGUESE-SOURCES.md).
+
 ## Implementação e fontes
 
 O HPmovies executa o host HTTP do Tatakai sob MPL-2.0 e o **pacote original Toko 4.5.5**, obtido da [release do autor](https://github.com/Snozxyx/Toko/releases/tag/toko-v4.5.5). O bundle continua intacto em `.local/sources/toko-4.5.5/`, ignorado pelo Git. Não foi incorporado código do Toko ao projeto. Os hashes, a origem e a configuração estão em [LOCAL-SOURCE-HOST.md](LOCAL-SOURCE-HOST.md).
@@ -42,9 +44,9 @@ npm run dev
 
 Abra [http://127.0.0.1:5173/sources](http://127.0.0.1:5173/sources). Há atalhos para os três casos validados. O comando inicia frontend 5173, API 4000 e host de fontes 8099; os arquivos privados de registro e `.env` desta máquina já apontam ao pacote instalado. Em uma nova cópia do repositório, é necessário obter o pacote do autor e preparar a configuração local conforme a documentação do host.
 
-AniList e MangaDex continuam com seu tratamento de indisponibilidade, sem alteração para contornar a manutenção. A listagem automática de episódios não é inventada a partir de metadados; fontes sem índice podem ser consultadas pelo número do episódio em `/sources`. O acesso direto também está ligado aos detalhes dos animes.
+Na etapa inicial, AniList e MangaDex mantiveram seu tratamento de indisponibilidade, sem alteração para contornar a manutenção. O MangaDex voltou a responder posteriormente, conforme a atualização acima. A listagem automática de episódios não é inventada a partir de metadados; fontes sem índice podem ser consultadas pelo número do episódio em `/sources`. O acesso direto também está ligado aos detalhes dos animes.
 
-As fontes validadas oferecem inglês/japonês nos casos acima. PT-BR continua prioritário quando uma fonte realmente o retorna; não há garantia para títulos, capítulos, regiões ou traduções que não foram testados. Integrações com browser/Electron, playlists criptografadas, ASS com headers e outros provedores/CDNs continuam fora da validação desta entrega.
+As fontes da tabela inicial oferecem inglês/japonês nos casos acima. A etapa posterior acrescentou legendas externas PT-BR e leituras MangaDex PT-BR; não há garantia para títulos, capítulos, regiões ou traduções que não foram testados. Integrações com browser/Electron, playlists criptografadas, ASS com headers e outros provedores/CDNs continuam fora da validação desta entrega.
 
 ## Verificação automatizada
 

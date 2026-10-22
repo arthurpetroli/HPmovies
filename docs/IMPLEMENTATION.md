@@ -1,5 +1,7 @@
 > Etapa posterior de backend: o host Tatakai local e as rotas de conteúdo foram implementados e validados com 182 testes + 10 testes de navegador. Veja [CONTENT-BACKEND.md](CONTENT-BACKEND.md). O relatório abaixo preserva a entrega anterior.
 
+> Atualização em português: MangaDex recuperado, filtro PT-BR em catálogo/leitura e legendas independentes PT-BR/PT implementados. A pesquisa do GoAnime e as amostras externas estão em [PORTUGUESE-SOURCES.md](PORTUGUESE-SOURCES.md). Os totais de testes das entregas anteriores abaixo são históricos.
+
 # Entrega local HPmovies V2 — 21/10/2026
 
 ## Escopo e estado final
@@ -94,3 +96,19 @@ Os testes de contrato usam fixtures e falhas simuladas. Os testes de navegador d
 ## Fontes reais no ambiente local — 21/10/2026
 
 O Toko 4.5.5 original foi instalado fora do Git a pedido do usuário. Nebula, Webtoons e Syosetu agora atravessam o host Tatakai, a API e os leitores/player do HPmovies. A tela `/sources` permite consulta direta durante a indisponibilidade dos catálogos. O [relatório de conteúdo real](REAL-CONTENT-VALIDATION.md) identifica os arquivos, as fontes, os idiomas, a instalação, a evidência externa e as limitações. A suíte final passou com 214 testes automatizados em 24 arquivos e 18 testes de navegador; lint, TypeScript e build também passaram.
+
+## Prioridade ao português — 21/10/2026
+
+**Implementado:** catálogo/home/busca MangaDex filtrados por PT-BR por padrão; português agregado e todos os idiomas por seleção explícita; idioma preservado em URLs e preferências de leitura; ausência de tradução informada sem troca silenciosa. A tela de fontes inclui atalhos de obras PT-BR. O player classifica os códigos explícitos de idioma, prioriza PT-BR e baixa/converte somente a faixa SRT/ASS selecionada.
+
+A consulta do feed MangaDex deixou de usar filtros que selecionavam apenas edições externas/vazias e passou a devolver também capítulos com imagens. Jujutsu Kaisen 0, antes sem capítulos na API local, retornou quatro; Solo Leveling passou a reunir cinco entradas com páginas e seis links externos, preservando a identificação de cada tipo na interface.
+
+O backend ganhou uma fonte independente de legendas do OpenSubtitles: mapeamento AniList/IMDb, verificação de série/temporada/episódio, busca PT-BR/PT, tickets opacos, validação de formato/codificação, limites de gzip, DNS público fixado no transporte e cache limitado em memória. A configuração `EXTERNAL_SUBTITLES_ENABLED` permite desligar a integração; falhas são informadas sem interromper o vídeo.
+
+**Arquivos principais:** `providers/portuguese-subtitles.ts`, `providers/mangadex.ts`, `providers/toko-reading.ts`, `providers/registry.ts`, `app.ts`; `shared/manga.ts`; serviços `readingLanguages.ts` e `manga.ts`; páginas de fontes, mangás e player; componentes/utilitários do player; testes e exemplos `.env`.
+
+**Evidência externa:** MangaDex HTTP 200, 12.114 títulos marcados PT-BR nos metadados, oito obras com feed PT-BR e uma amostra de capítulo com MangaDex@Home/imagem real HTTP 200 por obra. Os totais de feed incluem links externos. Foram baixadas e reconhecidas SRT PT-BR do episódio 1 de sete animes. One Piece no backend local recebeu três faixas PT-BR além da faixa original em inglês; o navegador selecionou uma SRT automaticamente, carregou 359 entradas e exibiu legendas ativas durante reprodução/seek, sem erros de página em desktop/celular. Quantidades e identificação das obras estão em [PORTUGUESE-SOURCES.md](PORTUGUESE-SOURCES.md); não representam coleções completas.
+
+**GoAnime:** revisão MIT consultada sem copiar código ou instalar runtime. AnimeFire, Goyabu e SuperFlix responderam 403 nas consultas HTTP normais, e o host AniDB falhou no DNS. Não foram implementadas rotinas de browser, clearance ou resolução de desafios. A integração funcional desta etapa usa legendas independentes com o vídeo já disponível.
+
+**Limites e verificação:** disponibilidade e sincronismo variam por episódio/edição. Não foram declarados novos textos externos em português para novels. Passaram 233 testes em 26 arquivos, 20 testes de navegador, lint, TypeScript, build e `git diff --check`; a regressão ampliada de seleção/erro/recuperação de legendas passou nas duas execuções desktop/celular. As amostras reais também comprovaram o player One Piece com PT-BR e o leitor Jujutsu Kaisen 0 com imagens e retomada da página 2, em desktop/celular. O [relatório de português](PORTUGUESE-SOURCES.md) detalha esses resultados, separados dos totais históricos acima.
