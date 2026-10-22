@@ -40,6 +40,7 @@ const selectClass = 'w-full rounded-lg border border-white/15 bg-[#202831] px-3 
 
 export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, intro, initialTime = 0, onProgress, onSourceError, onSourcePlaying, autoPlay = false, className = '' }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const captionTrackRef = useRef<HTMLTrackElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const progressCallbackRef = useRef(onProgress);
@@ -66,16 +67,24 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
   const [captionPreferences] = useState(readCaptionPreferences);
   const [subtitleId, setSubtitleId] = useState(() => preferredSubtitleId(subtitles, captionPreferences.language));
   const [captionLanguage, setCaptionLanguage] = useState(captionPreferences.language);
-  const conversionSignature = JSON.stringify(subtitles.filter(track => track.id === subtitleId && (track.format === 'srt' || track.format === 'ass')).map(({ id, url, label, format }) => ({ id, url, label, format })));
+  const selectedSubtitle = subtitles.find(track => track.id === subtitleId);
+  const captionSelectionKey = JSON.stringify([source.url, selectedSubtitle?.id, selectedSubtitle?.url, selectedSubtitle?.format]);
+  const [captionRetry, setCaptionRetry] = useState({ selection: '', count: 0 });
+  const captionAttempt = captionRetry.selection === captionSelectionKey ? captionRetry.count : 0;
+  const captionLoadKey = JSON.stringify([captionSelectionKey, captionAttempt]);
+  const conversionSignature = JSON.stringify({ key: captionLoadKey, tracks: subtitles.filter(track => track.id === subtitleId && (track.format === 'srt' || track.format === 'ass')).map(({ id, url, label, format }) => ({ id, url, label, format })) });
   const [conversion, setConversion] = useState<{ signature: string; tracks: Record<string, string>; errors: Record<string, string> }>({ signature: '', tracks: {}, errors: {} });
   const convertedTracks = conversion.signature === conversionSignature ? conversion.tracks : EMPTY_CONVERTED_TRACKS;
   const conversionError = conversion.signature === conversionSignature ? conversion.errors[subtitleId] : undefined;
+  const captionTrackUrl = selectedSubtitle && (selectedSubtitle.format === 'srt' || selectedSubtitle.format === 'ass' ? convertedTracks[selectedSubtitle.id] : selectedSubtitle.url);
   const [captionOffset, setCaptionOffset] = useState(captionPreferences.offset);
   const originalCueTimes = useRef(new WeakMap<TextTrackCue, { start: number; end: number }>());
-  const [captionText, setCaptionText] = useState('');
+  const [captionContent, setCaptionContent] = useState({ key: '', text: '' });
+  const captionText = captionContent.key === captionLoadKey ? captionContent.text : '';
   const [captionSize, setCaptionSize] = useState(captionPreferences.size);
   const [captionBackground, setCaptionBackground] = useState(captionPreferences.background);
-  const [captionError, setCaptionError] = useState<string | null>(null);
+  const [captionFailure, setCaptionFailure] = useState<{ key: string; message: string } | null>(null);
+  const captionError = captionFailure?.key === captionLoadKey ? captionFailure.message : null;
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -90,7 +99,7 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
     const controller = new AbortController();
     const blobs: string[] = [];
     let active = true;
-    const tracks = JSON.parse(conversionSignature) as Array<{ id: string; url: string; label: string; format: 'srt' | 'ass' }>;
+    const { tracks } = JSON.parse(conversionSignature) as { tracks: Array<{ id: string; url: string; label: string; format: 'srt' | 'ass' }> };
     const timer = setTimeout(() => controller.abort(), 12000);
     void Promise.all(tracks.map(async track => {
       try {
@@ -282,9 +291,12 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const listeners: Array<{ track: TextTrack; listener: () => void }> = [];
+    const element = captionTrackRef.current;
+    const selected = element?.track;
+    const isCurrent = () => element === captionTrackRef.current;
     const shiftCues = () => {
-      for (const track of Array.from(video.textTracks)) for (const cue of Array.from(track.cues || [])) {
+      if (!isCurrent()) return;
+      for (const cue of Array.from(selected?.cues || [])) {
         let original = originalCueTimes.current.get(cue);
         if (!original) { original = { start: cue.startTime, end: cue.endTime }; originalCueTimes.current.set(cue, original); }
         cue.startTime = Math.max(0, original.start + captionOffset);
@@ -292,21 +304,43 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
       }
     };
     const showCues = () => {
-      const selected = Array.from(video.textTracks).find(track => track.id === subtitleId);
+      if (!isCurrent()) return;
       const cues = selected?.activeCues ? Array.from(selected.activeCues) : [];
-      setCaptionText(cues.map(cue => typeof VTTCue !== 'undefined' && cue instanceof VTTCue ? cue.getCueAsHTML().textContent ?? '' : '').join('\n'));
+      setCaptionContent({ key: captionLoadKey, text: cues.map(cue => typeof VTTCue !== 'undefined' && cue instanceof VTTCue ? cue.getCueAsHTML().textContent ?? '' : '').join('\n') });
     };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const loaded = () => {
+      if (!isCurrent()) return;
+      clearTimeout(timer);
+      setCaptionFailure(value => value?.key === captionLoadKey ? null : value);
+      shiftCues();
+      showCues();
+    };
+    const failed = () => {
+      if (!isCurrent()) return;
+      clearTimeout(timer);
+      setCaptionFailure({ key: captionLoadKey, message: `Não foi possível carregar a faixa ${element?.label || 'selecionada'}.` });
+    };
+    // Only a ready, selected element is mounted. A pending SRT conversion must
+    // never create a <track> without src and poison a later successful load.
+    element?.addEventListener('load', loaded);
+    element?.addEventListener('error', failed);
+    selected?.addEventListener('cuechange', showCues);
     Array.from(video.textTracks).forEach(track => {
-      track.mode = track.id === subtitleId ? 'hidden' : 'disabled';
-      track.addEventListener('cuechange', showCues);
-      listeners.push({ track, listener: showCues });
+      track.mode = track === selected ? 'hidden' : 'disabled';
     });
+    if (element?.readyState === HTMLTrackElement.LOADED) loaded();
+    else if (element?.readyState === HTMLTrackElement.ERROR) failed();
+    else if (element) timer = setTimeout(failed, 12000);
     shiftCues();
-    const trackElements = Array.from(video.querySelectorAll('track'));
-    trackElements.forEach(track => track.addEventListener('load', shiftCues));
     showCues();
-    return () => { trackElements.forEach(track => track.removeEventListener('load', shiftCues)); listeners.forEach(({ track, listener }) => track.removeEventListener('cuechange', listener)); };
-  }, [subtitles, subtitleId, captionOffset, convertedTracks]);
+    return () => {
+      clearTimeout(timer);
+      element?.removeEventListener('load', loaded);
+      element?.removeEventListener('error', failed);
+      selected?.removeEventListener('cuechange', showCues);
+    };
+  }, [captionLoadKey, captionTrackUrl, captionOffset]);
 
   const hideControls = useCallback(() => {
     const focused = document.activeElement;
@@ -354,7 +388,6 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
     } catch { setNotice('O navegador não permitiu a tela cheia. Você pode continuar assistindo nesta janela.'); }
   };
   const canSkipIntro = hasValidIntro(intro, duration) && time >= intro.start && time < intro.end;
-  const selectedSubtitle = subtitles.find(track => track.id === subtitleId);
   const chosenQuality = qualities.find(level => level.index === quality);
   const qualityLabel = quality === -1 ? `Automática${activeHeight ? ` · ${activeHeight}p` : ''}` : chosenQuality?.height ? `${chosenQuality.height}p` : chosenQuality ? `${Math.round(chosenQuality.bitrate / 1000)} kbps` : 'Original';
 
@@ -375,8 +408,7 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
       }}>
       <video ref={videoRef} poster={poster} playsInline crossOrigin="anonymous" preload="metadata"
         className="h-full w-full object-contain" onClick={togglePlay} aria-label="Vídeo">
-        {subtitles.map(track => <track key={track.id} id={track.id} src={track.format === 'srt' || track.format === 'ass' ? convertedTracks[track.id] : track.url} srcLang={track.language} label={track.label} kind={track.kind ?? 'subtitles'}
-          onError={() => { if (subtitleId === track.id) setCaptionError(`Não foi possível carregar a faixa ${track.label}.`); }} />)}
+        {selectedSubtitle && captionTrackUrl && <track ref={captionTrackRef} key={captionLoadKey} id={selectedSubtitle.id} src={captionTrackUrl} srcLang={selectedSubtitle.language} label={selectedSubtitle.label} kind={selectedSubtitle.kind ?? 'subtitles'} />}
       </video>
 
       {buffering && !error && <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/15" role="status" aria-label="Carregando vídeo"><Loader2 className="h-10 w-10 animate-spin text-teal-400" /></div>}
@@ -391,6 +423,10 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
         <button type="button" className="rounded-lg bg-teal-400 px-5 py-2.5 font-semibold text-slate-950 hover:bg-teal-300" onClick={() => { startPositionRef.current = videoRef.current?.currentTime || startPositionRef.current; setError(null); setBuffering(true); setQualities([]); setQuality(-1); setAttempt(value => value + 1); }}>Tentar novamente</button>
       </div>}
       {notice && <div role="status" className="absolute inset-x-3 top-3 z-30 flex items-center justify-between gap-3 rounded-lg bg-black/85 px-3 py-2 text-xs text-white/90"><p>{notice}</p><button type="button" aria-label="Fechar mensagem" className="shrink-0 p-1 hover:text-teal-300" onClick={() => setNotice(null)}><X size={16} /></button></div>}
+      {(captionError || conversionError) && <div role="alert" className="absolute inset-x-3 top-3 z-30 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-black/90 px-3 py-2 text-xs text-amber-200">
+        <p>{captionError || conversionError}</p>
+        {captionAttempt < 3 ? <button type="button" className="rounded border border-amber-200/40 px-2 py-1 font-medium hover:bg-white/10" onClick={() => setCaptionRetry({ selection: captionSelectionKey, count: captionAttempt + 1 })}>Tentar legenda novamente</button> : <p>Escolha outra faixa nas configurações.</p>}
+      </div>}
 
       {captionText && !captionError && !conversionError && <div aria-live="off" className={`pointer-events-none absolute inset-x-4 text-center ${controlsVisible ? 'bottom-24 sm:bottom-28' : 'bottom-7'} transition-all`}>
         <span className={`inline-block max-w-[90%] whitespace-pre-line rounded px-3 py-1 font-medium leading-snug text-white ${captionBackground ? 'bg-black/80' : ''} ${captionSize === 'small' ? 'text-sm sm:text-lg' : captionSize === 'large' ? 'text-xl sm:text-3xl' : 'text-base sm:text-2xl'}`} style={{ textShadow: '0 1px 3px #000, 0 0 3px #000' }}>{captionText}</span>
@@ -404,13 +440,12 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
           {qualities.map(level => <option key={level.index} value={level.index}>{level.height ? `${level.height}p` : `${Math.round(level.bitrate / 1000)} kbps`}</option>)}
         </select>{source.type === 'hls' && qualities.length === 0 && <span className="block text-xs text-white/40">A qualidade é gerenciada pelo navegador nesta fonte.</span>}</label>
         <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Velocidade</span><select aria-label="Velocidade de reprodução" className={selectClass} value={speed} onChange={event => { if (videoRef.current) videoRef.current.playbackRate = Number(event.target.value); }}>{[0.5, 0.75, 1, 1.25, 1.5, 2].map(value => <option key={value} value={value}>{value === 1 ? 'Normal (1×)' : `${value}×`}</option>)}</select></label>
-        <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Legendas</span><select aria-label="Idioma das legendas" className={selectClass} value={subtitleId} onChange={event => { const selected = event.target.value; setSubtitleId(selected); setCaptionLanguage(selected === 'off' ? 'off' : subtitles.find(track => track.id === selected)?.language); setCaptionError(null); }}><option value="off">Desativadas</option>{orderedSubtitles(subtitles).map(track => <option key={track.id} value={track.id}>{track.label} · {track.language}</option>)}</select></label>
+        <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Legendas</span><select aria-label="Idioma das legendas" className={selectClass} value={subtitleId} onChange={event => { const selected = event.target.value; setSubtitleId(selected); setCaptionLanguage(selected === 'off' ? 'off' : subtitles.find(track => track.id === selected)?.language); }}><option value="off">Desativadas</option>{orderedSubtitles(subtitles).map(track => <option key={track.id} value={track.id}>{track.label} · {track.language}</option>)}</select></label>
         {selectedSubtitle && <>
           <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Tamanho da legenda</span><select aria-label="Tamanho da legenda" className={selectClass} value={captionSize} onChange={event => setCaptionSize(event.target.value as 'small' | 'medium' | 'large')}><option value="small">Pequena</option><option value="medium">Média</option><option value="large">Grande</option></select></label>
           <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Sincronização · {captionOffset > 0 ? '+' : ''}{captionOffset.toFixed(1)}s</span><input aria-label="Sincronização da legenda" className="w-full accent-teal-400" type="range" min={-10} max={10} step={0.1} value={captionOffset} onChange={event => setCaptionOffset(Number(event.target.value))} /><span className="block text-xs text-white/40">Valores positivos atrasam a legenda. ASS usa apenas texto, sem efeitos.</span></label>
           <label className="flex items-center gap-3 text-sm"><input type="checkbox" className="accent-teal-400" checked={captionBackground} onChange={event => setCaptionBackground(event.target.checked)} />Fundo da legenda</label>
         </>}
-        {(captionError || conversionError) && <p role="alert" className="mt-3 text-xs text-amber-300">{captionError || conversionError}</p>}
       </div>}
 
       <div className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black via-black/70 to-transparent px-3 pb-2 pt-10 transition-opacity sm:px-5 sm:pb-3 ${controlsVisible || !playing || settingsOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`} inert={error || (!controlsVisible && playing && !settingsOpen) ? true : undefined}>
