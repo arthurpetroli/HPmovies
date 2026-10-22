@@ -4,6 +4,7 @@ import type { LookupAddress } from 'node:dns';
 import { isIP } from 'node:net';
 import { gunzipSync } from 'node:zlib';
 import type { Playback, ProviderDiagnostic, StreamSubtitle } from '../../../shared/providers.js';
+import { MAX_SUBTITLE_BYTES, subtitleToVtt } from '../../../shared/subtitles.js';
 import { ApiError } from '../config/apiError.js';
 import { AniwatchAPICache } from '../config/cache.js';
 import { pinnedRequest, publicImageAddress } from './content-image.js';
@@ -35,7 +36,7 @@ interface Options {
 /** Explicit identities only: seasonless rows are usable only for a whole unique TV series. */
 export function parseSubtitleMappings(input: unknown): Map<number, Mapping> {
   if (!Array.isArray(input) || input.length > 100_000) throw invalid();
-  const candidates = input.filter(object).filter(row => integer(row.anilist_id) && ['TV', 'MOVIE'].includes(String(row.type)));
+  const candidates = input.filter(object).filter(row => integer(row.anilist_id, 999_999_999) && Number(row.anilist_id) > 0 && ['TV', 'MOVIE'].includes(String(row.type)));
   const owners = new Map<string, Set<number>>();
   for (const row of candidates) {
     if (row.type !== 'TV' || !Array.isArray(row.imdb_id)) continue;
@@ -152,7 +153,7 @@ export class PortugueseSubtitleProvider {
     while (this.tickets.size >= 4096) this.tickets.delete(this.tickets.keys().next().value!);
     const token = randomUUID(); this.tickets.set(token, { url: url.href, format, encoding, expires: Date.now() + 2 * 60 * 60_000 });
     const release = typeof row.SubFileName === 'string' ? row.SubFileName.replace(/[\r\n\0]/g, '').slice(0, 170) : String(row.IDSubtitleFile);
-    return { id: `opensubtitles-${row.IDSubtitleFile}`, url: `/api/subtitles/file/${token}`, format, language, label: `OpenSubtitles · ${language} · ${release}`, kind: 'subtitles' };
+    return { id: `opensubtitles-${row.IDSubtitleFile}`, url: `/api/subtitles/file/${token}`, format: 'vtt', language, label: `OpenSubtitles · ${language} · ${release}`, kind: 'subtitles' };
   }
 
   async subtitles(animeId: string, episode: number): Promise<StreamSubtitle[]> {
@@ -218,9 +219,11 @@ export class PortugueseSubtitleProvider {
       if (!bytes.length || bytes.length > MAX_FILE) throw invalid();
       const encoding = ticket.encoding === 'cp1252' ? 'windows-1252' : ticket.encoding === 'utf8' ? 'utf-8' : ticket.encoding;
       const text = new TextDecoder(encoding, { fatal: true }).decode(bytes).replace(/^\uFEFF/, '');
-      const valid = ticket.format === 'vtt' ? /^WEBVTT(?:\s|$)/.test(text) : ticket.format === 'ass' ? /^\[Script Info\]/m.test(text) && /^Dialogue:/m.test(text) : /^\s*\d+\s*\r?\n\d\d:\d\d:\d\d[,.]\d{3}\s*-->/m.test(text);
-      if (!valid || /\0/.test(text)) throw invalid();
-      return { bytes: new TextEncoder().encode(text), contentType: ticket.format === 'vtt' ? 'text/vtt; charset=utf-8' : ticket.format === 'srt' ? 'application/x-subrip; charset=utf-8' : 'text/plain; charset=utf-8', cacheControl: 'private, max-age=300' };
+      if (/\0/.test(text)) throw invalid();
+      // Native WebVTT avoids browser-dependent SRT/ASS blob conversion for Portuguese tracks.
+      const nativeBytes = new TextEncoder().encode(subtitleToVtt(text, ticket.format));
+      if (nativeBytes.byteLength > MAX_SUBTITLE_BYTES) throw invalid();
+      return { bytes: nativeBytes, contentType: 'text/vtt; charset=utf-8', cacheControl: 'private, max-age=300' };
     } catch { response?.cancel(); throw unavailable(); }
     finally { clearTimeout(timer); }
   }

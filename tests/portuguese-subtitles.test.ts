@@ -15,6 +15,7 @@ const identity = { meta: { id: imdb, videos: [
 const row = (extra: object = {}) => ({ IDSubtitleFile: '123', SubLanguageID: 'pob', SubDownloadLink: 'https://dl.opensubtitles.org/en/download/file/123.gz',
   SeriesIMDBParent: '123456', SeriesSeason: '2', SeriesEpisode: '1', MovieKind: 'episode', SubFormat: 'srt', SubEncoding: 'UTF-8', SubFileName: 'QA.S02E01.srt', SubDownloadsCnt: '10', ...extra });
 const ownSrt = '1\n00:00:01,000 --> 00:00:03,000\nTexto original de teste em português.\n';
+const ownVtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nTexto original de teste em português.\n';
 const json = (data: unknown) => new Response(JSON.stringify(data), { headers: { 'content-type': 'application/json' } });
 const binary = (bytes: Uint8Array, status = 200): ImageResponse => ({ status, headers: new Headers({ 'content-type': 'application/gzip' }), body: (async function* () { yield bytes; })(), cancel() {} });
 function setup(options: { rows?: unknown[]; mappings?: unknown[]; metadata?: unknown; bytes?: Uint8Array; ip?: string; status?: number } = {}) {
@@ -40,7 +41,7 @@ describe('Portuguese subtitle discovery and safe files', () => {
   it('maps a whole unique series absolute episode across seasons and verifies every returned identity', async () => {
     const { provider, calls } = setup({ rows: [row(), row({ IDSubtitleFile: '124', SeriesEpisode: '2' }), row({ IDSubtitleFile: '125', SeriesIMDBParent: '654321' }), row({ IDSubtitleFile: '126', SubLanguageID: 'eng' })] });
     const tracks = await provider.subtitles('42', 3);
-    expect(tracks).toHaveLength(1); expect(tracks[0]).toMatchObject({ id: 'opensubtitles-123', format: 'srt', language: 'pt-BR' });
+    expect(tracks).toHaveLength(1); expect(tracks[0]).toMatchObject({ id: 'opensubtitles-123', format: 'vtt', language: 'pt-BR' });
     expect(tracks[0].url).toMatch(/^\/api\/subtitles\/file\/[a-f0-9-]{36}$/);
     expect(calls.find(url => url.hostname === 'rest.opensubtitles.org')?.pathname).toBe('/search/episode-1/imdbid-0123456/season-2/sublanguageid-pob');
     await provider.subtitles('42', 3); expect(calls).toHaveLength(4);
@@ -72,6 +73,16 @@ describe('Portuguese subtitle discovery and safe files', () => {
     expect(await provider.subtitles('42', 1)).toHaveLength(1);
     expect(calls.some(url => url.pathname.includes('episode-2/imdbid-0123456/season-1'))).toBe(true);
   });
+  it.each([['Frieren', 154587], ['Demon Slayer', 101922]])('discovers Portuguese captions for the modern AniList ID of %s', async (_title, anilistId) => {
+    const { provider, calls } = setup({ mappings: [{ ...mapping, anilist_id: anilistId, season: { tvdb: 1, tmdb: 1 } }], rows: [row({ SeriesSeason: '1', SeriesEpisode: '1' })] });
+    expect(await provider.subtitles(String(anilistId), 1)).toHaveLength(1);
+    expect(calls.some(url => url.pathname.includes('episode-1/imdbid-0123456/season-1'))).toBe(true);
+  });
+  it('accepts only positive AniList IDs within the nine-digit API bound', () => {
+    const candidates = [0, -1, 1.5, 1_000_000_000, Number.MAX_SAFE_INTEGER, '154587', null];
+    expect(parseSubtitleMappings(candidates.map(anilist_id => ({ ...mapping, anilist_id }))).size).toBe(0);
+    expect(parseSubtitleMappings([{ ...mapping, anilist_id: 999_999_999 }]).has(999_999_999)).toBe(true);
+  });
   it('rejects forged download destinations and unknown formats/encodings before issuing a ticket', async () => {
     const { provider, transport } = setup({ rows: [row({ SubDownloadLink: 'https://127.0.0.1/private' }), row({ SubDownloadLink: 'https://evil.example/123.gz' }), row({ SubDownloadLink: 'https://a:b@dl.opensubtitles.org/en/download/a' }), row({ SubDownloadLink: 'https://dl.opensubtitles.org/not-download/a' }), row({ SubFormat: 'zip' }), row({ SubEncoding: 'unknown' })] });
     expect(await provider.subtitles('42', 3)).toEqual([]); expect(transport).not.toHaveBeenCalled();
@@ -87,18 +98,43 @@ describe('Portuguese subtitle discovery and safe files', () => {
     expect(first).toHaveLength(24); expect(first[0].id).toBe('opensubtitles-1000');
     for (let query = 0; query < 11; query++) expect(await provider.subtitles('42', 3)).toHaveLength(24);
     const file = await provider.file(first[0].url.split('/').at(-1)!);
-    expect(new TextDecoder().decode(file.bytes)).toBe(ownSrt);
+    expect(new TextDecoder().decode(file.bytes)).toBe(ownVtt);
   });
-  it('downloads only an issued gzip subtitle, decodes it to UTF-8 and deduplicates file requests', async () => {
+  it('downloads only an issued gzip subtitle, serves native UTF-8 WebVTT and deduplicates file requests', async () => {
     const { provider, transport } = setup(); const tracks = await provider.subtitles('42', 3); const token = tracks[0].url.split('/').at(-1)!;
     const [first, duplicate] = await Promise.all([provider.file(token), provider.file(token)]);
-    expect(first).toBe(duplicate); expect(new TextDecoder().decode(first.bytes)).toBe(ownSrt);
-    expect(first.contentType).toBe('application/x-subrip; charset=utf-8');
+    expect(first).toBe(duplicate); expect(new TextDecoder().decode(first.bytes)).toBe(ownVtt);
+    expect(first.contentType).toBe('text/vtt; charset=utf-8');
     await provider.file(token); expect(transport).toHaveBeenCalledOnce();
     const registry = new StreamingRegistry({ subtitles: provider }); const app = createApp({ registry });
-    const response = await app.request(tracks[0].url); expect(response.status).toBe(200); expect(await response.text()).toBe(ownSrt);
+    const response = await app.request(tracks[0].url); expect(response.status).toBe(200); expect(await response.text()).toBe(ownVtt);
+    expect(response.headers.get('content-type')).toBe('text/vtt; charset=utf-8');
     expect(response.headers.get('Cross-Origin-Resource-Policy')).toBe('cross-origin');
     expect((await app.request(`${tracks[0].url}?url=http://127.0.0.1`)).status).toBe(400);
+  });
+  it('converts ASS dialogue to native VTT while dropping malformed intervals and drawing commands', async () => {
+    const ass = '[Script Info]\nTitle: Original test fixture\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
+      + 'Dialogue: 0,0:00:01.20,0:00:04.50,Default,,0,0,0,,{\\an8}Olá, mundo\\N<b>Texto</b>\n'
+      + 'Dialogue: 0,0:00:04.50,0:00:04.50,Default,,0,0,0,,Intervalo inválido\n'
+      + 'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\p1}m 0 0 l 20 20';
+    const { provider } = setup({ rows: [row({ SubFormat: 'ass' })], bytes: gzipSync(ass) });
+    const [track] = await provider.subtitles('42', 3);
+    expect(track.format).toBe('vtt');
+    const file = await provider.file(track.url.split('/').at(-1)!);
+    expect(file.contentType).toBe('text/vtt; charset=utf-8');
+    expect(new TextDecoder().decode(file.bytes)).toBe('WEBVTT\n\n00:00:01.200 --> 00:00:04.500\nOlá, mundo\n&lt;b&gt;Texto&lt;/b&gt;\n');
+  });
+  it('keeps valid SRT dialogue when another cue is malformed instead of failing every Portuguese option', async () => {
+    const brokenCue = '\n2\n00:00:04,000 --> 00:00:04,000\nIntervalo inválido\n';
+    const { provider } = setup({ bytes: gzipSync(ownSrt + brokenCue) });
+    const [track] = await provider.subtitles('42', 3);
+    const file = await provider.file(track.url.split('/').at(-1)!);
+    expect(new TextDecoder().decode(file.bytes)).toBe(ownVtt);
+  });
+  it.each(['WEBVTT\n\n<html>challenge</html>', 'WEBVTT\n\n00:99:01.000 --> 00:99:02.000\nInvalid time', 'WEBVTT\n\n00:00:02.000 --> 00:00:01.000\nBackwards'])('rejects VTT without any valid dialogue instead of returning an unloadable track', async content => {
+    const { provider } = setup({ rows: [row({ SubFormat: 'vtt' })], bytes: gzipSync(content) });
+    const [track] = await provider.subtitles('42', 3);
+    await expect(provider.file(track.url.split('/').at(-1)!)).rejects.toMatchObject({ status: 503 });
   });
   it('rejects redirects, HTML, private DNS and decompression bombs', async () => {
     for (const options of [{ status: 302 }, { bytes: new TextEncoder().encode('<html>challenge</html>') }, { bytes: gzipSync('x'.repeat(4_000_001)) }]) {
