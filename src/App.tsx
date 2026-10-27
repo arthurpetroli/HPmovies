@@ -30,7 +30,7 @@ function ScrollReset() {
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-[#0b1011] text-white">
+      <div className="min-h-screen bg-[var(--background)] text-white">
         <ScrollReset />
         <Topbar />
         <Suspense fallback={<main className="min-h-[70vh] px-6 pt-32" aria-busy="true"><p className="text-center text-white/60">Carregando…</p></main>}>

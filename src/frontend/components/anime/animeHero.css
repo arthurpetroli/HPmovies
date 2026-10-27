@@ -1,0 +1,449 @@
+.anime-hero.discover-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: clamp(640px, 46vw, 700px);
+  padding-top: 64px;
+  padding-bottom: 84px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #0b0d0f;
+}
+
+.discover-hero__media {
+  position: absolute;
+  inset: 64px 0 auto;
+  z-index: -3;
+  overflow: hidden;
+  width: min(100%, var(--hero-art-max-width, 100%));
+  height: min(clamp(340px, 32vw, 470px), var(--hero-art-max-height, 470px));
+  margin-inline: auto;
+  background: #0b0d0f;
+  mask-image: linear-gradient(0deg, transparent, #000 27%, #000);
+}
+
+.discover-hero__artwork {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 65% 38%;
+}
+
+.discover-hero__media--poster {
+  height: min(520px, calc(100% - 90px));
+  mask-image: none;
+  background: radial-gradient(ellipse at 80% 40%, #243437, #0b0d0f 68%);
+}
+
+.discover-hero__media--poster .discover-hero__artwork {
+  width: min(46%, 580px);
+  margin-left: auto;
+  margin-right: max(5%, calc((100vw - 1440px) / 2));
+  object-fit: contain;
+  object-position: center;
+}
+
+.discover-hero__scrim {
+  position: absolute;
+  inset: 64px 0 0;
+  z-index: -2;
+  background:
+    linear-gradient(0deg, #0b0d0f 0%, #0b0d0f00 24%, #0b0d0f00 84%, #0b0d0f26 100%),
+    linear-gradient(90deg, #0b0d0ff5 0%, #0b0d0fe8 22%, #0b0d0fb8 38%, #0b0d0f45 60%, #0b0d0f00 86%);
+}
+
+.discover-hero__content {
+  padding-top: 32px;
+  padding-bottom: 24px;
+}
+
+.discover-hero__copy {
+  max-width: 590px;
+}
+
+.discover-hero__eyebrow {
+  display: inline-block;
+  margin-bottom: 14px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.discover-hero__copy h1 {
+  max-width: 650px;
+  margin: 0;
+  color: #fff;
+  font-size: clamp(42px, 4.1vw, 68px);
+  font-weight: 850;
+  line-height: 1.06;
+  letter-spacing: -.045em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  text-shadow: 0 2px 26px #0006;
+}
+
+.discover-hero__original {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 12px;
+  color: #d4d5d8;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.discover-hero--compact-title .discover-hero__copy h1 {
+  font-size: clamp(36px, 3.1vw, 46px);
+  line-height: 1.1;
+}
+
+.discover-hero--long-title .discover-hero__copy h1 {
+  font-size: clamp(32px, 2.7vw, 40px);
+  line-height: 1.12;
+}
+
+.discover-hero--compact-title .discover-hero__original,
+.discover-hero--long-title .discover-hero__original {
+  display: none;
+}
+
+.discover-hero__metadata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 16px;
+  color: #dadce0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.discover-hero__metadata > span + span {
+  padding-left: 14px;
+  border-left: 1px solid #ffffff4a;
+}
+
+.discover-hero__rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+
+.discover-hero__rating strong {
+  font-weight: 750;
+}
+
+.discover-hero__rating > span {
+  color: #dadce0;
+  font-size: 12px;
+}
+
+.discover-hero__description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  max-width: 530px;
+  margin-top: 16px;
+  color: #ededee;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.discover-hero__genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 20px;
+  max-width: 560px;
+  margin-top: 7px;
+}
+
+.discover-hero__genres a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: #c3c6cc;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.discover-hero__genres a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.discover-hero__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.discover-hero .discover-hero__primary {
+  justify-content: space-between;
+  gap: 30px;
+  min-height: 50px;
+  padding: 14px 24px;
+  border-radius: 3px;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.discover-hero__save {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  flex-shrink: 0;
+  border: 2px solid var(--accent);
+  border-radius: 3px;
+  background: #0b0d0f52;
+  color: var(--accent);
+}
+
+.discover-hero__save:hover,
+.discover-hero__save.is-saved {
+  background: #58e0bc24;
+}
+
+.discover-hero__navigation {
+  position: absolute;
+  right: 0;
+  bottom: 28px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.discover-hero__indicators {
+  display: flex;
+  gap: 4px;
+}
+
+.discover-hero__indicators button {
+  display: grid;
+  align-items: center;
+  width: 44px;
+  height: 44px;
+  padding-block: 15px;
+}
+
+.discover-hero__indicators button > span {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: #b4b7bd;
+  transition: background .16s ease;
+}
+
+.discover-hero__indicators button:hover > span {
+  background: #fff;
+}
+
+.discover-hero__indicators button.is-active > span {
+  background: var(--accent);
+}
+
+.discover-hero__arrows {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.discover-hero__arrows button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 3px;
+  background: #0b0d0f73;
+  color: #fff;
+}
+
+.discover-hero__arrows button:hover {
+  background: #ffffff20;
+}
+
+.discover-hero__count {
+  margin-right: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.discover-hero__count > span {
+  color: #b4b7bd;
+}
+
+@media (min-width: 1600px) {
+  .discover-hero__artwork {
+    object-position: 70% 32%;
+  }
+}
+
+@media (max-width: 1024px) and (min-width: 701px) {
+  .anime-hero.discover-hero {
+    min-height: 640px;
+  }
+
+  .discover-hero__copy {
+    max-width: 520px;
+  }
+
+  .discover-hero__description {
+    max-width: 460px;
+  }
+
+  .discover-hero__scrim {
+    background:
+      linear-gradient(0deg, #0b0d0f, #0b0d0f00 30%),
+      linear-gradient(90deg, #0b0d0ff0, #0b0d0fc4 42%, #0b0d0f26);
+  }
+}
+
+@media (max-width: 700px) {
+  .anime-hero.discover-hero {
+    justify-content: flex-start;
+    min-height: 0;
+    padding-top: 64px;
+    padding-bottom: 0;
+  }
+
+  .discover-hero__media {
+    position: relative;
+    inset: auto;
+    height: clamp(240px, 67vw, 420px);
+    width: 100%;
+    flex-shrink: 0;
+    mask-image: none;
+  }
+
+  .discover-hero__artwork {
+    object-position: 65% 40%;
+  }
+
+  .discover-hero__media--poster .discover-hero__artwork {
+    width: 100%;
+    margin-inline: auto;
+    object-fit: contain;
+    object-position: center top;
+  }
+
+  .discover-hero__scrim {
+    top: 64px;
+    bottom: auto;
+    height: clamp(240px, 67vw, 420px);
+    background: linear-gradient(0deg, #0b0d0f 0%, #0b0d0f6b 15%, #0b0d0f00 58%);
+  }
+
+  .discover-hero__content {
+    padding-top: 0;
+    padding-bottom: 12px;
+    margin-top: -32px;
+  }
+
+  .discover-hero__copy {
+    max-width: 100%;
+  }
+
+  .discover-hero__eyebrow {
+    margin-bottom: 12px;
+    font-size: 12px;
+  }
+
+  .discover-hero__copy h1 {
+    max-width: 620px;
+    font-size: clamp(32px, 7.5vw, 48px);
+    line-height: 1.12;
+    letter-spacing: -.035em;
+  }
+
+  .discover-hero--compact-title .discover-hero__copy h1 {
+    font-size: clamp(28px, 6.8vw, 40px);
+  }
+
+  .discover-hero--long-title .discover-hero__copy h1 {
+    font-size: clamp(25px, 6.2vw, 36px);
+  }
+
+  .discover-hero__original {
+    display: none;
+  }
+
+  .discover-hero__metadata {
+    gap: 8px 10px;
+    margin-top: 15px;
+    font-size: 12px;
+  }
+
+  .discover-hero__metadata > span + span {
+    padding-left: 10px;
+  }
+
+  .discover-hero__description {
+    max-width: 580px;
+    margin-top: 15px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .discover-hero__genres {
+    margin-top: 2px;
+  }
+
+  .discover-hero__genres a {
+    font-size: 12px;
+  }
+
+  .discover-hero__actions {
+    margin-top: 12px;
+  }
+
+  .discover-hero .discover-hero__primary {
+    flex: 1;
+    max-width: 310px;
+    padding-inline: 20px;
+  }
+
+  .discover-hero__navigation {
+    position: relative;
+    inset: auto;
+    flex-wrap: wrap;
+    gap: 0 8px;
+    margin-top: 0;
+    padding-bottom: 20px;
+  }
+
+  .discover-hero__indicators {
+    gap: 0;
+  }
+
+  .discover-hero__indicators button {
+    width: 44px;
+    min-height: 44px;
+    padding-inline: 4px;
+  }
+
+  .discover-hero__arrows {
+    gap: 4px;
+  }
+
+  .discover-hero__count {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .discover-hero button,
+  .discover-hero a,
+  .discover-hero__indicators button > span {
+    transition: none;
+  }
+}

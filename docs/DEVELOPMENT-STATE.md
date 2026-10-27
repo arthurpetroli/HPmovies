@@ -119,3 +119,57 @@ A `main` local estava alinhada com `origin/main` após o fetch. A integração
 mantém o código aprovado; este registro atualiza somente a documentação.
 As verificações da etapa de legendas acima continuam sendo a validação do código
 integrado. Não houve push ou deploy nesta operação.
+
+## Redesign da descoberta e cards — 27/10/2026
+
+Interface local redesenhada com as skills frontend-design, UI/UX e caveman.
+A direção segue a composição de descoberta solicitada do Crunchyroll e mantém
+o verde do HPmovies: navegação mais simples, destaque com arte ampla, títulos
+legíveis, fileiras de pôsteres maiores, gêneros ilustrados e seção editorial.
+As decisões e a limitação de acesso à referência estão em
+[FRONTEND-DESIGN.md](FRONTEND-DESIGN.md).
+
+Os cards mostram sinopse, nota AniList, formato, ano, episódios, status e gêneros
+quando disponíveis. Mouse e teclado abrem a prévia; no celular existe controle
+explícito de toque. Escape fecha. Conforme o ajuste solicitado na retomada,
+o card inteiro é um único link nativo: capa, título, sinopse e áreas vazias abrem
+o anime. Salvar e fechar são botões independentes, sem navegação acidental e sem
+botões dentro de links. O carrossel salvo foi movido para depois das demais
+fileiras, evitando deslocar o card na primeira adição.
+
+Pôsteres continuam usando `extraLarge` do AniList. O destaque limita a ampliação
+do banner conforme suas dimensões naturais, reduz o tamanho de títulos longos
+sem cortá-los e usa a capa se o banner falhar. Não houve alteração de fontes,
+player, legendas, backend ou dependências. O idioma da sinopse segue o catálogo.
+
+Verificações desta etapa:
+
+- 373 testes unitários em 36 arquivos aprovados.
+- Lint, TypeScript e build aprovados. Continua o aviso de bundle do player
+  acima de 500 kB; ele não impediu a compilação.
+- Suítes `platform.spec.ts` e `discover-design.spec.ts`: 20 cenários aprovados
+  em desktop e celular; dois casos não se aplicam ao dispositivo e são pulados.
+  As fixtures do catálogo são sintéticas e separadas da aplicação. Os testes
+  de player dessa suíte usam demonstração; não revalidam episódios reais.
+- Inspeção separada com catálogo real: 92 cards, sem erros de página ou overflow
+  nas larguras 412, 768, 1024 e 1440px. Também foi conferida a prévia real a 360px,
+  com sinopse e botões visíveis. Destaques reais ficaram entre 662 e 706px no
+  desktop da amostra. Capturas temporárias estão em `/tmp/hpmovies-hero-refined-*`
+  e `/tmp/hpmovies-card-real-*`; podem desaparecer após reinício.
+
+Retomada: iniciar com `npm run dev` e acessar `http://127.0.0.1:5173`.
+Neste ambiente, Playwright precisou das bibliotecas extraídas localmente em
+`/tmp/hpmovies-browser-libs/extracted/usr/lib/x86_64-linux-gnu`, fornecidas via
+`LD_LIBRARY_PATH`, sem instalação de sistema. As pendências de conteúdo real e
+legendas das etapas anteriores permanecem. Não houve commit, push ou deploy.
+
+## Salvamento no Git autorizado — 27/10/2026
+
+Após aprovar o redesign e o clique no card inteiro, o usuário solicitou salvar
+o trabalho no Git remoto. Esta etapa reúne interface, estilos, testes de navegador
+e documentação na `main`, com envio para `origin`. As verificações acima cobrem
+o código que está sendo salvo; não houve novas alterações funcionais nesta etapa.
+
+O bundle privado `src/toko.kai` permanece somente local e foi incluído no
+`.gitignore` para evitar seu envio acidental. Arquivos de ambiente e artefatos
+de navegador continuam fora do versionamento. Não foi solicitado deploy.

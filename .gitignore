@@ -30,6 +30,7 @@ test-results/
 
 # Local executable source bundles and operator configuration
 .local/
+/src/toko.kai
 
 # Local Python skill caches
 __pycache__/
