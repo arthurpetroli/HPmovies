@@ -36,6 +36,31 @@ describe('subtitle language verification', () => {
   it('keeps captions disabled when no tracks exist', () => {
     expect(preferredSubtitleId([])).toBe('off');
   });
+  it('prefers human Portuguese across regions before automatic Portuguese, then other languages', () => {
+    const machineBrazilian = { ...subtitle('machine-br', 'pt-BR', 'Português'), machineTranslated: true };
+    const machinePortuguese = { ...subtitle('machine-pt', 'pt'), machineTranslated: true };
+    // Labels do not establish translation provenance.
+    const humanPortuguese = subtitle('human-pt', 'pt', 'Tradução automática no nome do arquivo');
+    const tracks = [subtitle('english', 'en'), machineBrazilian, machinePortuguese, subtitle('human-ptpt', 'pt-PT'), humanPortuguese];
+    expect(orderedSubtitles(tracks).map(track => track.id)).toEqual(['human-pt', 'human-ptpt', 'machine-br', 'machine-pt', 'english']);
+    expect(preferredSubtitleId(tracks)).toBe('human-pt');
+    expect(preferredSubtitleId(tracks, 'pt-BR')).toBe('human-pt');
+    expect(preferredSubtitleId(tracks, 'en')).toBe('english');
+    expect(preferredSubtitleId(tracks, 'off')).toBe('off');
+    expect(preferredSubtitleId([tracks[0], machineBrazilian])).toBe('machine-br');
+  });
+  it('selects a human track before an automatic track in the same saved language', () => {
+    const tracks = [{ ...subtitle('automatic', 'pt-BR'), machineTranslated: true }, subtitle('human', 'pt-BR')];
+    expect(preferredSubtitleId(tracks, 'pt-BR')).toBe('human');
+  });
+  it('ranks mirrors with human Portuguese before automatic Portuguese and English', () => {
+    const playback = { episode: { id: 'qa', title: 'QA', available: true }, isDemo: false, audioLanguages: [], subtitles: [], sources: [
+      { url: 'https://english.example/video.mp4', type: 'mp4', subtitles: [subtitle('english', 'en')] },
+      { url: 'https://automatic.example/video.mp4', type: 'mp4', subtitles: [{ ...subtitle('automatic', 'pt-BR'), machineTranslated: true }] },
+      { url: 'https://human.example/video.mp4', type: 'mp4', subtitles: [subtitle('human', 'pt')] },
+    ] } satisfies Playback;
+    expect(orderedPlaybackSources(playback).map(source => source.url)).toEqual([playback.sources[2].url, playback.sources[1].url, playback.sources[0].url]);
+  });
 });
 
 describe('intro skip metadata', () => {

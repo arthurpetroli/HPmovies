@@ -11,15 +11,23 @@ export function portugueseCaptionRank(language: string): number {
   return code === 'pt-br' ? 0 : code === 'pt' ? 1 : code === 'pt-pt' ? 2 : code.startsWith('pt-') ? 3 : 4;
 }
 
+function subtitleRank(track: StreamSubtitle): number {
+  const languageRank = portugueseCaptionRank(track.language);
+  return languageRank < 4 ? languageRank + (track.machineTranslated ? 4 : 0) : 8;
+}
+
 export function orderedSubtitles(tracks: StreamSubtitle[]): StreamSubtitle[] {
-  return [...tracks].sort((left, right) => portugueseCaptionRank(left.language) - portugueseCaptionRank(right.language));
+  return [...tracks].sort((left, right) => subtitleRank(left) - subtitleRank(right));
 }
 
 export function preferredSubtitleId(tracks: StreamSubtitle[], preferredLanguage?: string): string {
   if (preferredLanguage === 'off') return 'off';
   const language = preferredLanguage ? captionLanguageCode(preferredLanguage) : '';
-  const matching = tracks.find(track => captionLanguageCode(track.language) === language);
-  return matching?.id ?? orderedSubtitles(tracks).find(track => portugueseCaptionRank(track.language) < 4)?.id ?? 'off';
+  const ordered = orderedSubtitles(tracks);
+  const matching = ordered.find(track => captionLanguageCode(track.language) === language);
+  const humanPortuguese = ordered.find(track => portugueseCaptionRank(track.language) < 4 && !track.machineTranslated);
+  if (matching && !(portugueseCaptionRank(language) < 4 && matching.machineTranslated && humanPortuguese)) return matching.id;
+  return ordered.find(track => portugueseCaptionRank(track.language) < 4)?.id ?? 'off';
 }
 
 /** Unscoped episode tracks belong to the primary source, never an unrelated mirror. */
@@ -28,7 +36,7 @@ export function subtitlesForSource(playback: Playback, source: StreamSource): St
 }
 
 export function orderedPlaybackSources(playback: Playback): StreamSource[] {
-  const rank = (source: StreamSource) => Math.min(4, ...subtitlesForSource(playback, source).map(track => portugueseCaptionRank(track.language)));
+  const rank = (source: StreamSource) => Math.min(8, ...subtitlesForSource(playback, source).map(subtitleRank));
   return [...playback.sources].sort((left, right) => rank(left) - rank(right));
 }
 

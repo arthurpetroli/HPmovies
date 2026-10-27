@@ -105,3 +105,31 @@ test('a successful native load clears an earlier caption error and immediately r
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.getByText(pt, { exact: true })).toBeVisible();
 });
+
+test('automatic Portuguese is a labeled manual alternative with a persistent notice outside settings', async ({ page }) => {
+  const automaticText = 'Fala de teste com tradução automática';
+  const automaticLabel = 'Tradução automática · PT-BR · Overgeared — episódio 2 · SubDL';
+  await playback(page, [
+    { id: 'pt-human', url: '/qa-loading-human.vtt', language: 'pt', label: 'Português QA', format: 'vtt' },
+    { id: 'pt-automatic', url: '/qa-loading-automatic.vtt', language: 'pt-BR', label: automaticLabel, format: 'vtt', machineTranslated: true },
+  ]);
+  await page.route('**/qa-loading-human.vtt', route => route.fulfill({ contentType: 'text/vtt', body: vtt(pt) }));
+  await page.route('**/qa-loading-automatic.vtt', route => route.fulfill({ contentType: 'text/vtt', body: vtt(automaticText) }));
+  await page.goto('/watch/subtitle-loading');
+  await play(page);
+  await expect(page.getByText(pt, { exact: true })).toBeVisible();
+  const notice = page.getByText('Tradução automática: pode conter erros.', { exact: true });
+  await expect(notice).toHaveCount(0);
+  await page.getByRole('button', { name: 'Abrir configurações' }).click();
+  await expect(page.getByRole('combobox', { name: 'Idioma das legendas' })).toContainText(automaticLabel);
+  await page.getByRole('combobox', { name: 'Idioma das legendas' }).selectOption('pt-automatic');
+  await page.getByRole('button', { name: 'Fechar configurações' }).click();
+  await expect(page.getByLabel('Configurações do vídeo')).toHaveCount(0);
+  await expect(notice).toBeVisible();
+  await expect(page.getByText(automaticText, { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Abrir configurações' }).click();
+  await page.getByRole('combobox', { name: 'Idioma das legendas' }).selectOption('off');
+  await page.getByRole('button', { name: 'Fechar configurações' }).click();
+  await expect(notice).toHaveCount(0);
+  await expect(page.getByText(automaticText, { exact: true })).toHaveCount(0);
+});

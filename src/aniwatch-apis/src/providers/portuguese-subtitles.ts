@@ -9,6 +9,9 @@ import { ApiError } from '../config/apiError.js';
 import { AniwatchAPICache } from '../config/cache.js';
 import { pinnedRequest, publicImageAddress } from './content-image.js';
 import type { ImageRequest, ImageResponse } from './content-image.js';
+import { addonSubtitleUrl, parseAddonPortugueseSubtitles, permittedAddonSubtitleDownloadUrl } from './opensubtitles-addon.js';
+import { curatedSubtitleIdentity, findCuratedPortugueseSubtitles, permittedCuratedSubtitleUrl, sanitizeCuratedSubtitleText } from './curated-portuguese-subtitles.js';
+import { extractSubtitleArchive } from './subtitle-archive.js';
 
 const MAPPINGS = 'https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-full.json';
 const REST = 'https://rest.opensubtitles.org/search';
@@ -23,7 +26,8 @@ interface Mapping {
   id: number; imdb: string; kind: 'movie' | 'series'; season?: number; offset: number; wholeSeries: boolean;
 }
 interface EpisodeIdentity { imdb: string; kind: 'movie' | 'series'; season?: number; episode?: number }
-interface FileTicket { url: string; format: 'srt' | 'ass' | 'vtt'; encoding: string; expires: number }
+interface FileTicket { url: string; format: 'srt' | 'ass' | 'vtt'; encoding: string; archive?: 'zip'; machineTranslated?: boolean; expires: number }
+interface SubtitleCandidate extends Omit<FileTicket, 'expires'> { id: string; language: string; label: string }
 interface SubtitleFile { bytes: Uint8Array; contentType: string; cacheControl: string }
 interface Options {
   enabled?: boolean;
@@ -112,6 +116,9 @@ export class PortugueseSubtitleProvider {
   }
 
   private async identity(animeId: string, episode: number): Promise<EpisodeIdentity | undefined> {
+    // Curated identities remain usable when the external mapping list is down.
+    const curated = curatedSubtitleIdentity(animeId, episode);
+    if (curated) return curated;
     const row = (await this.mapping()).get(Number(animeId));
     if (!row || !Number.isSafeInteger(episode) || episode < 1 || episode > 100_000) return undefined;
     if (row.kind === 'movie') return episode === 1 ? { imdb: row.imdb, kind: 'movie' } : undefined;
@@ -149,17 +156,23 @@ export class PortugueseSubtitleProvider {
     if (url.protocol !== 'https:' || url.hostname !== 'dl.opensubtitles.org' || url.username || url.password || url.port || url.hash || !url.pathname.startsWith('/en/download/')) return undefined;
     const encoding = typeof row.SubEncoding === 'string' ? row.SubEncoding.toLowerCase().replace(/_/g, '-') : 'utf-8';
     if (!['utf-8', 'utf8', 'windows-1252', 'cp1252', 'iso-8859-1', 'utf-16', 'utf-16le'].includes(encoding)) return undefined;
+    const release = typeof row.SubFileName === 'string' ? row.SubFileName.replace(/[\r\n\0]/g, '').slice(0, 170) : String(row.IDSubtitleFile);
+    return this.register({ id: `opensubtitles-${row.IDSubtitleFile}`, url: url.href, format, encoding, language, label: `OpenSubtitles · ${language} · ${release}` });
+  }
+
+  private register(candidate: SubtitleCandidate): StreamSubtitle {
     for (const [token, item] of this.tickets) if (item.expires <= Date.now()) this.tickets.delete(token);
     while (this.tickets.size >= 4096) this.tickets.delete(this.tickets.keys().next().value!);
-    const token = randomUUID(); this.tickets.set(token, { url: url.href, format, encoding, expires: Date.now() + 2 * 60 * 60_000 });
-    const release = typeof row.SubFileName === 'string' ? row.SubFileName.replace(/[\r\n\0]/g, '').slice(0, 170) : String(row.IDSubtitleFile);
-    return { id: `opensubtitles-${row.IDSubtitleFile}`, url: `/api/subtitles/file/${token}`, format: 'vtt', language, label: `OpenSubtitles · ${language} · ${release}`, kind: 'subtitles' };
+    const token = randomUUID();
+    this.tickets.set(token, { url: candidate.url, format: candidate.format, encoding: candidate.encoding,
+      ...(candidate.archive ? { archive: candidate.archive } : {}), ...(candidate.machineTranslated ? { machineTranslated: true } : {}), expires: Date.now() + 2 * 60 * 60_000 });
+    return { id: candidate.id, url: `/api/subtitles/file/${token}`, format: 'vtt', language: candidate.language, label: candidate.label, kind: 'subtitles', ...(candidate.machineTranslated ? { machineTranslated: true } : {}) };
   }
 
   async subtitles(animeId: string, episode: number): Promise<StreamSubtitle[]> {
     if (!this.enabled || !/^[1-9]\d{0,8}$/.test(animeId)) return [];
     const identity = await this.identity(animeId, episode); if (!identity) return [];
-    const results = await Promise.allSettled((['pt-BR', 'pt'] as const).map(async language => {
+    const legacy = (['pt-BR', 'pt'] as const).map(async language => {
       const filter = identity.kind === 'series' ? `episode-${identity.episode}/imdbid-${identity.imdb.slice(2)}/season-${identity.season}/` : `imdbid-${identity.imdb.slice(2)}/`;
       const payload = await this.cache.getOrSet(() => this.json(`${REST}/${filter}sublanguageid-${language === 'pt-BR' ? 'pob' : 'por'}`), `subtitle:list:${identity.imdb}:${identity.season}:${identity.episode}:${language}`, 1800);
       if (!Array.isArray(payload) || payload.length > 500) throw invalid();
@@ -170,18 +183,26 @@ export class PortugueseSubtitleProvider {
         seen.add(id); tracks.push(track); if (tracks.length === 24) break;
       }
       return tracks;
-    }));
-    const tracks = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
-    if (results.every(result => result.status === 'rejected')) throw unavailable();
+    });
+    const addon = async () => {
+      const payload = await this.cache.getOrSet(() => this.json(addonSubtitleUrl(identity)),
+        `subtitle:addon:${identity.imdb}:${identity.season}:${identity.episode}`, 1800);
+      return parseAddonPortugueseSubtitles(payload, identity).map(track => this.register(track));
+    };
+    const curated = findCuratedPortugueseSubtitles(animeId, episode, identity).map(track => this.register(track));
+    const results = await Promise.allSettled([...legacy, addon()]);
+    const tracks = [...results.flatMap(result => result.status === 'fulfilled' ? result.value : []), ...curated];
+    if (!tracks.length && results.every(result => result.status === 'rejected')) throw unavailable();
     return [...new Map(tracks.map(track => [track.id, track])).values()];
   }
 
   async enrich(playback: Playback, animeId: string): Promise<Playback> {
     if (!this.enabled || playback.isDemo || !playback.episode.number) return playback;
-    const diagnostic = (state: ProviderDiagnostic['state'], message: string): ProviderDiagnostic => ({ id: 'opensubtitles', name: 'OpenSubtitles · português', enabled: true, technicalAvailable: state !== 'connection_error', authorized: true, state, checkedAt: new Date().toISOString(), message, capabilities: ['external-subtitles'] });
+    const diagnostic = (state: ProviderDiagnostic['state'], message: string): ProviderDiagnostic => ({ id: 'opensubtitles', name: 'Legendas em português · fontes externas', enabled: true, technicalAvailable: state !== 'connection_error', authorized: true, state, checkedAt: new Date().toISOString(), message, capabilities: ['external-subtitles'] });
     try {
       const tracks = await this.subtitles(animeId, playback.episode.number);
-      const merge = (items: StreamSubtitle[]) => [...new Map([...items, ...tracks].map(track => [track.id, track])).values()].sort((a, b) => (b.language === 'pt-BR' ? 3 : b.language.startsWith('pt') ? 2 : 0) - (a.language === 'pt-BR' ? 3 : a.language.startsWith('pt') ? 2 : 0));
+      const score = (track: StreamSubtitle) => track.language.startsWith('pt') ? (track.machineTranslated ? 0 : 4) + (track.language === 'pt-BR' ? 3 : 2) : 0;
+      const merge = (items: StreamSubtitle[]) => [...new Map([...items, ...tracks].map(track => [track.id, track])).values()].sort((a, b) => score(b) - score(a));
       return { ...playback, sources: playback.sources.map(source => ({ ...source, subtitles: merge(source.subtitles ?? []) })), subtitles: merge(playback.subtitles), diagnostics: [...(playback.diagnostics ?? []), diagnostic(tracks.length ? 'available' : 'empty', tracks.length ? `${tracks.length} legendas em português encontradas para esta série, temporada e episódio. A versão do vídeo pode exigir ajuste de sincronização.` : 'Nenhuma legenda em português com correspondência segura foi encontrada.')] };
     } catch {
       return { ...playback, diagnostics: [...(playback.diagnostics ?? []), diagnostic('connection_error', 'A busca externa de legendas falhou; a reprodução continua disponível.')] };
@@ -207,18 +228,28 @@ export class PortugueseSubtitleProvider {
     let response: ImageResponse | undefined;
     try {
       const aborted = new Promise<never>((_resolve, reject) => controller.signal.addEventListener('abort', () => reject(unavailable()), { once: true }));
-      const records = await Promise.race([this.resolver('dl.opensubtitles.org'), aborted]);
+      const url = new URL(ticket.url);
+      const legacy = url.protocol === 'https:' && url.hostname === 'dl.opensubtitles.org' && !url.username && !url.password
+        && !url.port && !url.hash && url.pathname.startsWith('/en/download/');
+      if (ticket.archive === 'zip' ? !permittedCuratedSubtitleUrl(ticket.url) : !legacy && !permittedAddonSubtitleDownloadUrl(ticket.url)) throw invalid();
+      const records = await Promise.race([this.resolver(url.hostname), aborted]);
       if (!records.length || records.length > 32 || records.some(row => !publicImageAddress(row.address) || isIP(row.address) !== row.family)) throw invalid();
       const target = records.find(row => row.family === 4) ?? records[0];
-      response = await Promise.race([this.transport({ url: new URL(ticket.url), address: target.address, family: target.family as 4 | 6, headers: { Accept: '*/*', 'Accept-Encoding': 'identity', 'User-Agent': 'HPmovies/2.0 (Portuguese subtitles)' }, signal: controller.signal }), aborted]);
+      response = await Promise.race([this.transport({ url, address: target.address, family: target.family as 4 | 6, headers: { Accept: '*/*', 'Accept-Encoding': 'identity', 'User-Agent': 'HPmovies/2.0 (Portuguese subtitles)' }, signal: controller.signal }), aborted]);
       if (response.status !== 200 || Number(response.headers.get('content-length')) > 2_000_000) throw unavailable();
       const chunks: Uint8Array[] = []; let total = 0; const iterator = response.body[Symbol.asyncIterator]();
       while (true) { const part = await Promise.race([iterator.next(), aborted]); if (part.done) break; total += part.value.byteLength; if (total > 2_000_000) throw invalid(); chunks.push(part.value); }
       let bytes: Uint8Array = Buffer.concat(chunks);
+      if (ticket.archive === 'zip') {
+        const archive = extractSubtitleArchive(bytes);
+        if (archive.format !== ticket.format) throw invalid();
+        bytes = archive.bytes;
+      }
       if (bytes[0] === 0x1f && bytes[1] === 0x8b) bytes = gunzipSync(bytes, { maxOutputLength: MAX_FILE });
       if (!bytes.length || bytes.length > MAX_FILE) throw invalid();
       const encoding = ticket.encoding === 'cp1252' ? 'windows-1252' : ticket.encoding === 'utf8' ? 'utf-8' : ticket.encoding;
-      const text = new TextDecoder(encoding, { fatal: true }).decode(bytes).replace(/^\uFEFF/, '');
+      const decoded = new TextDecoder(encoding, { fatal: true }).decode(bytes).replace(/^\uFEFF/, '');
+      const text = sanitizeCuratedSubtitleText(decoded, !!ticket.machineTranslated);
       if (/\0/.test(text)) throw invalid();
       // Native WebVTT avoids browser-dependent SRT/ASS blob conversion for Portuguese tracks.
       const nativeBytes = new TextEncoder().encode(subtitleToVtt(text, ticket.format));

@@ -94,3 +94,19 @@ npm run test:streaming:real -- 101922 11061
 O catálogo completo e todos os episódios externos não foram testados. Índice,
 URL e HTTP 200 isolados não comprovam correspondência ou reprodução integral.
 O deploy continua reservado para uma etapa posterior.
+
+## Atualização posterior: mais legendas em português
+
+Integração e validação de 27/10/2026: OpenSubtitles v3 passou a complementar o REST,
+com deduplicação por arquivo e downloads UTF-8. O filme de Steins;Gate recebeu a
+faixa PT-BR revisada do Legendei. Overgeared E02 recebeu tradução automática do
+SubDL, autorizada pelo usuário, com identificação, aviso persistente e prioridade
+para opções portuguesas sem a marca automática.
+
+Os dois casos passaram no player real: 1.435 entradas no filme e 512 no episódio.
+Também foram baixadas faixas v3 de Naruto, One Piece, Steins;Gate série e Your Name.
+Validação desta etapa: 373 testes, oito cenários Playwright de legendas, lint,
+TypeScript e build aprovados. Overgeared E01 segue sem arquivo português público
+e baixável validado; Bleach requer revisão da correspondência de temporada.
+
+Fontes, evidências e limites em [MORE-PORTUGUESE-SUBTITLES.md](MORE-PORTUGUESE-SUBTITLES.md).

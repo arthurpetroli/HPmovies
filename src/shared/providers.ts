@@ -60,6 +60,7 @@ export interface StreamSubtitle {
   language: string;
   kind?: 'subtitles' | 'captions';
   default?: boolean;
+  machineTranslated?: boolean;
 }
 
 export interface StreamSource {

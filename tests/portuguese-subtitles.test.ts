@@ -24,6 +24,7 @@ function setup(options: { rows?: unknown[]; mappings?: unknown[]; metadata?: unk
     const url = new URL(String(input)); calls.push(url);
     if (url.hostname === 'raw.githubusercontent.com') return json(options.mappings ?? [mapping]);
     if (url.hostname === 'v3-cinemeta.strem.io') return json(options.metadata ?? identity);
+    if (url.hostname === 'opensubtitles-v3.strem.io') return json({ subtitles: [] });
     if (url.pathname.endsWith('sublanguageid-por')) return json([]);
     return json(options.rows ?? [row()]);
   });
@@ -44,7 +45,7 @@ describe('Portuguese subtitle discovery and safe files', () => {
     expect(tracks).toHaveLength(1); expect(tracks[0]).toMatchObject({ id: 'opensubtitles-123', format: 'vtt', language: 'pt-BR' });
     expect(tracks[0].url).toMatch(/^\/api\/subtitles\/file\/[a-f0-9-]{36}$/);
     expect(calls.find(url => url.hostname === 'rest.opensubtitles.org')?.pathname).toBe('/search/episode-1/imdbid-0123456/season-2/sublanguageid-pob');
-    await provider.subtitles('42', 3); expect(calls).toHaveLength(4);
+    await provider.subtitles('42', 3); expect(calls).toHaveLength(5);
   });
   it.each([
     ['episode', [{ id: `${imdb}:1:1`, season: 1, episode: 1 }, { id: `${imdb}:1:3`, season: 1, episode: 3 }]],

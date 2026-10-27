@@ -422,11 +422,14 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
         <p className="max-w-lg text-sm text-white/90">{error}</p>
         <button type="button" className="rounded-lg bg-teal-400 px-5 py-2.5 font-semibold text-slate-950 hover:bg-teal-300" onClick={() => { startPositionRef.current = videoRef.current?.currentTime || startPositionRef.current; setError(null); setBuffering(true); setQualities([]); setQuality(-1); setAttempt(value => value + 1); }}>Tentar novamente</button>
       </div>}
-      {notice && <div role="status" className="absolute inset-x-3 top-3 z-30 flex items-center justify-between gap-3 rounded-lg bg-black/85 px-3 py-2 text-xs text-white/90"><p>{notice}</p><button type="button" aria-label="Fechar mensagem" className="shrink-0 p-1 hover:text-teal-300" onClick={() => setNotice(null)}><X size={16} /></button></div>}
-      {(captionError || conversionError) && <div role="alert" className="absolute inset-x-3 top-3 z-30 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-black/90 px-3 py-2 text-xs text-amber-200">
+      <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex flex-col items-start gap-2">
+      {selectedSubtitle?.machineTranslated && <p role="status" aria-atomic="true" className="max-w-full rounded-lg bg-black/85 px-3 py-2 text-xs leading-relaxed text-white/90">Tradução automática: pode conter erros.</p>}
+      {notice && <div role="status" className="pointer-events-auto flex w-full items-center justify-between gap-3 rounded-lg bg-black/85 px-3 py-2 text-xs text-white/90"><p>{notice}</p><button type="button" aria-label="Fechar mensagem" className="shrink-0 p-1 hover:text-teal-300" onClick={() => setNotice(null)}><X size={16} /></button></div>}
+      {(captionError || conversionError) && <div role="alert" className="pointer-events-auto flex w-full flex-wrap items-center justify-between gap-2 rounded-lg bg-black/90 px-3 py-2 text-xs text-amber-200">
         <p>{captionError || conversionError}</p>
         {captionAttempt < 3 ? <button type="button" className="rounded border border-amber-200/40 px-2 py-1 font-medium hover:bg-white/10" onClick={() => setCaptionRetry({ selection: captionSelectionKey, count: captionAttempt + 1 })}>Tentar legenda novamente</button> : <p>Escolha outra faixa nas configurações.</p>}
       </div>}
+      </div>
 
       {captionText && !captionError && !conversionError && <div aria-live="off" className={`pointer-events-none absolute inset-x-4 text-center ${controlsVisible ? 'bottom-24 sm:bottom-28' : 'bottom-7'} transition-all`}>
         <span className={`inline-block max-w-[90%] whitespace-pre-line rounded px-3 py-1 font-medium leading-snug text-white ${captionBackground ? 'bg-black/80' : ''} ${captionSize === 'small' ? 'text-sm sm:text-lg' : captionSize === 'large' ? 'text-xl sm:text-3xl' : 'text-base sm:text-2xl'}`} style={{ textShadow: '0 1px 3px #000, 0 0 3px #000' }}>{captionText}</span>
