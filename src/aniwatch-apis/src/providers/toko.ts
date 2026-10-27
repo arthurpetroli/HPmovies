@@ -8,6 +8,7 @@ import type { TokoConfig } from '../config/integrations.js';
 import { TokoHttpClient } from './toko-http.js';
 import type { TokoStream } from './toko-http.js';
 import { streamMediaGateway } from './stream-media.js';
+import { isKnownSourceMismatch } from './source-mismatches.js';
 
 export interface TokoStreamingOptions {
   config?: TokoConfig;
@@ -24,20 +25,27 @@ export function normalizeTokoLanguage(value: string | undefined): string {
   const explicitNames: Record<string, string> = {
     english: 'en', japanese: 'ja',
     'portuguese(brazil)': 'pt-BR', 'português(brasil)': 'pt-BR',
+    'portuguese(-português(brasil))': 'pt-BR',
+    'portuguese(-portuguese(brazil))': 'pt-BR', 'portuguese(-portugues(brasil))': 'pt-BR',
+    'portuguese(-brazilian)': 'pt-BR', 'brazilian portuguese': 'pt-BR',
+    'portuguese(portuguese-brazilian[full])': 'pt-BR', 'portuguese(portuguese-brazilian)': 'pt-BR',
+    'portuguese(portuguese-[full])': 'pt', 'portuguese(-european)': 'pt-PT',
+    portuguese: 'pt', 'portuguese 2': 'pt',
   };
   const supplied = (value ?? '').trim();
-  const candidate = explicitNames[supplied.toLowerCase().replace(/\s*([()])\s*/g, '$1')] ?? supplied;
+  const candidate = explicitNames[supplied.toLowerCase().replace(/\s*([()[\]-])\s*/g, '$1')] ?? supplied;
   if (!/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i.test(candidate) || ['sub', 'dub'].includes(candidate.toLowerCase())) return 'und';
   try { return Intl.getCanonicalLocales(candidate)[0] ?? 'und'; } catch { return 'und'; }
 }
 
-/** Exact public DNS host permissions; no replay proxy or arbitrary destinations. */
-export function permittedMediaUrl(raw: string, allowedHosts: string[]): string | undefined {
+/** Exact hosts or explicit streaming DNS families; no arbitrary destinations. */
+export function permittedMediaUrl(raw: string, allowedHosts: string[], allowedStreamDomains: string[] = []): string | undefined {
   try {
     const url = new URL(raw);
     const hostname = url.hostname.toLowerCase();
     if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443') || url.hash) return undefined;
-    if (!allowedHosts.includes(hostname) || !hostname.includes('.') ||
+    const permitted = allowedHosts.includes(hostname) || allowedStreamDomains.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+    if (!permitted || !hostname.includes('.') ||
         /(?:^|\.)(?:localhost|local|internal|invalid|test)$/.test(hostname) ||
         /^\d+(?:\.\d+){3}$/.test(hostname) || hostname.includes(':')) return undefined;
     return url.toString();
@@ -48,13 +56,13 @@ export function normalizeTokoSource(source: TokoStream, config: TokoConfig, inde
   const providerId = normalizeProviderKey(source.providerKey || source.providerName);
   if (!config.contentAuthorized || !providerId || !config.allowedProviders.includes(providerId) || source.requiresHeaders && !source.headers) return undefined;
   if (source.type !== 'hls' && source.type !== 'mp4') return undefined;
-  let url = permittedMediaUrl(source.url, config.allowedMediaHosts);
+  let url = permittedMediaUrl(source.url, config.allowedMediaHosts, config.allowedStreamDomains);
   if (!url) return undefined;
   try { url = streamMediaGateway.issue(config, providerId, url, source.type, source.headers); }
   catch { return undefined; }
   const audioLanguage = normalizeTokoLanguage(source.audioLanguage);
   const subtitles = source.subtitles.flatMap((track, trackIndex): StreamSubtitle[] => {
-    let subtitleUrl = permittedMediaUrl(track.url, config.allowedMediaHosts);
+    let subtitleUrl = permittedMediaUrl(track.url, config.allowedMediaHosts, config.allowedStreamDomains);
     if (!subtitleUrl) return [];
     const inferred = /\.(srt|ass|ssa|vtt)$/i.exec(new URL(track.url).pathname)?.[1].toLowerCase();
     const format = track.format !== undefined ? track.format.trim().toLowerCase() : inferred === 'ssa' ? 'ass' : inferred ?? 'vtt';
@@ -104,7 +112,8 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
   }
 
   private get contentPermitted(): boolean {
-    return this.config.contentAuthorized && this.config.allowedProviders.length > 0 && this.config.allowedMediaHosts.length > 0;
+    return this.config.contentAuthorized && this.config.allowedProviders.length > 0
+      && (this.config.allowedMediaHosts.length > 0 || (this.config.allowedStreamDomains?.length ?? 0) > 0);
   }
 
   private status(state: ProviderState, technicalAvailable: boolean, message: string): ProviderDiagnostic {
@@ -141,13 +150,18 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
       }
       // A provider's episode index alone is not evidence of authorized playback.
       const first = indexed[0];
-      const probe = await this.resolveSources(Number(animeId), first.number, titles);
+      // Keep a genuine source index visible even when its first video's CDN
+      // fails. Other entries are resolved independently when selected.
+      const probe = await this.resolveSources(Number(animeId), first.number, titles)
+        .catch(error => ({ sources: [] as StreamingSource[], failureState: errorState(error) }));
       const available = probe.sources.length > 0;
       const state = available ? 'available' : probe.failureState;
       const episodes: StreamingEpisode[] = indexed.map((episode) => ({
         id: `${this.id}:${animeId}:${episode.number}`, number: episode.number,
         title: episode.title || `Episódio ${episode.number}`,
-        ...(episode.number === first.number ? { available } : {}),
+        // A failed initial check can be transient. Keep indexed entries open
+        // for individual resolution rather than disabling their links.
+        ...(episode.number === first.number && available ? { available: true } : {}),
       }));
       const message = available
         ? 'Fonte permitida confirmada para o primeiro episódio; os demais são verificados ao abrir o player.'
@@ -164,7 +178,11 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
 
   private async resolveSources(anilistId: number, episode: number, titles?: string[]) {
     const result = await this.client.streams(anilistId, episode, titles);
-    const candidates = result.sources.flatMap((source, index) => {
+    const eligible = result.sources.filter(source => !isKnownSourceMismatch({
+      anilistId, episode, providerId: normalizeProviderKey(source.providerKey || source.providerName),
+      audioLanguage: normalizeTokoLanguage(source.audioLanguage), type: source.type,
+    }));
+    const candidates = eligible.flatMap((source, index) => {
       const normalized = normalizeTokoSource(source, this.config, index);
       return normalized ? [normalized] : [];
     });
@@ -181,9 +199,9 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
     try { await Promise.all([worker(), worker()]); }
     finally { clearTimeout(timer); }
     const sources = candidates.filter(source => confirmed.has(source));
-    const failureState: ProviderState = !result.sources.length ? 'empty'
+    const failureState: ProviderState = !eligible.length ? 'empty'
       : !candidates.length || failures.some(error => error instanceof ApiError && error.code === 'STREAM_MEDIA_NOT_PERMITTED') ? 'unauthorized' : 'connection_error';
-    return { sources, returnedSources: result.sources.length, failureState };
+    return { sources, returnedSources: eligible.length, failureState };
   }
 
   async playback(episodeId: string, titles?: string[]): Promise<Playback> {

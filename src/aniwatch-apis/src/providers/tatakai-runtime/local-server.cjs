@@ -6,6 +6,7 @@ const { mkdtemp, writeFile, rm } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
 const { createHostApp } = require('./vendor/host-server.cjs');
+const { createEpisodeIndexResolver } = require('./episode-index.cjs');
 
 const MAX_CONFIG_BYTES = 256 * 1024;
 const MAX_BUNDLE_BYTES = 20 * 1024 * 1024;
@@ -119,7 +120,7 @@ async function startSourceHost({ port = 8099, extensionsFile, logger = console }
   process.env.CF_BYPASS_ENABLED = 'false';
   process.env.CF_BYPASS_AUTO_INSTALL = 'false';
   const loaded = await loadLocalRegistry(extensionsFile);
-  const app = createHostApp({ registry: loaded.registry, logger });
+  const app = createHostApp({ registry: loaded.registry, logger, episodeIndexResolver: createEpisodeIndexResolver() });
   const server = createServer((req, res) => {
     const reply = (status, error) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error })); };
     if (!isLocalRequest(req)) return reply(403, 'Only loopback requests are allowed');

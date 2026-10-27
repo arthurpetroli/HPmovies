@@ -48,7 +48,7 @@ describe('Toko subtitle compatibility', () => {
 
   it.each([
     ['English', 'en'], ['Japanese', 'ja'], ['Portuguese (Brazil)', 'pt-BR'], ['Português(Brasil)', 'pt-BR'],
-    ['sub', 'und'], ['dub', 'und'], ['Brazilian Portuguese', 'und'], ['English dub', 'und'], ['en glish', 'und'],
+    ['sub', 'und'], ['dub', 'und'], ['Brazilian Portuguese', 'pt-BR'], ['English dub', 'und'], ['en glish', 'und'],
   ])('normalizes only an explicit supported language name: %s', (input, expected) => {
     expect(normalizeTokoLanguage(input)).toBe(expected);
   });

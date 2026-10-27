@@ -274,7 +274,8 @@ export class TokoHttpClient {
   }
 
   streams(anilistId: number, episode: number, titles?: string[]): Promise<TokoStreamResponse> {
-    if (!this.config.contentAuthorized || !this.config.allowedProviders.length || !this.config.allowedMediaHosts.length) {
+    if (!this.config.contentAuthorized || !this.config.allowedProviders.length
+      || !(this.config.allowedMediaHosts.length || this.config.allowedStreamDomains?.length)) {
       throw new ApiError(503, 'TOKO_UNAUTHORIZED', 'Nenhuma fonte autorizada foi configurada para reprodução no Toko.');
     }
     if (!Number.isFinite(episode) || episode <= 0 || episode > 100_000) throw new ApiError(400, 'INVALID_EPISODE', 'Episódio inválido.');

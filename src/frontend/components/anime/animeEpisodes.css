@@ -1,0 +1,41 @@
+.anime-episodes { margin: 0 0 38px; scroll-margin-top: 100px; }
+.anime-episodes-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.anime-episodes-heading h2 { font-size: 21px; font-weight: 700; letter-spacing: -.025em; }
+.anime-episodes-heading p { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.anime-episode-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 18px; }
+.anime-episode-search { display: flex; flex: 1 1 270px; align-items: center; gap: 10px; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 12px 14px; color: var(--muted); }
+.anime-episode-search:focus-within { border-color: var(--accent); }
+.anime-episode-search input { width: 100%; min-width: 0; background: transparent; outline: none; color: #e5edf1; font-size: 12px; }
+.anime-episode-range { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); }
+.anime-episode-range select { max-width: 100%; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 12px; color: #e5edf1; font-size: 12px; }
+.anime-episode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.anime-episode-card { display: flex; align-items: center; min-width: 0; gap: 13px; padding: 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); transition: border-color .18s, background .18s; }
+.anime-episode-card:hover, .anime-episode-card:focus-visible { background: #58e0bc08; border-color: #58e0bc70; }
+.anime-episode-card > svg { flex-shrink: 0; color: var(--accent); }
+.anime-episode-number { display: grid; place-items: center; flex-shrink: 0; min-width: 43px; min-height: 43px; padding: 7px; border-radius: 7px; background: #58e0bc0a; color: #9ce7d4; font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.anime-episode-thumbnail { width: 92px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+.anime-episode-caption { flex: 1; min-width: 0; }
+.anime-episode-caption > span { display: block; color: var(--accent); font-size: 10px; }
+.anime-episode-caption h3 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; margin-top: 5px; color: #dce4eb; font-size: 12px; line-height: 1.55; }
+.anime-episode-caption small { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; }
+.anime-episode-card.is-unavailable { opacity: .55; }
+.anime-episode-skeleton { height: 86px; border-radius: 8px; }
+.anime-episodes-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 35px 20px; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; text-align: center; }
+.anime-episodes-empty > svg { margin-bottom: 2px; color: var(--accent); }
+.anime-episodes-empty h3 { font-size: 15px; font-weight: 600; }
+.anime-episodes-empty p { max-width: 620px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.anime-episodes-empty button { margin-top: 5px; font-size: 12px; }
+.anime-episode-pagination { display: flex; justify-content: center; align-items: center; gap: 22px; margin-top: 23px; }
+.anime-episode-pagination > span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.anime-episode-pagination .button-secondary { font-size: 12px; }
+.anime-episode-pagination button:disabled { opacity: .4; cursor: default; }
+@media (max-width: 1050px) { .anime-episode-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) {
+  .anime-episode-grid { grid-template-columns: 1fr; }
+  .anime-episodes-heading { margin-bottom: 17px; }
+  .anime-episodes-heading h2 { font-size: 19px; }
+  .anime-episode-range { width: 100%; justify-content: space-between; }
+  .anime-episode-range select { flex: 1; max-width: 230px; }
+  .anime-episode-pagination { gap: 15px; }
+  .anime-episode-pagination .button-secondary { padding: 10px 12px; font-size: 11px; }
+}

@@ -671,7 +671,7 @@ function logProviderChunk(logger, namespace, mode, chunk, count) {
  * @param {object} [deps.logger]    LogService
  * @returns {{ handler: Function, listNamespaces: Function, invalidateBundles: Function }}
  */
-function createHostApp({ registry, localProxy, logger }) {
+function createHostApp({ registry, localProxy, logger, episodeIndexResolver }) {
     const bundleLoader = createBundleLoader(logger, () => resultCache.clear());
 
     // ── In-process bundle fetch shim (novel + manga scraping proxy) ─────────
@@ -1709,6 +1709,27 @@ function createHostApp({ registry, localProxy, logger }) {
         // routes use, so they are not gated on `manifest.apiServer.routes`.
         if (route === 'providers') {
             return handleProviderList(res, found.entry, namespace);
+        }
+        // HPmovies: the upstream host omitted the index route used by the
+        // website and by getWebsiteEpisodeIndex. Only the local host installs
+        // this resolver; installed extension bytes remain unchanged.
+        if (route === 'index/episodes' && typeof episodeIndexResolver === 'function') {
+            const rawId = searchParams.get('anilistId') || '';
+            const titles = parseTitles(searchParams);
+            if (!/^[1-9]\d{0,9}$/.test(rawId) || Number(rawId) > 2147483647 || titles.length > 5 || titles.some(title => !title.trim() || title.length > 200 || /[\u0000-\u001f\u007f]/.test(title))) {
+                res.writeHead(400, JSON_HEADERS);
+                return res.end(JSON.stringify({ error: 'Invalid AniList identifier or titles' }));
+            }
+            try {
+                const bundle = bundleLoader.load(found.entry.bundlePath, found.entry.manifest, found.entry.runtime);
+                const index = await episodeIndexResolver({ bundle, entry: found.entry, namespace, anilistId: Number(rawId), titles: [...new Set(titles.map(title => title.trim()))] });
+                res.writeHead(200, JSON_HEADERS);
+                return res.end(JSON.stringify(index));
+            } catch (err) {
+                logger?.warn?.(`[ExtHost] ${namespace}/index/episodes failed: ${err.message}`);
+                res.writeHead([400, 404, 502, 503, 504].includes(err.status) ? err.status : 502, JSON_HEADERS);
+                return res.end(JSON.stringify({ provider: null, episodeCount: 0, episodes: [], error: 'Episode index is unavailable' }));
+            }
         }
         const providerMatch = route.match(/^providers\/([^/]+)$/);
         if (providerMatch) {

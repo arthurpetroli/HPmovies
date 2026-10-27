@@ -37,7 +37,8 @@ function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: 
   const sourceEpisode = /^(tatakai|toko):([1-9]\d*):(\d+(?:\.\d+)?)$/.exec(episodeId);
   const sourceBack = new URLSearchParams(hints);
   if (sourceEpisode) { sourceBack.set('kind', 'anime'); sourceBack.set('id', sourceEpisode[2]); sourceBack.set('episode', sourceEpisode[3]); }
-  const backPath = !anime && sourceEpisode ? `/sources?${sourceBack}` : '/explore';
+  const backPath = anime ? `/anime/${encodeURIComponent(anime.id)}` : sourceEpisode ? `/sources?${sourceBack}` : '/explore';
+  const backLabel = anime ? 'Voltar ao anime' : sourceEpisode ? 'Voltar às fontes' : 'Voltar ao catálogo';
 
   useEffect(() => {
     let active = true;
@@ -104,7 +105,7 @@ function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: 
   if (error || !session || !source) return <main id="main-content" className="mx-auto flex min-h-[75vh] max-w-4xl flex-col items-center justify-center gap-6 px-6 pt-24 text-center">
     <div className="rounded-2xl border border-white/10 bg-white/5 p-5"><Film className="h-10 w-10 text-teal-300" /></div>
     <div><h1 className="mb-3 text-2xl font-bold text-white">{episodeId === 'demo' ? 'Não foi possível preparar o player' : 'Episódio indisponível'}</h1><p role="alert" className="max-w-xl text-sm leading-relaxed text-slate-400">{error}</p></div>
-    <div className="flex flex-wrap justify-center gap-3">{episodeId !== 'demo' && <Link className="rounded-lg bg-teal-400 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-teal-300" to="/watch/demo">Experimentar o player</Link>}<Link className="rounded-lg border border-white/15 px-5 py-3 text-sm font-medium text-white hover:bg-white/5" to="/explore">Explorar catálogo</Link>
+    <div className="flex flex-wrap justify-center gap-3">{episodeId !== 'demo' && <Link className="rounded-lg bg-teal-400 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-teal-300" to="/watch/demo">Experimentar o player</Link>}<Link className="rounded-lg border border-white/15 px-5 py-3 text-sm font-medium text-white hover:bg-white/5" to={backPath}>{backLabel}</Link>
       <button className="rounded-lg border border-white/15 px-5 py-3 text-sm text-white hover:bg-white/5" onClick={() => { setLoading(true); setAttempt(value => value + 1); }}>Tentar novamente</button>
     </div>
   </main>;
@@ -114,7 +115,7 @@ function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: 
   const portugueseRank = Math.min(4, ...activeSubtitles.map(track => portugueseCaptionRank(track.language)));
   return (
     <main id="main-content" className="mx-auto max-w-[1440px] px-4 pb-20 pt-24 sm:px-8 lg:px-12">
-      <Link to={backPath} className="mb-6 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={16} />{backPath.startsWith('/sources') ? 'Voltar às fontes' : 'Voltar ao catálogo'}</Link>
+      <Link to={backPath} className="mb-6 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={16} />{backLabel}</Link>
       <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0">
           <VideoPlayer ref={playerRef} key={`${episodeId}:${source.url}:${sourceAttempt}`} source={source} poster={playback.episode.thumbnail} subtitles={activeSubtitles} intro={playback.intro} initialTime={resumeTime} onProgress={saveProgress} onSourceError={recoverSource} onSourcePlaying={() => setRecoveryNotice(null)} autoPlay={continuePlaying} />

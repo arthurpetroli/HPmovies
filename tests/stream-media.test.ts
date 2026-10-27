@@ -45,8 +45,8 @@ describe('scoped streaming transport', () => {
     await gateway.media(token(segment)); expect(transport).toHaveBeenCalledTimes(3);
   });
 
-  it('refuses DRM/encrypted playlists and unapproved HLS descendants', async () => {
-    for (const manifest of ['#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="key"\nsegment.ts', '#EXTM3U\n#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI="key"', '#EXTM3U\nhttps://private.example.org/segment.ts', '#EXTM3U\nhttp://cdn.example.org/segment.ts', '#EXTM3U\n#EXT-X-MAP:URI=data:abc']) {
+  it('refuses DRM playlists and unapproved HLS descendants', async () => {
+    for (const manifest of ['#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="key"\nsegment.ts', '#EXTM3U\n#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI="key"', '#EXTM3U\nhttps://private.example.org/segment.ts', '#EXTM3U\nhttp://cdn.example.org/segment.ts', '#EXTM3U\n#EXT-X-MAP:URI=data:abc']) {
       const transport = vi.fn(async () => response(manifest));
       const gateway = new StreamMediaGateway({ resolver, transport });
       const path = gateway.issue(config(), 'source', 'https://cdn.example.org/master.m3u8', 'hls');

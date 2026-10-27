@@ -28,10 +28,17 @@ export class StreamingRegistry implements AnimeStreamingProvider {
     const available = results.flatMap(result => result.status === 'fulfilled' && result.value.available ? [result.value] : []);
     if (available.length) return { ...available[0], episodes: available.flatMap(value => value.episodes), diagnostics: available.flatMap(value => value.diagnostics || []) };
     const values = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+    const indexed = values.filter(value => value.episodes.length > 0);
+    if (indexed.length) return {
+      ...indexed[0], available: false,
+      episodes: [...new Map(indexed.flatMap(value => value.episodes).map(episode => [episode.id, episode])).values()].sort((a, b) => (a.number ?? 0) - (b.number ?? 0)),
+      message: 'Episódios encontrados. A fonte de vídeo será verificada ao abrir cada episódio.',
+      diagnostics: values.flatMap(value => value.diagnostics ?? []),
+    };
     return {
       available: false, episodes: [],
       state: values.find(value => value.state === 'unauthorized')?.state ?? values[0]?.state ?? 'connection_error' as const,
-      message: 'Nenhuma fonte de reprodução autorizada está disponível para este anime. Consulte os provedores ou use a demonstração do player.',
+      message: values.find(value => value.message)?.message || 'As fontes conectadas ainda não retornaram episódios para este anime.',
       diagnostics: values.flatMap(value => value.diagnostics || []),
     };
   }

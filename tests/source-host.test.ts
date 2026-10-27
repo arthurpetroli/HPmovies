@@ -23,6 +23,7 @@ async function prepareExtensions(names = ['fixture']) {
     const bundle = `module.exports = {
       async streamAll(opts, onChunk) { await new Promise(resolve => setTimeout(resolve, 2)); onChunk({results:[{url:'https://media.example.test/${name}/'+encodeURIComponent(opts.titles[0]||'none')+'.m3u8',type:'hls',providerName:'${name}',headers:{Referer:'https://origin.example.test/'}}],diagnostic:{provider:'${name}',status:'ok'}}); },
       listProviders() { return [{name:'${name}',kind:'stream'}]; },
+      async getWebsiteEpisodeIndex(params) { return {provider:'${name}',episodeCount:2,episodes:[{number:1,title:params.titles[0]||'First'},{number:2}]}; },
       async getMangaChapters() { return [{number:1,title:'First',sources:[{provider:'${name}',chapterKey:'manga:1',providerChapterId:'upstream-1',language:'pt-BR'}]}]; },
       async getMangaPages(params) { return [{pageNumber:1,imageUrl:'https://media.example.test/page.jpg',headers:{Referer:'https://origin.example.test/'+params.providerChapterId},width:800,height:1200}]; },
       async getNovelChapters() { return [{number:2,title:'Second',sources:[{provider:'${name}',chapterKey:'novel:2',translator:'Fixture translator'}]}]; },
@@ -60,6 +61,10 @@ describe('explicit local Tatakai source host', () => {
     expect(health.namespaces[0]).toMatchObject({ namespace: 'fixture', extensionId: 'fixture', capabilities: ['streaming', 'manga', 'novel'] });
     const streams = await (await fetch(`${host.baseUrl}/api/v3/fixture/stream?stream=0&titles[]=First`)).json();
     expect(streams.sources[0]).toMatchObject({ url: 'https://media.example.test/fixture/First.m3u8', type: 'hls', headers: { Referer: 'https://origin.example.test/' } });
+    const episodes = await (await fetch(`${host.baseUrl}/api/v3/fixture/index/episodes?anilistId=21&titles[]=Original`)).json();
+    expect(episodes).toEqual({ provider: 'fixture', episodeCount: 2, episodes: [{ number: 1, title: 'Original' }, { number: 2 }] });
+    expect((await fetch(`${host.baseUrl}/api/v3/fixture/index/episodes?anilistId=https://example.com`)).status).toBe(400);
+    expect((await fetch(`${host.baseUrl}/api/v3/fixture/index/episodes?anilistId=21&titles[]=%00bad`)).status).toBe(400);
     const manga = await (await fetch(`${host.baseUrl}/api/v3/fixture/manga/chapters?title=First`)).json();
     expect(manga.chapters[0]).toMatchObject({ chapterKey: 'manga:1', provider: 'fixture', providerChapterId: 'upstream-1' });
     const pages = await (await fetch(`${host.baseUrl}/api/v3/fixture/manga/pages?chapterKey=manga:1&providerChapterId=upstream-1`)).json();

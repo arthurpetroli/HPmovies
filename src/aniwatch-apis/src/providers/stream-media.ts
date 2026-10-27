@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createDecipheriv, createHash, randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import type { LookupAddress } from 'node:dns';
@@ -7,10 +7,12 @@ import type { TokoConfig } from '../config/integrations.js';
 import { permittedContentHeaders, permittedContentUrl, pinnedRequest, publicImageAddress } from './content-image.js';
 import type { ImageRequest, ImageResponse } from './content-image.js';
 
-type MediaKind = 'hls' | 'mp4' | 'subtitle' | 'segment';
+type MediaKind = 'hls' | 'mp4' | 'subtitle' | 'segment' | 'key' | 'encrypted-segment';
+interface SegmentEncryption { keyToken: string; iv: Uint8Array }
 interface Ticket {
   source: string; kind: MediaKind; provider: string; headers: Record<string, string>;
   config: TokoConfig; expiresAt: number; key: string;
+  encryption?: SegmentEncryption;
 }
 interface GatewayOptions {
   resolver?: (host: string) => Promise<LookupAddress[]>;
@@ -23,7 +25,39 @@ const RANGE_BYTES = 8_000_000;
 const BINARY_MEDIA_MIME = new Set(['video/mp2t', 'video/mp4', 'audio/mp4', 'audio/aac', 'audio/mpeg', 'application/octet-stream', 'text/vtt']);
 const denied = () => new ApiError(503, 'STREAM_MEDIA_NOT_PERMITTED', 'A mídia exige um domínio ou cabeçalhos não permitidos para esta fonte.');
 const unavailable = () => new ApiError(502, 'STREAM_MEDIA_UNAVAILABLE', 'A fonte não disponibilizou esta mídia. Escolha outra fonte ou tente novamente.');
+const unsupportedEncryption = () => new ApiError(502, 'ENCRYPTED_MEDIA_UNSUPPORTED', 'Esta fonte usa um formato de criptografia não compatível com a reprodução local. Escolha outra fonte.');
+interface HlsKey { uri: string; iv?: Uint8Array }
+/** Only the public identity AES-128 method is supported, never DRM key systems. */
+function hlsKey(line: string): HlsKey | null {
+  if (!line.startsWith('#EXT-X-KEY:')) throw unsupportedEncryption();
+  const input = line.slice('#EXT-X-KEY:'.length);
+  const attributes = new Map<string, { value: string; quoted: boolean }>();
+  let cursor = 0;
+  while (cursor < input.length) {
+    const match = /^([A-Z][A-Z0-9-]*)=(?:"([^"\r\n]*)"|([^,\s"]+))(?:,|$)/.exec(input.slice(cursor));
+    if (!match || attributes.has(match[1]) || !['METHOD', 'URI', 'IV', 'KEYFORMAT', 'KEYFORMATVERSIONS'].includes(match[1])) throw unsupportedEncryption();
+    attributes.set(match[1], { value: match[2] ?? match[3], quoted: match[2] !== undefined });
+    cursor += match[0].length;
+    if (cursor === input.length && match[0].endsWith(',')) throw unsupportedEncryption();
+  }
+  const method = attributes.get('METHOD');
+  if (!method || method.quoted) throw unsupportedEncryption();
+  if (method.value === 'NONE' && attributes.size === 1) return null;
+  const uri = attributes.get('URI'), iv = attributes.get('IV'), format = attributes.get('KEYFORMAT'), version = attributes.get('KEYFORMATVERSIONS');
+  if (method.value !== 'AES-128' || !uri?.quoted || !uri.value || format && (!format.quoted || format.value !== 'identity')
+    || version && (!version.quoted || version.value !== '1') || iv && (iv.quoted || !/^0x[0-9a-f]{1,32}$/i.test(iv.value))) throw unsupportedEncryption();
+  return { uri: uri.value, ...(iv ? { iv: Buffer.from(iv.value.slice(2).padStart(32, '0'), 'hex') } : {}) };
+}
 const mediaError = (error: unknown): unknown => error instanceof ApiError && error.code === 'CONTENT_IMAGE_NOT_PERMITTED' ? denied() : error;
+/** Operator-approved CDN domains apply only to streaming, never image tickets. */
+export function permittedStreamUrl(source: string, config: TokoConfig): URL {
+  let url: URL;
+  try { url = new URL(source); } catch { throw denied(); }
+  const domainAllowed = (config.allowedStreamDomains ?? []).some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`));
+  try {
+    return permittedContentUrl(source, domainAllowed ? { ...config, allowedMediaHosts: [...config.allowedMediaHosts, url.hostname] } : config);
+  } catch (error) { throw mediaError(error); }
+}
 const isTransportStream = (bytes: Uint8Array): boolean => bytes.length >= 188 * 3 && bytes.length % 188 === 0
   && bytes.every((value, index) => index % 188 !== 0 || value === 0x47);
 const isMp4 = (bytes: Uint8Array, fragment = false): boolean => {
@@ -56,12 +90,14 @@ export class StreamMediaGateway {
     this.transport = options.transport ?? pinnedRequest;
     this.timeoutMs = options.timeoutMs ?? 18000;
   }
-  issue(config: TokoConfig, provider: string, source: string, kind: MediaKind, inputHeaders: Record<string, string> = {}, expiresAt = Date.now() + 2 * 60 * 60_000): string {
+  issue(config: TokoConfig, provider: string, source: string, kind: MediaKind, inputHeaders: Record<string, string> = {}, expiresAt = Date.now() + 2 * 60 * 60_000, encryption?: SegmentEncryption): string {
     if (!config.enabled || !config.contentAuthorized || !config.allowedProviders.includes(provider)) throw denied();
     let url: URL;
-    try { url = permittedContentUrl(source, config); } catch (error) { throw mediaError(error); }
+    try { url = permittedStreamUrl(source, config); } catch (error) { throw mediaError(error); }
     const headers = streamRequestHeaders(inputHeaders, config);
-    const key = createHash('sha256').update(JSON.stringify([provider, url.href, kind, headers, config.allowedMediaHosts, config.allowedRequestOrigins])).digest('hex');
+    if (kind === 'encrypted-segment' && !encryption) throw denied();
+    const key = createHash('sha256').update(JSON.stringify([provider, url.href, kind, headers, config.allowedMediaHosts, config.allowedStreamDomains, config.allowedRequestOrigins,
+      encryption?.keyToken, encryption && Buffer.from(encryption.iv).toString('hex')])).digest('hex');
     const previous = this.sources.get(key); const remembered = previous && this.tickets.get(previous);
     if (previous && remembered && remembered.expiresAt > Date.now() + 30_000) return `/api/streaming/media/${previous}`;
     for (const [token, ticket] of this.tickets) if (ticket.expiresAt <= Date.now()) this.remove(token, ticket);
@@ -71,7 +107,7 @@ export class StreamMediaGateway {
       this.remove(first[0], first[1]);
     }
     const token = randomUUID();
-    this.tickets.set(token, { source: url.href, config, provider, kind, headers, expiresAt, key });
+    this.tickets.set(token, { source: url.href, config, provider, kind, headers, expiresAt, key, encryption });
     this.sources.set(key, token); return `/api/streaming/media/${token}`;
   }
   private remove(token: string, ticket: Ticket) {
@@ -101,7 +137,7 @@ export class StreamMediaGateway {
     let range: string | undefined;
     try {
       if (!ticket.config.enabled || !ticket.config.contentAuthorized || !ticket.config.allowedProviders.includes(ticket.provider)) throw denied();
-      permittedContentUrl(ticket.source, ticket.config); streamRequestHeaders(ticket.headers, ticket.config);
+      permittedStreamUrl(ticket.source, ticket.config); streamRequestHeaders(ticket.headers, ticket.config);
       range = this.range(ticket.kind, requestedRange);
     } catch (error) { return Promise.reject(mediaError(error)); }
     const key = `${token}:${range ?? ''}`; const cached = this.cache.get(key);
@@ -128,11 +164,13 @@ export class StreamMediaGateway {
     if (!ticket || ticket.expiresAt <= Date.now() || !['hls', 'mp4'].includes(ticket.kind)) return Promise.reject(unavailable());
     try {
       if (!ticket.config.enabled || !ticket.config.contentAuthorized || !ticket.config.allowedProviders.includes(ticket.provider)) throw denied();
-      permittedContentUrl(ticket.source, ticket.config); streamRequestHeaders(ticket.headers, ticket.config);
+      permittedStreamUrl(ticket.source, ticket.config); streamRequestHeaders(ticket.headers, ticket.config);
     } catch (error) { return Promise.reject(mediaError(error)); }
-    const cached = this.probes.get(path);
+    const probeKey = JSON.stringify([path, ticket.config.allowedMediaHosts, ticket.config.allowedStreamDomains,
+      ticket.config.allowedRequestOrigins, ticket.config.allowedProviders]);
+    const cached = this.probes.get(probeKey);
     if (cached && cached.expiresAt > Date.now()) return cached.error ? Promise.reject(cached.error) : Promise.resolve();
-    const pending = this.pendingProbes.get(path); if (pending) return pending;
+    const pending = this.pendingProbes.get(probeKey); if (pending) return pending;
     if (this.pendingProbes.size >= 12) return Promise.reject(new ApiError(503, 'STREAM_MEDIA_BUSY', 'Há muitas fontes sendo verificadas. Tente novamente em instantes.'));
     if (signal?.aborted) return Promise.reject(unavailable());
     const controller = new AbortController(); const abort = () => controller.abort();
@@ -140,14 +178,14 @@ export class StreamMediaGateway {
     const deadline = setTimeout(abort, 8_000);
     const aborted = new Promise<never>((_resolve, reject) => controller.signal.addEventListener('abort', () => reject(unavailable()), { once: true }));
     const task = Promise.race([this.probeTicket(token!, ticket.kind === 'mp4', controller.signal), aborted]).then(() => {
-      this.probes.set(path, { expiresAt: Math.min(ticket.expiresAt, Date.now() + 30_000) });
+      this.probes.set(probeKey, { expiresAt: Math.min(ticket.expiresAt, Date.now() + 30_000) });
     }, error => {
-      this.probes.set(path, { expiresAt: Date.now() + 5_000, error }); throw error;
+      this.probes.set(probeKey, { expiresAt: Date.now() + 5_000, error }); throw error;
     }).finally(() => {
-      clearTimeout(deadline); signal?.removeEventListener('abort', abort); this.pendingProbes.delete(path);
+      clearTimeout(deadline); signal?.removeEventListener('abort', abort); this.pendingProbes.delete(probeKey);
       while (this.probes.size > 512) this.probes.delete(this.probes.keys().next().value!);
     });
-    this.pendingProbes.set(path, task); return task;
+    this.pendingProbes.set(probeKey, task); return task;
   }
   private async probeTicket(token: string, mp4: boolean, signal: AbortSignal): Promise<void> {
     if (mp4) {
@@ -164,8 +202,19 @@ export class StreamMediaGateway {
       const ticket = child && this.tickets.get(child);
       if (!ticket) throw unavailable();
       if (ticket.kind === 'hls') { token = child!; continue; }
-      if (ticket.kind !== 'segment' || !lines.some(line => line.startsWith('#EXTINF:'))) throw unavailable();
+      if (!['segment', 'encrypted-segment'].includes(ticket.kind) || !lines.some(line => line.startsWith('#EXTINF:'))) throw unavailable();
       const init = lines.find(line => line.startsWith('#EXT-X-MAP:'))?.match(/URI="\/api\/streaming\/media\/([^"/?#]+)"/)?.[1];
+      if (ticket.kind === 'encrypted-segment') {
+        if (init || !ticket.encryption) throw unsupportedEncryption();
+        const key = (await this.media(ticket.encryption.keyToken, undefined, signal)).bytes;
+        const encrypted = (await this.media(child!, undefined, signal)).bytes;
+        try {
+          const decipher = createDecipheriv('aes-128-cbc', key, ticket.encryption.iv);
+          const plain = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+          if (!isTransportStream(plain)) throw unavailable();
+        } catch { throw unavailable(); }
+        return;
+      }
       if (init && !isMp4((await this.media(init, undefined, signal)).bytes)) throw unavailable();
       const segment = (await this.media(child!, undefined, signal)).bytes;
       if (!isTransportStream(segment) && !(init && isMp4(segment, true))) throw unavailable();
@@ -177,14 +226,29 @@ export class StreamMediaGateway {
     if (!text.replace(/^\uFEFF/, '').startsWith('#EXTM3U') || text.length > 1_000_000 || /\0/.test(text)) throw unavailable();
     let nextIsManifest = false;
     let references = 0;
-    const descendant = (raw: string, kind: MediaKind): string => {
+    let encryption: { keyToken: string; iv?: Uint8Array } | null = null;
+    let sequence = 0n, sequenceSeen = false, segmentSeen = false;
+    const descendant = (raw: string, kind: MediaKind, cipher?: SegmentEncryption): string => {
       if (++references > 4096 || !raw || raw.length > 8192 || /[\r\n\0]/.test(raw)) throw unavailable();
-      return this.issue(ticket.config, ticket.provider, new URL(raw, ticket.source).href, kind, ticket.headers, ticket.expiresAt);
+      return this.issue(ticket.config, ticket.provider, new URL(raw, ticket.source).href, kind, ticket.headers, ticket.expiresAt, cipher);
     };
     return text.split(/\r?\n/).map(line => {
       const value = line.trim();
-      if (/^#EXT-X-(?:SESSION-)?KEY:/.test(value) && !/^#EXT-X-KEY:METHOD=NONE\s*$/.test(value)) {
-        throw new ApiError(502, 'ENCRYPTED_MEDIA_UNSUPPORTED', 'Esta fonte usa criptografia não compatível com a reprodução local. Escolha outra fonte.');
+      if (/^#EXT-X-(?:SESSION-)?KEY\b/i.test(value)) {
+        const parsed = hlsKey(value);
+        if (!parsed) { encryption = null; return value; }
+        if (/(?:^|\r?\n)\s*#EXT-X-(?:MAP|BYTERANGE):/.test(text)) throw unsupportedEncryption();
+        const path = descendant(parsed.uri, 'key');
+        encryption = { keyToken: path.split('/').at(-1)!, iv: parsed.iv };
+        const rewritten = value.replace(/\bURI="[^"\r\n]*"/, `URI="${path}"`);
+        // HLS.js preserves an explicit hexadecimal IV's byte length. Expand
+        // short values, including zero, so WebCrypto receives all 16 bytes.
+        return parsed.iv ? rewritten.replace(/\bIV=0x[0-9a-f]{1,32}(?=,|$)/i, `IV=0x${Buffer.from(parsed.iv).toString('hex')}`) : rewritten;
+      }
+      if (value.startsWith('#EXT-X-MEDIA-SEQUENCE:')) {
+        const number = value.slice('#EXT-X-MEDIA-SEQUENCE:'.length);
+        if (sequenceSeen || segmentSeen || !/^\d{1,20}$/.test(number) || BigInt(number) > 0xffffffffffffffffn) throw unavailable();
+        sequence = BigInt(number); sequenceSeen = true;
       }
       if (!value || value.startsWith('#') && !value.includes('URI=')) {
         if (value.startsWith('#EXT-X-STREAM-INF:')) nextIsManifest = true;
@@ -192,7 +256,16 @@ export class StreamMediaGateway {
       }
       if (!value.startsWith('#')) {
         const kind = nextIsManifest || /\.m3u8(?:[?#]|$)/i.test(value) ? 'hls' : 'segment';
-        nextIsManifest = false; return descendant(value, kind);
+        nextIsManifest = false;
+        if (kind === 'hls') { if (encryption) throw unsupportedEncryption(); return descendant(value, kind); }
+        segmentSeen = true;
+        // HLS.js derives an omitted IV from only the low 32 sequence bits.
+        // Refuse that unsupported case instead of verifying with a different IV.
+        if (encryption && !encryption.iv && sequence > 0xffffffffn) throw unsupportedEncryption();
+        const cipher = encryption && { keyToken: encryption.keyToken, iv: encryption.iv ?? Buffer.from(sequence.toString(16).padStart(32, '0'), 'hex') };
+        if (sequence > 0xffffffffffffffffn) throw unavailable();
+        sequence++;
+        return descendant(value, cipher ? 'encrypted-segment' : kind, cipher || undefined);
       }
       const kind: MediaKind = /^#EXT-X-(?:MEDIA|I-FRAME-STREAM-INF):/.test(value) ? 'hls' : 'segment';
       let replaced = 0;
@@ -211,7 +284,7 @@ export class StreamMediaGateway {
         if (controller.signal.aborted) reject(new Error('timeout'));
         else controller.signal.addEventListener('abort', () => reject(new Error('timeout')), { once: true });
       });
-      const url = permittedContentUrl(ticket.source, ticket.config);
+      const url = permittedStreamUrl(ticket.source, ticket.config);
       const records = await Promise.race([this.resolver(url.hostname), aborted]);
       if (!records.length || records.length > 32 || records.some(row => !publicImageAddress(row.address) || row.family !== isIP(row.address))) throw denied();
       const target = records.find(row => row.family === 4) ?? records[0];
@@ -220,9 +293,11 @@ export class StreamMediaGateway {
       const mime = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? '';
       const length = Number(response.headers.get('content-length') ?? 0);
       const explicitRange = range && /^bytes=(\d+)-(\d+)$/.exec(range);
-      const maxBytes = ticket.kind === 'hls' ? 1_000_000 : ticket.kind === 'subtitle' ? 4_000_000
+      const maxBytes = ticket.kind === 'key' ? 16 : ticket.kind === 'hls' ? 1_000_000 : ticket.kind === 'subtitle' ? 4_000_000
         : ticket.kind === 'mp4' ? Math.min(RANGE_BYTES, explicitRange ? Number(explicitRange[2]) - Number(explicitRange[1]) + 1 : RANGE_BYTES) : 12_000_000;
       const goodMime = ticket.kind === 'hls' ? ['application/vnd.apple.mpegurl', 'application/x-mpegurl', 'audio/mpegurl', 'audio/x-mpegurl', 'text/plain', 'application/octet-stream'].includes(mime)
+        : ticket.kind === 'key' ? ['application/octet-stream', 'binary/octet-stream', 'application/binary'].includes(mime)
+        : ticket.kind === 'encrypted-segment' ? ['application/octet-stream', 'video/mp2t'].includes(mime)
         : ticket.kind === 'subtitle' ? ['text/vtt', 'application/x-subrip', 'text/plain', 'application/octet-stream', 'text/srt'].includes(mime)
           : BINARY_MEDIA_MIME.has(mime) || ticket.kind === 'segment';
       if ((response.status !== 200 && !(range && response.status === 206)) || !goodMime || !Number.isFinite(length) || length < 0 || length > maxBytes) throw unavailable();
@@ -245,6 +320,7 @@ export class StreamMediaGateway {
       if (!bytes || length > 0 && bytes !== length) throw unavailable();
       let result = new Uint8Array(bytes); let offset = 0;
       for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.byteLength; }
+      if (ticket.kind === 'key' && result.byteLength !== 16 || ticket.kind === 'encrypted-segment' && (result.byteLength < 16 || result.byteLength % 16 !== 0)) throw unavailable();
       // Some HLS CDNs attach unrelated MIME labels to individual TS segments.
       // Validate the complete packet sequence before correcting the type. Actual
       // HTML, scripts, stylesheets and images never pass this media sniff.

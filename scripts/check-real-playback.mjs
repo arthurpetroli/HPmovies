@@ -4,9 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // Explicit live-source check: no route interception, fixtures or demo fallback.
-const titles = new Map([[20, 'Naruto'], [1535, 'Death Note'], [1, 'Cowboy Bebop'], [16498, 'Shingeki no Kyojin'], [21, 'One Piece']]);
-const ids = process.argv.slice(2).length ? process.argv.slice(2).map(Number) : [...titles.keys()];
-if (ids.some(id => !titles.has(id))) throw new Error('IDs aceitos: 20, 1535, 1, 16498, 21.');
+const titles = new Map([[20, 'Naruto'], [1535, 'Death Note'], [1, 'Cowboy Bebop'], [16498, 'Shingeki no Kyojin'], [21, 'One Piece'],
+  [127230, 'Chainsaw Man'], [154587, 'Sousou no Frieren'], [101922, 'Kimetsu no Yaiba'], [21087, 'One Punch Man'],
+  [269, 'Bleach'], [813, 'Dragon Ball Z'], [164, 'Fullmetal Alchemist'], [113415, 'Jujutsu Kaisen'], [140960, 'SPY×FAMILY'],
+  [151807, 'Solo Leveling'], [11061, 'Hunter x Hunter (2011)'], [21519, 'Kimi no Na wa.'], [199, 'Sen to Chihiro no Kamikakushi']]);
+const ids = process.argv.slice(2).length ? process.argv.slice(2).map(Number) : [20, 1535, 1, 16498, 21];
+// A working media file can still be an upstream title mismatch. In the known
+// Demon Slayer regression, episode 1 resolved to a 105-minute compilation.
+const durationWindows = new Map([[101922, { minimum: 18 * 60, maximum: 35 * 60 }]]);
+if (ids.some(id => !titles.has(id))) throw new Error(`IDs aceitos: ${[...titles.keys()].join(', ')}.`);
 const origin = new URL(process.env.STREAM_CHECK_ORIGIN || 'http://127.0.0.1:5173');
 if (!['http:', 'https:'].includes(origin.protocol) || origin.username || origin.password || origin.search || origin.hash) throw new Error('Informe uma origem HTTP válida.');
 const directory = join(tmpdir(), `hpmovies-playback-${Date.now()}`);
@@ -40,6 +46,8 @@ try {
         decodedAudioBytes: video.webkitAudioDecodedByteCount ?? null,
         captionCues: [...video.textTracks].filter(track => track.mode === 'hidden').map(track => ({ language: track.language, count: track.cues?.length ?? 0 })),
       }));
+      const durationWindow = durationWindows.get(id);
+      result.durationMatchesExpectedEpisode = !durationWindow || result.beforeSeek.duration >= durationWindow.minimum && result.beforeSeek.duration <= durationWindow.maximum;
       await page.getByRole('region', { name: 'Player de vídeo' }).focus();
       await page.keyboard.press('ArrowRight');
       await page.waitForFunction(position => document.querySelector('video')?.currentTime >= position + 11, result.beforeSeek.time, { timeout: 30000 });
@@ -61,7 +69,7 @@ try {
       result.mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
       await page.screenshot({ path: join(directory, `${id}-mobile.png`) });
       result.alerts = await page.getByRole('alert').allTextContents();
-      result.passed = result.beforeSeek.decodedFrames > 0 && typeof result.beforeSeek.decodedAudioBytes === 'number' && result.beforeSeek.decodedAudioBytes > 0 && result.portugueseCaptionVisible && !result.afterSeek.error && !result.mobileOverflow && !result.pageErrors.length && !result.failedRequests.length && !result.alerts.length && result.mediaStatuses.every(status => status === 200 || status === 206);
+      result.passed = result.durationMatchesExpectedEpisode && result.beforeSeek.decodedFrames > 0 && typeof result.beforeSeek.decodedAudioBytes === 'number' && result.beforeSeek.decodedAudioBytes > 0 && result.portugueseCaptionVisible && !result.afterSeek.error && !result.mobileOverflow && !result.pageErrors.length && !result.failedRequests.length && !result.alerts.length && result.mediaStatuses.every(status => status === 200 || status === 206);
     } catch (error) {
       result.error = error instanceof Error ? error.message.split('\n')[0] : String(error);
       result.alerts = await page.getByRole('alert').allTextContents();

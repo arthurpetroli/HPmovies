@@ -1,8 +1,7 @@
 import { useCallback, useState } from 'react';
-import { ArrowRight, BookOpen, Loader2, Search, Server } from 'lucide-react';
+import { ArrowRight, BookOpen, Loader2, RefreshCw, Search, Server, WifiOff } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { ContentChapterList, ContentKind } from '../../shared/content';
-import { CatalogError } from '../components/ui/CatalogState';
 import { contentService, sourceParams, sourceQuery, sourceSuffix } from '../services/content';
 import { useCatalogRequest } from '../hooks/useCatalogRequest';
 import { contentLanguageLabel, readingLanguages, readReadingLanguage, saveReadingLanguage, validReadingLanguage } from '../services/readingLanguages';
@@ -87,7 +86,7 @@ function SourceResults({ params }: { params: URLSearchParams }) {
   }, [id, kind, serialized, episode, navigate]);
   const { data, loading, error } = useCatalogRequest(`source:${kind}:${id}:${serialized}:${retry}`, load);
   if (loading) return <div role="status" className="mt-8 flex items-center gap-3 text-slate-300"><Loader2 className="animate-spin text-teal-300" size={20} />Consultando as fontes conectadas…</div>;
-  if (error) return <div className="mt-8"><CatalogError message={error} onRetry={() => setRetry(value => value + 1)} /></div>;
+  if (error) return <div className="catalog-state mt-8" role="alert"><span className="state-icon"><WifiOff size={28} /></span><h2>{kind === 'anime' ? 'Não foi possível abrir este episódio' : 'Não foi possível carregar os capítulos'}</h2><p>{error}</p><button className="button-primary" onClick={() => setRetry(value => value + 1)}><RefreshCw size={16} />Tentar novamente</button></div>;
   if (!data) return null;
   const query = sourceQuery(new URLSearchParams(serialized));
   const availableChapters = data.chapters.filter(chapter => chapter.available);

@@ -70,7 +70,12 @@ describe('integration configuration and permission separation', () => {
 
 describe('source normalization', () => {
   it.each([
-    ['pt-br', 'pt-BR'], ['pt', 'pt'], ['ja', 'ja'], ['sub', 'und'], ['dub', 'und'], ['Brazilian Portuguese', 'und'], [undefined, 'und'],
+    ['pt-br', 'pt-BR'], ['pt', 'pt'], ['ja', 'ja'], ['sub', 'und'], ['dub', 'und'], ['Brazilian Portuguese', 'pt-BR'], [undefined, 'und'],
+    ['Portuguese (- Português (Brasil))', 'pt-BR'], ['Portuguese', 'pt'],
+    ['Portuguese (- Portuguese(Brazil))', 'pt-BR'], ['Portuguese (- Portugues(Brasil))', 'pt-BR'],
+    ['Portuguese (- Brazilian)', 'pt-BR'], ['Portuguese 2', 'pt'],
+    ['Portuguese (Portuguese - Brazilian [Full])', 'pt-BR'], ['Portuguese (Portuguese - Brazilian)', 'pt-BR'],
+    ['Portuguese (Portuguese - [Full])', 'pt'], ['Portuguese (- European)', 'pt-PT'],
   ])('normalizes explicit language %s as %s without inventing PT-BR', (raw, expected) => expect(normalizeTokoLanguage(raw)).toBe(expected));
 
   it.each([
@@ -89,6 +94,13 @@ describe('source normalization', () => {
     expect(normalizeTokoSource({ ...stream(), type: 'embed' }, config())).toBeUndefined();
     expect(normalizeTokoSource({ ...stream(), type: 'torrent' }, config())).toBeUndefined();
     expect(normalizeTokoSource({ ...stream(), subtitles: [{ url: 'https://evil.org/sub.vtt', language: 'pt-br', label: 'PT-BR' }] }, config())?.subtitles).toEqual([]);
+  });
+
+  it('permits only the configured streaming DNS trees and rejects lookalike suffixes', () => {
+    expect(permittedMediaUrl('https://rotating.media.example.org/video.m3u8', [], ['media.example.org'])).toBe('https://rotating.media.example.org/video.m3u8');
+    expect(permittedMediaUrl('https://media.example.org/video.m3u8', [], ['media.example.org'])).toBeDefined();
+    expect(permittedMediaUrl('https://notmedia.example.org/video.m3u8', [], ['media.example.org'])).toBeUndefined();
+    expect(permittedMediaUrl('https://media.example.org.evil.com/video.m3u8', [], ['media.example.org'])).toBeUndefined();
   });
 });
 
@@ -148,11 +160,25 @@ describe('verified Toko JSON HTTP contract', () => {
     const probe = vi.spyOn(streamMediaGateway, 'probe').mockRejectedValue(new ApiError(502, 'STREAM_MEDIA_UNAVAILABLE', 'Unavailable'));
     try {
       const provider = new TokoStreamingProvider({ client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
-      expect(await provider.episodes('1')).toMatchObject({ available: false, state: 'connection_error', episodes: [{ available: false }, {}] });
+      const availability = await provider.episodes('1');
+      expect(availability).toMatchObject({ available: false, state: 'connection_error', episodes: [{ number: 1 }, {}] });
+      expect(availability.episodes[0].available).toBeUndefined();
       await expect(provider.playback('toko:1:1')).rejects.toMatchObject({ code: 'STREAM_MEDIA_UNAVAILABLE' });
       expect(probe.mock.calls[0][0]).toMatch(/^\/api\/streaming\/media\/[0-9a-f-]{36}$/);
       expect(probe.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
     } finally { probe.mockRestore(); }
+  });
+
+  it('preserves a real source episode index when resolving the first video throws', async () => {
+    const fetcher = vi.fn(async (raw: string) => {
+      if (raw.includes('/health')) return json(health);
+      if (raw.includes('/index/episodes')) return json(index);
+      return json({ error: 'Unavailable' }, 503);
+    });
+    const provider = new TokoStreamingProvider({ client: new TokoHttpClient({ ...config(), retries: 0 }, { fetcher: fetcher as typeof fetch }) });
+    const availability = await provider.episodes('1');
+    expect(availability).toMatchObject({ available: false, state: 'connection_error', episodes: [{ number: 1 }, { number: 2 }] });
+    expect(availability.episodes[0].available).toBeUndefined();
   });
 
   it('returns only verified candidates with at most two simultaneous probes', async () => {

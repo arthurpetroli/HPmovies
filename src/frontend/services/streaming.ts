@@ -27,7 +27,7 @@ export const streamingService: AnimeStreamingProvider = {
       const availability = value as StreamingAvailability | null;
       return !!availability && typeof availability.available === 'boolean' && Array.isArray(availability.episodes)
         && availability.episodes.every((episode) => !!episode && typeof episode.id === 'string' && typeof episode.title === 'string');
-    }),
+    }, { timeoutMs: 65_000 }),
   playback: (episodeId, titles) => requestData(`/streaming/episodes/${encodeURIComponent(episodeId)}${hints(titles)}`,
     isPlayback, { timeoutMs: 65_000 }).then(playbackMedia),
 };

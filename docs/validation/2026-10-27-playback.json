@@ -1,0 +1,146 @@
+{
+  "checkedAt": "2026-10-27T14:39:50.245Z",
+  "results": [
+    {
+      "id": 101922,
+      "title": "Kimetsu no Yaiba",
+      "episode": 1,
+      "passed": true,
+      "pageErrors": [],
+      "failedRequests": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "subtitleStatuses": [
+        200
+      ],
+      "beforeSeek": {
+        "time": 10.01941,
+        "duration": 1419.960605,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 243,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 211660,
+        "captionCues": [
+          {
+            "language": "pt-BR",
+            "count": 303
+          }
+        ]
+      },
+      "durationMatchesExpectedEpisode": true,
+      "afterSeek": {
+        "time": 21.026012,
+        "readyState": 4,
+        "paused": false,
+        "error": null
+      },
+      "portugueseCaptionVisible": true,
+      "mobileOverflow": false,
+      "alerts": []
+    },
+    {
+      "id": 11061,
+      "title": "Hunter x Hunter (2011)",
+      "episode": 1,
+      "passed": true,
+      "pageErrors": [],
+      "failedRequests": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "subtitleStatuses": [
+        200
+      ],
+      "beforeSeek": {
+        "time": 10.016209,
+        "duration": 1411.4519229999996,
+        "width": 640,
+        "height": 360,
+        "decodedFrames": 245,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 165566,
+        "captionCues": [
+          {
+            "language": "pt-BR",
+            "count": 293
+          }
+        ]
+      },
+      "durationMatchesExpectedEpisode": true,
+      "afterSeek": {
+        "time": 21.027119,
+        "readyState": 4,
+        "paused": false,
+        "error": null
+      },
+      "portugueseCaptionVisible": true,
+      "mobileOverflow": false,
+      "alerts": []
+    }
+  ]
+}

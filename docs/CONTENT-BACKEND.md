@@ -45,6 +45,7 @@ Todas as respostas de sucesso usam `{ "data": ... }`. `source` seleciona o adapt
 | Diagnósticos | `GET /api/providers` |
 | Imagem emitida por capítulo | `GET /api/content/image/:token` |
 | Mídia emitida por fonte/manifesto HLS | `GET /api/streaming/media/:token` |
+| Índice real de episódios | `GET /api/streaming/anime/:anilistId/episodes` |
 | Resolver episódio explícito | `GET /api/content/anime/:anilistId/episodes/:numero` |
 | Reabrir reprodução normalizada | `GET /api/streaming/episodes/:episodeId` |
 | Capítulos de mangá | `GET /api/content/manga/:workId/chapters` |
@@ -65,7 +66,7 @@ curl 'http://127.0.0.1:4000/api/content/novel/anilist:30001/chapters?source=tata
 
 Depois de listar capítulos, use o `id` retornado para pedir páginas ou texto. Esse ID é um hash estável; não contém a URL upstream. A API reconstrói a associação pela fonte após um reinício, verifica obra/tipo/provedor e transmite `providerChapterId` somente a partir da listagem validada. Idiomas e créditos são preservados. A lista prioriza PT-BR explícito, registra resultados parciais e isola falhas por fonte. Um capítulo com páginas que exigem cabeçalhos ou hosts sem configuração recebe erro integral. Os cabeçalhos autorizados são aplicados no transporte de imagens, com limite de bytes, DNS público fixado na conexão TLS e sem redirecionamentos.
 
-O host Tatakai não fornece um índice de episódios automaticamente. A rota de resolução explícita funciona com extensões que retornam mídia para o episódio pedido; a listagem não inventa episódios com base em quantidade do catálogo. O player existente reconhece IDs `tatakai:<AniListId>:<episodio>` e `toko:<AniListId>:<episodio>`. Podem ser abertos em `/watch/<id>` quando a fonte estiver configurada.
+O host local agora expõe `/api/v3/:namespace/index/episodes` por um resolver validado. Para Nebula, consulta o índice público paginado pelo ID AniList, valida a identidade e limita páginas, bytes, concorrência e tempo; outros provedores usam o método de índice da extensão quando existente. Não inventa episódios a partir da quantidade do catálogo. A página do anime preserva o índice mesmo quando uma sondagem de vídeo falha, permitindo resolver cada episódio individualmente. O player reconhece IDs `tatakai:<AniListId>:<episodio>` e `toko:<AniListId>:<episodio>`.
 
 ## Addon Stremio por HTTP
 

@@ -109,6 +109,8 @@ test('a source without a stream shows its real failure without opening a demo', 
   await mockSources(page);
   await page.goto(`/sources?${new URLSearchParams({ kind: 'anime', id, title, source: 'tatakai', episode: '1', open: '1' })}`);
   await expect(page.getByText('A fonte conectada não retornou vídeo para este episódio.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Não foi possível abrir este episódio' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'O catálogo está fora de alcance' })).toHaveCount(0);
   expect(new URL(page.url()).pathname).toBe('/sources');
   await expect(page.locator('video')).toHaveCount(0);
 });
