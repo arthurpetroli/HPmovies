@@ -30,3 +30,7 @@ test-results/
 
 # Local executable source bundles and operator configuration
 .local/
+
+# Local Python skill caches
+__pycache__/
+*.py[cod]
