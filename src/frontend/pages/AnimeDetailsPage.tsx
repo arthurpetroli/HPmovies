@@ -1,217 +1,61 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import aniwatchService from '../services/aniwatch';
+import { useCallback, useState } from 'react';
+import { ArrowLeft, ArrowUpRight, Bookmark, Check, Clock3, ExternalLink, Heart, MonitorPlay, Play, Star } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
+import { AnimeEpisodeList } from '../components/anime/AnimeEpisodeList';
+import { sourceSuffix } from '../services/content';
+import { AnimeRowCarousel } from '../components/anime/AnimeRowCarousel';
+import { genreLabel } from '../components/filters/genreLabels';
+import { CatalogError } from '../components/ui/CatalogState';
+import { catalogService } from '../services/catalog';
+import { libraryService, useLibrary } from '../services/library';
+import { streamingService } from '../services/streaming';
+import { useCatalogRequest } from '../hooks/useCatalogRequest';
 
-export const AnimeDetailsPage: React.FC = () => {
-  const { animeId } = useParams<{ animeId: string }>();
-  const navigate = useNavigate();
-
-  const [animeInfo, setAnimeInfo] = useState<any>(null);
-  const [episodes, setEpisodes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const loadAnimeData = async () => {
-      if (!animeId) {
-        setError('ID do anime não fornecido');
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError(null);
-
-        console.log('📺 Carregando dados do anime:', animeId);
-
-        // Buscar informações do anime
-        const infoResponse = await aniwatchService.getAnimeInfo(animeId);
-        console.log('✅ Info do anime:', infoResponse);
-        
-        // A resposta vem com { success: true, data: { anime: {...} } }
-        const info = infoResponse?.data?.anime || infoResponse?.anime || infoResponse;
-        setAnimeInfo(info);
-
-        // Buscar episódios
-        const epsResponse = await aniwatchService.getAnimeEpisodes(animeId);
-        console.log('✅ Episódios:', epsResponse);
-        
-        // A resposta vem com { success: true, data: { episodes: [...] } }
-        const eps = epsResponse?.data?.episodes || epsResponse?.episodes || [];
-        setEpisodes(eps);
-
-      } catch (err: any) {
-        console.error('❌ Erro ao carregar anime:', err);
-        setError(err.response?.data?.message || 'Erro ao carregar anime');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadAnimeData();
-  }, [animeId]);
-
-  const handleWatchEpisode = (episode: any) => {
-    // O episodeId já vem no formato correto: "steinsgate-3?ep=213"
-    console.log('🎬 Clicando no episódio:', episode);
-    console.log('🎯 Episode ID:', episode.episodeId);
-    navigate(`/watch/${encodeURIComponent(episode.episodeId)}`);
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-pink-500 border-t-transparent" />
-          <p className="text-white">Carregando anime...</p>
+const statusLabels: Record<string, string> = { RELEASING: 'Em exibição', FINISHED: 'Concluído', NOT_YET_RELEASED: 'Em breve', CANCELLED: 'Cancelado', HIATUS: 'Em pausa' };
+const relationLabels: Record<string, string> = { SEQUEL: 'Continuação', PREQUEL: 'Anterior', SIDE_STORY: 'História paralela', ALTERNATIVE: 'Versão alternativa', SPIN_OFF: 'Spin-off', PARENT: 'História principal', SUMMARY: 'Resumo', COMPILATION: 'Compilação', OTHER: 'Relacionado', CHARACTER: 'Personagem' };
+export function AnimeDetailsPage() {
+  const { animeId = '' } = useParams();
+  const [retry, setRetry] = useState(0);
+  const [episodeRetry, setEpisodeRetry] = useState(0);
+  const [expandedAnime, setExpandedAnime] = useState('');
+  const expanded = expandedAnime === animeId;
+  const loader = useCallback(() => catalogService.details(animeId), [animeId]);
+  const { data: anime, loading, error } = useCatalogRequest(`details:${animeId}:${retry}`, loader);
+  const titleKey = JSON.stringify([anime?.title, anime?.titleOriginal].filter(Boolean));
+  const streamLoader = useCallback(() => {
+    const titles = JSON.parse(titleKey) as string[];
+    return titles.length ? streamingService.episodes(animeId, titles) : Promise.resolve(null);
+  }, [animeId, titleKey]);
+  const { data: availability, error: streamError, loading: episodesLoading } = useCatalogRequest(`episodes:${animeId}:${titleKey}:${episodeRetry}`, streamLoader);
+  const { list } = useLibrary();
+  const entry = list.find((saved) => saved.anime.id === animeId);
+  if (loading) return <main id="main-content" className="details-page" aria-busy="true" aria-label="Carregando detalhes"><div className="details-banner skeleton" /><div className="content-width details-body"><div className="details-main"><div className="details-poster skeleton" /><div className="details-content"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-meta" /><div className="skeleton skeleton-description" /></div></div></div></main>;
+  if (error || !anime) return <main id="main-content" className="page-shell content-width"><Link className="back-link" to="/explore"><ArrowLeft size={16} />Voltar ao catálogo</Link><CatalogError message={error} onRetry={() => setRetry((value) => value + 1)} /></main>;
+  const links = (anime.externalLinks || []).filter((link) => /^https:\/\//i.test(link.url));
+  const seasons = (anime.relations || []).filter((relation) => relation.anime.id !== anime.id);
+  const firstEpisode = availability?.episodes.find(episode => episode.available !== false);
+  const episodeSuffix = sourceSuffix({ titles: [anime.title, anime.titleOriginal || ''].filter(Boolean) });
+  return <main id="main-content" className="details-page">
+    <div className="details-banner">{(anime.banner || anime.poster) && <img src={anime.banner || anime.poster} alt="" />}<div className="details-banner-shade" /><div className="content-width"><Link to="/explore" className="back-link"><ArrowLeft size={16} />Voltar ao catálogo</Link></div></div>
+    <div className="content-width details-body">
+      <div className="details-main">
+        <div className="details-aside"><img className="details-poster" src={anime.poster} alt={anime.title} /><div className="details-aside-note"><Bookmark size={15} />Seu próximo anime favorito?</div></div>
+        <div className="details-content">
+          <div className="details-top-meta">{anime.status && <span className={`status-pill ${anime.status === 'RELEASING' ? 'airing' : ''}`}>{anime.status === 'RELEASING' && <span />}{statusLabels[anime.status] || anime.status}</span>}{anime.format && <span>{anime.format.replace('_', ' ')}</span>}{anime.year && <span>{anime.year}</span>}</div>
+          <h1>{anime.title}</h1>
+          {anime.titleOriginal && anime.titleOriginal !== anime.title && <p className="details-original">{anime.titleOriginal}</p>}
+          <div className="details-stats">{anime.score != null && <div className="details-score"><Star size={20} fill="currentColor" /><strong>{(anime.score / 10).toFixed(1)}</strong><span>Nota no AniList</span></div>}{anime.episodeCount != null && <div><MonitorPlay size={17} /><span>{anime.episodeCount} episódios no catálogo</span></div>}{anime.duration != null && <div><Clock3 size={16} /><span>{anime.duration} min por episódio</span></div>}</div>
+          <div className="details-genres">{anime.genres.map((genre) => <Link className="genre-chip" key={genre} to={`/explore?genre=${encodeURIComponent(genre)}`}>{genreLabel(genre)}</Link>)}</div>
+          <p className={`details-description ${expanded ? 'expanded' : ''}`}>{anime.description || 'A sinopse deste anime ainda não está disponível no catálogo.'}</p>
+          {anime.description && anime.description.length > 400 && <button className="text-link synopsis-toggle" onClick={() => setExpandedAnime(expanded ? '' : animeId)} aria-expanded={expanded}>{expanded ? 'Ler menos' : 'Ler sinopse completa'}</button>}
+          <div className="details-buttons">{firstEpisode && <Link className="button-primary" to={`/watch/${encodeURIComponent(firstEpisode.id)}${episodeSuffix}`} state={{ anime }}><Play size={17} fill="currentColor" />Assistir</Link>}<button className={firstEpisode ? 'button-secondary' : 'button-primary'} onClick={() => libraryService.toggle(anime)} aria-pressed={!!entry}>{entry ? <Check size={17} /> : <Bookmark size={17} />}{entry ? 'Na minha lista' : 'Adicionar à lista'}</button><button className={`button-secondary favorite-button ${entry?.favorite ? 'selected' : ''}`} onClick={() => libraryService.toggleFavorite(anime)} aria-pressed={!!entry?.favorite}>{<Heart size={17} fill={entry?.favorite ? 'currentColor' : 'none'} />}{entry?.favorite ? 'Favorito' : 'Favoritar'}</button></div>
         </div>
       </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <p className="text-red-400 text-xl">❌ {error}</p>
-          <button
-            onClick={() => navigate('/')}
-            className="bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-lg transition"
-          >
-            Voltar para Home
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!animeInfo) {
-    return (
-      <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center">
-        <p className="text-white">Anime não encontrado</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-900 pt-20">
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-8">
-        {/* Botão voltar */}
-        <button
-          onClick={() => navigate(-1)}
-          className="text-pink-500 hover:text-pink-400 transition flex items-center gap-2"
-        >
-          <span>←</span> Voltar
-        </button>
-
-        {/* Info do anime */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="md:col-span-1">
-            <img
-              src={animeInfo.info?.poster || animeInfo.poster}
-              alt={animeInfo.info?.name || animeInfo.name}
-              className="w-full rounded-lg shadow-lg"
-              onError={(e) => {
-                e.currentTarget.src = 'https://via.placeholder.com/300x450?text=No+Image';
-              }}
-            />
-          </div>
-
-          <div className="md:col-span-2 space-y-4">
-            <h1 className="text-3xl md:text-4xl font-bold text-white">
-              {animeInfo.info?.name || animeInfo.name || 'Sem título'}
-            </h1>
-
-            {animeInfo.info?.description && (
-              <p className="text-gray-300 leading-relaxed">
-                {animeInfo.info.description}
-              </p>
-            )}
-
-            {/* Stats */}
-            <div className="flex flex-wrap gap-2">
-              {animeInfo.info?.stats?.episodes?.sub && (
-                <span className="bg-pink-500/20 text-pink-400 px-3 py-1 rounded-full text-sm">
-                  {animeInfo.info.stats.episodes.sub} eps (leg)
-                </span>
-              )}
-              {animeInfo.info?.stats?.episodes?.dub > 0 && (
-                <span className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-sm">
-                  {animeInfo.info.stats.episodes.dub} eps (dub)
-                </span>
-              )}
-              {animeInfo.info?.stats?.type && (
-                <span className="bg-purple-500/20 text-purple-400 px-3 py-1 rounded-full text-sm">
-                  {animeInfo.info.stats.type}
-                </span>
-              )}
-              {animeInfo.info?.stats?.rating && (
-                <span className="bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full text-sm">
-                  ⭐ {animeInfo.info.stats.rating}
-                </span>
-              )}
-            </div>
-
-            {/* Gêneros */}
-            {animeInfo.moreInfo?.genres && animeInfo.moreInfo.genres.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="text-white font-semibold">Gêneros</h3>
-                <div className="flex flex-wrap gap-2">
-                  {animeInfo.moreInfo.genres.map((genre: string, idx: number) => (
-                    <span
-                      key={idx}
-                      className="bg-gray-700 text-gray-200 px-3 py-1 rounded-full text-sm"
-                    >
-                      {genre}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Lista de episódios */}
-        {episodes.length > 0 && (
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-white">
-              Episódios ({episodes.length})
-            </h2>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-              {episodes.map((episode: any) => (
-                <button
-                  key={episode.episodeId}
-                  onClick={() => handleWatchEpisode(episode)}
-                  className="bg-gray-800 hover:bg-pink-500 text-white px-4 py-3 rounded-lg transition-all hover:scale-105 font-medium group"
-                  title={episode.title || `Episódio ${episode.number}`}
-                >
-                  <div className="text-center">
-                    <p className="text-lg font-bold">EP {episode.number}</p>
-                    {episode.title && (
-                      <p className="text-xs text-gray-400 group-hover:text-white truncate mt-1">
-                        {episode.title}
-                      </p>
-                    )}
-                    {episode.isFiller && (
-                      <span className="block text-xs text-yellow-400 mt-1">
-                        Filler
-                      </span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {episodes.length === 0 && (
-          <div className="bg-gray-800 rounded-lg p-8 text-center">
-            <p className="text-gray-400">Nenhum episódio disponível</p>
-          </div>
-        )}
-      </div>
+      <AnimeEpisodeList key={animeId} anime={anime} availability={availability} loading={episodesLoading} error={streamError} onRetry={() => setEpisodeRetry(value => value + 1)} />
+      {links.length > 0 && <section className="external-section"><div><h3>Encontre mais sobre esta história</h3><p>Links oficiais e serviços informados pelo AniList. A disponibilidade varia por região.</p></div><div className="external-links">{links.map((link) => <a className="button-secondary button-sm" key={link.url} href={link.url} target="_blank" rel="noopener noreferrer">{link.site}<ExternalLink size={14} /></a>)}</div></section>}
+      {seasons.length > 0 && <section className="catalog-row"><div className="section-heading"><div><h2>Temporadas e histórias relacionadas</h2><p>Continue explorando esse universo.</p></div></div><div className="relations-carousel scrollbar-hide">{seasons.map(({ relation, anime: related }) => <Link key={`${relation}-${related.id}`} className="relation-card" to={`/anime/${related.id}`}><img src={related.poster} alt="" loading="lazy" /><div><span>{relationLabels[relation] || relation}</span><h3>{related.title}</h3><small>{[related.year, related.format?.replace('_', ' ')].filter(Boolean).join(' · ')}</small></div><ArrowUpRight size={17} /></Link>)}</div></section>}
+      {!!anime.characters?.length && <section className="catalog-row"><div className="section-heading"><div><h2>Quem faz parte desta história</h2><p>Personagens e seus papéis no anime.</p></div></div><div className="character-list">{anime.characters.map(character => <article key={character.id}>{character.image && <img src={character.image} alt="" loading="lazy" />}<div><h3>{character.name}</h3><p>{character.role === 'MAIN' ? 'Principal' : character.role === 'SUPPORTING' ? 'Coadjuvante' : 'Participação'}</p></div></article>)}</div></section>}
+      {anime.recommendations && <AnimeRowCarousel title="Mais histórias para sua lista" subtitle="Recomendações da comunidade do AniList." animes={anime.recommendations} />}
     </div>
-  );
-};
+  </main>;
+}

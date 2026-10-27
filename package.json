@@ -4,25 +4,28 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:backend": "nodemon --watch src/aniwatch-apis --exec tsx src/aniwatch-apis/src/server.ts",
+    "dev": "concurrently --kill-others --names FONTES,API,WEB \"npm run dev:source-host\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "tsx watch src/aniwatch-apis/src/server.ts",
     "dev:frontend": "vite",
-    "build": "vite build && npm run build:backend",
+    "build": "npm run typecheck && vite build && npm run build:backend",
     "start": "npm run start:backend",
     "lint": "eslint .",
     "preview": "vite preview",
     "build:backend": "tsc -p tsconfig.backend.json",
-    "start:backend": "if [ -f dist/backend/server.js ]; then node dist/backend/server.js; else echo '⚠️ Build artifact not found, falling back to ts-node' && ts-node --esm --project tsconfig.backend.json src/aniwatch-apis/src/server.ts; fi"
+    "start:backend": "node dist/backend/aniwatch-apis/src/server.js",
+    "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json && tsc -p tsconfig.backend.json --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "diagnose:aniwatch": "node scripts/diagnose-aniwatch.mjs",
+    "test:e2e": "playwright test",
+    "test:streaming:real": "node scripts/check-real-playback.mjs",
+    "dev:source-host": "node scripts/start-source-host.cjs"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
     "aniwatch": "^2.24.3",
     "axios": "^1.6.0",
-    "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "envalid": "^8.0.0",
-    "express": "^4.18.2",
-    "express-rate-limit": "^8.2.1",
     "hls.js": "^1.6.15",
     "hono": "^4.6.14",
     "hono-rate-limiter": "^0.4.2",
@@ -32,15 +35,11 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.5",
-    "redis": "^5.9.0",
-    "ts-node": "^10.9.2",
     "typescript": "~5.9.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/express-rate-limit": "^5.1.3",
+    "@playwright/test": "^1.64.1",
     "@types/node": "^20.10.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
@@ -52,16 +51,15 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
-    "nodemon": "^3.0.2",
     "pino-pretty": "^13.0.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
     "tsx": "^4.20.6",
     "typescript-eslint": "^8.46.3",
     "vite": "npm:rolldown-vite@7.2.2",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.11"
   },
-  "overrides": {
-    "vite": "npm:rolldown-vite@7.2.2"
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

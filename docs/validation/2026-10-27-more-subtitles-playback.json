@@ -1,0 +1,119 @@
+{
+  "checkedAt": "2026-10-27T15:07:21.809Z",
+  "results": [
+    {
+      "id": 11577,
+      "title": "Steins;Gate: Fuka Ryouiki no Déjà vu",
+      "episode": 1,
+      "passed": true,
+      "pageErrors": [],
+      "failedRequests": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "subtitleStatuses": [
+        200
+      ],
+      "beforeSeek": {
+        "time": 10.008407,
+        "duration": 5407.5070000000005,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 247,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 305562,
+        "captionCues": [
+          {
+            "language": "pt-BR",
+            "count": 1435
+          }
+        ]
+      },
+      "durationMatchesExpectedEpisode": true,
+      "afterSeek": {
+        "time": 21.024625,
+        "readyState": 4,
+        "paused": false,
+        "error": null
+      },
+      "portugueseCaptionVisible": true,
+      "machineTranslationWarningVisible": false,
+      "mobileOverflow": false,
+      "alerts": []
+    },
+    {
+      "id": 212888,
+      "title": "Overgeared",
+      "episode": 2,
+      "passed": true,
+      "pageErrors": [],
+      "failedRequests": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "subtitleStatuses": [
+        200
+      ],
+      "beforeSeek": {
+        "time": 10.010251,
+        "duration": 1420.0436359999953,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 244,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 235928,
+        "captionCues": [
+          {
+            "language": "pt-BR",
+            "count": 512
+          }
+        ]
+      },
+      "durationMatchesExpectedEpisode": true,
+      "afterSeek": {
+        "time": 21.026152,
+        "readyState": 4,
+        "paused": false,
+        "error": null
+      },
+      "portugueseCaptionVisible": true,
+      "machineTranslationWarningVisible": true,
+      "mobileOverflow": false,
+      "alerts": []
+    }
+  ]
+}

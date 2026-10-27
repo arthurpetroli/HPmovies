@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "installedAt": "2026-10-27",
+  "skills": [
+    {
+      "name": "ui-ux-pro-max",
+      "repository": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+      "path": ".claude/skills/ui-ux-pro-max",
+      "revision": "28b3b8dee8c976df4fa3e94aed4e092ad43fcb03",
+      "skillSha256": "ea087c341bfb5b23195c7302027268ede86da802554c18a5c4896a6017b439f9",
+      "license": "MIT",
+      "licenseFile": "LICENSE"
+    },
+    {
+      "name": "frontend-design",
+      "repository": "https://github.com/anthropics/skills",
+      "path": "skills/frontend-design",
+      "revision": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+      "skillSha256": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3",
+      "license": "Apache-2.0",
+      "licenseFile": "LICENSE.txt"
+    },
+    {
+      "name": "caveman",
+      "repository": "https://github.com/JuliusBrussee/caveman",
+      "path": "skills/caveman",
+      "revision": "9b68f7ed12b05e7efaff18e65c5a3fc2849fd0a4",
+      "skillSha256": "415d43518f2b1a9498c15a445d4657117b129ee5e81b19454ce348439cc6672b",
+      "license": "Apache-2.0",
+      "licenseFile": "LICENSE"
+    }
+  ]
+}

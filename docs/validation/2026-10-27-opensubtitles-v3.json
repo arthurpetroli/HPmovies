@@ -1,0 +1,114 @@
+{
+  "checkedAt": "2026-10-27T15:08:57.835Z",
+  "method": "live PortugueseSubtitleProvider; one official addon file per title; no fixtures or browser",
+  "results": [
+    {
+      "title": "Naruto",
+      "animeId": "20",
+      "episode": 1,
+      "total": 5,
+      "addon": 2,
+      "legacy": 3,
+      "languages": {
+        "ptBR": 4,
+        "pt": 1
+      },
+      "download": {
+        "source": "OpenSubtitles v3",
+        "language": "pt-BR",
+        "machineTranslated": null,
+        "contentType": "text/vtt; charset=utf-8",
+        "bytes": 24209,
+        "webVtt": true,
+        "cues": 348,
+        "firstCue": "00:00:05.570",
+        "lastCueEnd": "00:23:33.530",
+        "valid": true
+      }
+    },
+    {
+      "title": "One Piece",
+      "animeId": "21",
+      "episode": 1,
+      "total": 3,
+      "addon": 2,
+      "legacy": 1,
+      "languages": {
+        "ptBR": 3,
+        "pt": 0
+      },
+      "download": {
+        "source": "OpenSubtitles v3",
+        "language": "pt-BR",
+        "machineTranslated": null,
+        "contentType": "text/vtt; charset=utf-8",
+        "bytes": 35172,
+        "webVtt": true,
+        "cues": 357,
+        "firstCue": "00:00:16.670",
+        "lastCueEnd": "00:24:55.010",
+        "valid": true
+      }
+    },
+    {
+      "title": "Steins;Gate",
+      "animeId": "9253",
+      "episode": 1,
+      "total": 3,
+      "addon": 2,
+      "legacy": 1,
+      "languages": {
+        "ptBR": 2,
+        "pt": 1
+      },
+      "download": {
+        "source": "OpenSubtitles v3",
+        "language": "pt-BR",
+        "machineTranslated": null,
+        "contentType": "text/vtt; charset=utf-8",
+        "bytes": 23096,
+        "webVtt": true,
+        "cues": 360,
+        "firstCue": "00:00:04.400",
+        "lastCueEnd": "00:21:55.290",
+        "valid": true
+      }
+    },
+    {
+      "title": "Your Name",
+      "animeId": "21519",
+      "episode": 1,
+      "total": 6,
+      "addon": 1,
+      "legacy": 5,
+      "languages": {
+        "ptBR": 2,
+        "pt": 4
+      },
+      "download": {
+        "source": "OpenSubtitles v3",
+        "language": "pt-BR",
+        "machineTranslated": null,
+        "contentType": "text/vtt; charset=utf-8",
+        "bytes": 65956,
+        "webVtt": true,
+        "cues": 1068,
+        "firstCue": "00:00:53.428",
+        "lastCueEnd": "01:40:50.378",
+        "valid": true
+      }
+    },
+    {
+      "title": "Bleach",
+      "animeId": "269",
+      "episode": 1,
+      "total": 0,
+      "addon": 0,
+      "legacy": 0,
+      "languages": {
+        "ptBR": 0,
+        "pt": 0
+      }
+    }
+  ]
+}

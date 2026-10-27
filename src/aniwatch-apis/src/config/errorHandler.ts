@@ -3,26 +3,13 @@ import type { ErrorHandler, NotFoundHandler } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { log } from "./logger.js";
 
-const errResp: { status: ContentfulStatusCode; message: string } = {
-    status: 500,
-    message: "Internal Server Error",
-};
-
 export const errorHandler: ErrorHandler = (err, c) => {
     log.error(JSON.stringify(err));
-
-    if (err instanceof HiAnimeError) {
-        errResp.status = err.status as ContentfulStatusCode;
-        errResp.message = err.message;
-    }
-
-    return c.json(errResp, errResp.status);
+    const status = err instanceof HiAnimeError ? err.status as ContentfulStatusCode : 500;
+    const message = err instanceof HiAnimeError ? err.message : "Internal Server Error";
+    return c.json({ status, message }, status);
 };
 
 export const notFoundHandler: NotFoundHandler = (c) => {
-    errResp.status = 404;
-    errResp.message = "Not Found";
-
-    log.error(JSON.stringify(errResp));
-    return c.json(errResp, errResp.status);
+    return c.json({ status: 404, message: "Not Found" }, 404);
 };

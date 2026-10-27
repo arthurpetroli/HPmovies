@@ -1,109 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { ArrowUpRight, LoaderCircle, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Search, X } from 'lucide-react';
-import aniwatchService from '../../services/aniwatch';
+import type { CatalogAnime } from '../../../shared/providers';
+import { catalogService } from '../../services/catalog';
 
-interface SearchBarProps {
-  onClose?: () => void;
-}
-
-export const SearchBar: React.FC<SearchBarProps> = ({ onClose }) => {
-  const navigate = useNavigate();
+export function SearchBar({ onClose, autoFocus = false }: { onClose?: () => void; autoFocus?: boolean }) {
   const [query, setQuery] = useState('');
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-
+  const [suggestions, setSuggestions] = useState<CatalogAnime[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [selected, setSelected] = useState(-1);
+  const input = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
+  const listId = useId();
+  useEffect(() => { if (autoFocus) input.current?.focus(); }, [autoFocus]);
   useEffect(() => {
-    const fetchSuggestions = async () => {
-      if (query.trim().length < 2) {
-        setSuggestions([]);
-        return;
-      }
-
-      try {
-        const response = await aniwatchService.searchSuggestions(query);
-        setSuggestions(response.data?.suggestions || []);
-      } catch (error) {
-        console.error('Erro ao buscar sugestões:', error);
-        setSuggestions([]);
-      }
-    };
-
-    const debounce = setTimeout(fetchSuggestions, 300);
-    return () => clearTimeout(debounce);
+    let active = true;
+    if (query.trim().length < 2) return;
+    const timer = window.setTimeout(() => {
+      catalogService.search({ search: query.trim(), page: 1 }).then((result) => { if (active) setSuggestions(result.items.slice(0, 5)); }).catch(() => { if (active) setError(true); }).finally(() => { if (active) setLoading(false); });
+    }, 350);
+    return () => { active = false; window.clearTimeout(timer); };
   }, [query]);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (query.trim()) {
-      navigate(`/search?q=${encodeURIComponent(query)}`);
-      setShowSuggestions(false);
-      onClose?.();
-    }
-  };
-
-  const handleSuggestionClick = (suggestion: any) => {
-    navigate(`/anime/${suggestion.id}`);
-    setShowSuggestions(false);
-    setQuery('');
-    onClose?.();
-  };
-
-  return (
-    <div className="relative w-full max-w-2xl mx-auto">
-      <form onSubmit={handleSearch}>
-        <div className="relative">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setShowSuggestions(true);
-            }}
-            onFocus={() => setShowSuggestions(true)}
-            placeholder="Buscar anime..."
-            className="w-full bg-gray-800 text-white rounded-lg pl-12 pr-12 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500"
-          />
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-          {query && (
-            <button
-              type="button"
-              onClick={() => {
-                setQuery('');
-                setSuggestions([]);
-              }}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-            >
-              <X size={20} />
-            </button>
-          )}
-        </div>
-      </form>
-
-      {/* Suggestions Dropdown */}
-      {showSuggestions && suggestions.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 rounded-lg shadow-xl max-h-96 overflow-y-auto z-50">
-          {suggestions.map((suggestion) => (
-            <button
-              key={suggestion.id}
-              onClick={() => handleSuggestionClick(suggestion)}
-              className="w-full flex items-center gap-3 p-3 hover:bg-gray-700 transition-colors text-left"
-            >
-              <img
-                src={suggestion.poster}
-                alt={suggestion.name}
-                className="w-12 h-16 object-cover rounded"
-              />
-              <div className="flex-1">
-                <div className="text-white font-medium">{suggestion.name}</div>
-                {suggestion.jname && (
-                  <div className="text-gray-400 text-sm">{suggestion.jname}</div>
-                )}
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
+  const changeQuery = (value: string) => { setQuery(value); setOpen(true); setSelected(-1); setSuggestions([]); setError(false); setLoading(value.trim().length >= 2); };
+  const go = (path: string) => { setOpen(false); onClose?.(); navigate(path); };
+  const hasPanel = open && query.trim().length >= 2;
+  return <div className="search-component">
+    <form role="search" onSubmit={(event) => { event.preventDefault(); if (query.trim()) go(selected >= 0 && suggestions[selected] ? `/anime/${suggestions[selected].id}` : `/search?q=${encodeURIComponent(query.trim())}`); }}>
+      <Search size={20} className="search-leading" />
+      <input ref={input} value={query} type="search" placeholder="Encontre seu próximo anime..." aria-label="Buscar animes" autoComplete="off" role="combobox" aria-expanded={hasPanel} aria-controls={listId} aria-autocomplete="list" aria-activedescendant={selected >= 0 ? `${listId}-${selected}` : undefined} onChange={(event) => { changeQuery(event.target.value); }} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 150)} onKeyDown={(event) => { if (event.key === 'ArrowDown' && suggestions.length) { event.preventDefault(); setSelected((value) => (value + 1) % suggestions.length); } if (event.key === 'ArrowUp' && suggestions.length) { event.preventDefault(); setSelected((value) => (value - 1 + suggestions.length) % suggestions.length); } if (event.key === 'Escape') setOpen(false); }} />
+      {query && <button type="button" className="search-clear" aria-label="Limpar busca" onClick={() => { changeQuery(''); input.current?.focus(); }}><X size={18} /></button>}
+      <button type="submit" className="search-submit" aria-label="Ver resultados"><ArrowUpRight size={19} /></button>
+    </form>
+    {hasPanel && <div className="search-suggestions"><div className="suggestions-label">{loading ? <><LoaderCircle size={14} className="animate-spin" />Buscando no catálogo</> : 'Resultados rápidos'}</div><div role="listbox" id={listId} aria-label="Sugestões de animes">{suggestions.map((anime, index) => <button type="button" role="option" aria-selected={selected === index} id={`${listId}-${index}`} key={anime.id} className={`suggestion ${selected === index ? 'active' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => go(`/anime/${anime.id}`)}><img src={anime.poster} alt="" /><span><strong>{anime.title}</strong><small>{[anime.year, anime.format?.replace('_', ' ')].filter(Boolean).join(' · ')}</small></span><ArrowUpRight size={16} /></button>)}</div>{!loading && !suggestions.length && <p className="suggestions-empty">{error ? 'Busca indisponível. Tente novamente em instantes.' : 'Nenhum anime encontrado. Tente outro título.'}</p>}{suggestions.length > 0 && <button type="button" className="suggestions-all" onMouseDown={(event) => event.preventDefault()} onClick={() => go(`/search?q=${encodeURIComponent(query.trim())}`)}>Ver todos os resultados <ArrowUpRight size={15} /></button>}</div>}
+  </div>;
+}

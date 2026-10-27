@@ -1,0 +1,7 @@
+import { ArrowUpRight, MonitorPlay } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Brand } from './Topbar';
+
+export function Footer() {
+  return <footer className="site-footer"><div className="content-width footer-main"><div className="footer-brand"><Brand /><p>Novas histórias. Novos mundos.<br />Sua próxima história começa aqui.</p></div><div className="footer-links"><h3>Explore</h3><Link to="/explore">Todos os animes</Link><Link to="/category/most-popular">Mais populares</Link><Link to="/manga">Mangás</Link><Link to="/novels">Light novels</Link></div><div className="footer-links"><h3>Seu espaço</h3><Link to="/library">Minha lista e favoritos</Link><Link to="/library?tab=history">Histórico de reprodução</Link><Link to="/sources">Assistir e ler pelas fontes</Link><Link to="/providers">Disponibilidade das fontes</Link><Link to="/watch/demo"><MonitorPlay size={14} /> Conhecer o player</Link></div><div className="footer-note"><span className="eyebrow">FEITO PARA DESCOBRIR</span><p>Catálogos AniList e MangaDex. Reprodução disponível apenas para fontes autorizadas.</p><a href="https://anilist.co" target="_blank" rel="noopener noreferrer">Conheça o AniList <ArrowUpRight size={14} /></a></div></div><div className="content-width footer-bottom"><span>HPmovies · Animes, mangás e light novels</span><span>Lista e progresso salvos neste navegador</span></div></footer>;
+}

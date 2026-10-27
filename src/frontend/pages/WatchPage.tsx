@@ -1,412 +1,155 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { MessageSquare, Share2, Flag, List, Search } from 'lucide-react';
-import aniwatchService from '../services/aniwatch';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, Film, Info, Loader2, Subtitles } from 'lucide-react';
+import type { CatalogAnime, Playback, StreamSource } from '../../shared/providers';
+import { streamingService } from '../services/streaming';
+import { libraryService } from '../services/library';
 import { VideoPlayer } from '../components/player/VideoPlayer';
+import type { VideoPlayerHandle, VideoSourceError } from '../components/player/VideoPlayer';
+import { orderedPlaybackSources, portugueseCaptionRank, subtitlesForSource } from '../components/player/playbackUtils';
+import { sourceQuery, sourceSuffix, sourceTitles } from '../services/content';
 
-type EpisodeCategory = 'sub' | 'dub' | 'raw';
+interface WatchSession { playback: Playback; resumeTime: number }
 
-interface EpisodeServer {
-  serverId: number;
-  serverName: string;
-}
-
-interface StreamingSource {
-  url: string;
-  quality?: string;
-  isM3U8?: boolean;
-}
-
-interface EpisodeSubtitle {
-  lang?: string;
-  url: string;
-  label?: string;
-  kind?: string;
-}
-
-interface EpisodeServersByCategory {
-  sub: EpisodeServer[];
-  dub: EpisodeServer[];
-  raw: EpisodeServer[];
-}
-
-const CATEGORY_LABELS: Record<EpisodeCategory, string> = {
-  sub: 'Legendado',
-  dub: 'Dublado',
-  raw: 'Raw',
-};
-
-export const WatchPage: React.FC = () => {
+export function WatchPage() {
   const params = useParams();
-  const navigate = useNavigate();
+  const location = useLocation();
+  const [query] = useSearchParams();
+  const episodeId = params['*'] || params.episodeId || '';
+  const state = location.state as { anime?: CatalogAnime } | null;
+  const requestQuery = sourceQuery(query);
+  const hints = sourceSuffix({ ...requestQuery, titles: requestQuery.titles?.length ? requestQuery.titles : sourceTitles.get('anime', episodeId) });
+  return <WatchEpisode key={`${episodeId}:${hints}`} episodeId={episodeId} anime={state?.anime} hints={hints} />;
+}
 
-  // O episodeId vem da URL, pode ter múltiplos segmentos (ex: steinsgate-3/ep=230)
-  // Vamos reconstruir corretamente
-  const rawEpisodeId = params['*'] || params.episodeId || '';
-  const episodeId = decodeURIComponent(rawEpisodeId);
-
-  const [servers, setServers] = useState<EpisodeServersByCategory>({ sub: [], dub: [], raw: [] });
-  const [selectedCategory, setSelectedCategory] = useState<EpisodeCategory>('sub');
-  const [selectedServer, setSelectedServer] = useState<EpisodeServer | null>(null);
-  const [sources, setSources] = useState<StreamingSource[]>([]);
-  const [selectedSource, setSelectedSource] = useState<StreamingSource | null>(null);
-  const [subtitles, setSubtitles] = useState<EpisodeSubtitle[]>([]);
-  const [referer, setReferer] = useState<string | undefined>();
-  const [episodeList, setEpisodeList] = useState<any[]>([]);
-  const [loadingServers, setLoadingServers] = useState(true);
-  const [loadingSources, setLoadingSources] = useState(false);
+function WatchEpisode({ episodeId, anime, hints }: { episodeId: string; anime?: CatalogAnime; hints: string }) {
+  const playerRef = useRef<VideoPlayerHandle>(null);
+  const [session, setSession] = useState<WatchSession | null>(null);
+  const [source, setSource] = useState<StreamSource | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0);
+  const failedSourcesRef = useRef(new Set<string>());
+  const [sourceAttempt, setSourceAttempt] = useState(0);
+  const [continuePlaying, setContinuePlaying] = useState(false);
+  const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
+  const [exhausted, setExhausted] = useState(false);
+  const sourceEpisode = /^(tatakai|toko):([1-9]\d*):(\d+(?:\.\d+)?)$/.exec(episodeId);
+  const sourceBack = new URLSearchParams(hints);
+  if (sourceEpisode) { sourceBack.set('kind', 'anime'); sourceBack.set('id', sourceEpisode[2]); sourceBack.set('episode', sourceEpisode[3]); }
+  const backPath = anime ? `/anime/${encodeURIComponent(anime.id)}` : sourceEpisode ? `/sources?${sourceBack}` : '/explore';
+  const backLabel = anime ? 'Voltar ao anime' : sourceEpisode ? 'Voltar às fontes' : 'Voltar ao catálogo';
 
   useEffect(() => {
-    if (!episodeId) {
-      setError('ID do episódio não foi fornecido');
-      setLoadingServers(false);
-      return;
-    }
-
-    // Validar formato do episodeId (deve conter ?ep=)
-    if (!episodeId.includes('?ep=')) {
-      console.error('⚠️ episodeId em formato incorreto:', episodeId);
-      setError(`Formato de episódio inválido: ${episodeId}`);
-      setLoadingServers(false);
-      return;
-    }
-
-    // Limpar estados anteriores ao mudar de episódio para evitar conflitos
-    setSources([]);
-    setSelectedSource(null);
-    setSubtitles([]);
-    setReferer(undefined);
-    setServers({ sub: [], dub: [], raw: [] });
-    setError(null);
-
-    loadEpisodeServers(episodeId);
-    loadAnimeEpisodes(episodeId);
-  }, [episodeId]);
-
-  const loadAnimeEpisodes = async (epId: string) => {
-    try {
-      // Extrai o ID do anime da string do episódio (ex: "one-piece-100?ep=2142" -> "one-piece-100")
-      const animeId = epId.split('?')[0];
-      if (!animeId) return;
-
-      const response = await aniwatchService.getAnimeEpisodes(animeId);
-      const eps = response?.data?.episodes || response?.episodes || [];
-      setEpisodeList(eps);
-    } catch (err) {
-      console.error('Erro ao carregar lista de episódios:', err);
-    }
-  };
-
-  const loadEpisodeServers = async (epId: string) => {
-    try {
-      setLoadingServers(true);
+    let active = true;
+    const queryTitles = sourceQuery(new URLSearchParams(hints)).titles;
+    const titles = queryTitles?.length ? queryTitles : anime ? [anime.title, anime.titleOriginal || ''].filter(Boolean) : sourceTitles.get('anime', episodeId);
+    void streamingService.playback(episodeId, titles).then(playback => {
+      if (!active) return;
+      if (!playback.sources.length) throw new Error('A reprodução ainda não está disponível para este episódio.');
+      sourceTitles.save('anime', episodeId, titles);
+      const previous = libraryService.getProgress(episodeId);
+      setSession({ playback, resumeTime: previous && !previous.completed ? previous.currentTime : 0 });
+      setSource(orderedPlaybackSources(playback)[0]);
+      failedSourcesRef.current.clear();
+      setRecoveryNotice(null);
+      setExhausted(false);
+      setContinuePlaying(false);
       setError(null);
-      
-      const response = await aniwatchService.getEpisodeServers(epId);
-      
-      if (!response || (!response.success && response.status !== 200)) {
-        throw new Error('Resposta inválida da API');
-      }
+      setLoading(false);
+    }).catch((cause: unknown) => {
+      if (!active) return;
+      setSession(null);
+      setSource(null);
+      setLoading(false);
+      setError(cause instanceof Error ? cause.message : 'Não foi possível carregar o vídeo. Tente novamente em instantes.');
+    });
+    return () => { active = false; };
+  }, [episodeId, attempt, anime, hints]);
 
-      const data = response.data;
+  const saveProgress = useCallback((currentTime: number, duration: number) => {
+    if (!session) return;
+    libraryService.saveProgress({ episodeId, title: session.playback.episode.title, anime, currentTime, duration });
+  }, [episodeId, session, anime]);
 
-      const normalized: EpisodeServersByCategory = {
-        sub: Array.isArray(data.sub) ? data.sub : [],
-        dub: Array.isArray(data.dub) ? data.dub : [],
-        raw: Array.isArray(data.raw) ? data.raw : [],
-      };
-
-      setServers(normalized);
-
-      // Encontrar primeira categoria com servidores disponíveis
-      const availableCategory = (['sub', 'dub', 'raw'] as EpisodeCategory[]).find(
-        (cat) => normalized[cat] && normalized[cat].length > 0
-      );
-
-      if (!availableCategory) {
-        setError('Nenhum servidor disponível para este episódio');
-        setLoadingServers(false);
-        return;
-      }
-
-      const firstServer = normalized[availableCategory][0];
-
-      setSelectedCategory(availableCategory);
-      setSelectedServer(firstServer);
-
-      // Carregar fontes automaticamente
-      await loadEpisodeSources(epId, firstServer.serverName, availableCategory);
-
-    } catch (err: any) {
-      console.error('❌ Erro ao carregar servidores:', err);
-      const errorMessage = err.response?.data?.message || err.message || 'Erro ao carregar servidores';
-      setError(`Erro: ${errorMessage}`);
-    } finally {
-      setLoadingServers(false);
-    }
-  };
-
-  const loadEpisodeSources = async (
-    epId: string,
-    serverName: string,
-    category: EpisodeCategory
-  ) => {
-    try {
-      setLoadingSources(true);
-      setError(null);
-
-      const response = await aniwatchService.getEpisodeSources(
-        epId,
-        serverName,
-        category
-      );
-
-      if (!response || (!response.success && response.status !== 200)) {
-        throw new Error('Resposta inválida da API');
-      }
-
-      const data = response.data;
-      const sourcesData = Array.isArray(data.sources) ? data.sources : [];
-
-      const rawTracks = Array.isArray(data.tracks) ? data.tracks : (Array.isArray(data.subtitles) ? data.subtitles : []);
-      const subtitlesData = rawTracks.filter((track: any) => 
-        track.kind !== 'thumbnails' && 
-        track.label !== 'thumbnails' && 
-        track.lang !== 'thumbnails' &&
-        track.url // Garante que tem URL
-      );
-
-      if (data.headers?.Referer) {
-        setReferer(data.headers.Referer);
-      }
-
-      if (sourcesData.length === 0) {
-        setError('Nenhuma fonte de vídeo disponível para este servidor. Tente outro servidor.');
-        setSources([]);
-        setSelectedSource(null);
-      } else {
-        setSources(sourcesData);
-        setSelectedSource(sourcesData[0]);
-        setSubtitles(subtitlesData);
-      }
-
-    } catch (err: any) {
-      console.error('❌ Erro ao carregar fontes:', err);
-      const errorMessage = err.response?.data?.message || err.message || 'Erro desconhecido';
-      setError(`Não foi possível carregar o vídeo: ${errorMessage}`);
-      setSources([]);
-      setSelectedSource(null);
-      setSubtitles([]);
-    } finally {
-      setLoadingSources(false);
-    }
-  };
-
-  const handleCategoryChange = (category: EpisodeCategory) => {
-    const availableServers = servers[category] || [];
-    
-    if (availableServers.length === 0) {
-      setError('Nenhum servidor disponível para esta categoria');
+  const recoverSource = useCallback((failure: VideoSourceError) => {
+    if (!session || !source) return;
+    failedSourcesRef.current.add(source.url);
+    // Each distinct URL is tried once per cycle. A source can appear more than
+    // once with different labels, so indexes alone cannot bound recovery.
+    const next = orderedPlaybackSources(session.playback).find(item => !failedSourcesRef.current.has(item.url));
+    if (!next) {
+      setExhausted(true);
+      setRecoveryNotice('Todas as fontes disponíveis falharam. Você pode escolher uma fonte manualmente ou tentar as fontes novamente.');
       return;
     }
+    setSession({ playback: session.playback, resumeTime: failure.currentTime });
+    setContinuePlaying(failure.playRequested);
+    setRecoveryNotice(`A fonte anterior não respondeu. Tentando ${next.label || 'outra fonte disponível'}…`);
+    setSource(next);
+  }, [session, source]);
 
-    setSelectedCategory(category);
-    const server = availableServers[0];
-    setSelectedServer(server);
-
-    if (episodeId && server) {
-      loadEpisodeSources(episodeId, server.serverName, category);
-    }
+  const chooseSource = (chosen: StreamSource) => {
+    if (!session) return;
+    const currentPosition = playerRef.current?.getPosition() ?? session.resumeTime;
+    setSession({ playback: session.playback, resumeTime: currentPosition });
+    setContinuePlaying(playerRef.current?.getPlayRequested() ?? false);
+    failedSourcesRef.current.clear();
+    setExhausted(false);
+    setRecoveryNotice(null);
+    setSource(chosen);
+    setSourceAttempt(value => value + 1);
   };
 
-  const handleServerChange = (server: EpisodeServer) => {
-    setSelectedServer(server);
-    if (episodeId) {
-      loadEpisodeSources(episodeId, server.serverName, selectedCategory);
-    }
-  };
-
-  const handleSourceChange = (source: StreamingSource) => {
-    setSelectedSource(source);
-  };
-
-  const qualityLabel = (source: StreamingSource) => {
-    if (source.quality) return source.quality;
-    if (source.isM3U8) return 'Auto (HLS)';
-    return 'Padrão';
-  };
-
-  const handleVideoError = () => {
-    setError('Erro ao reproduzir o vídeo. Tente outro servidor ou qualidade.');
-  };
-
-  if (loadingServers) {
-    return (
-      <div className="min-h-screen bg-gray-900 pt-20 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-pink-500 border-t-transparent" />
-          <p className="text-white text-lg">Carregando player...</p>
-          <p className="text-gray-400 text-sm font-mono">Episode: {episodeId}</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-[#0f0f0f] text-gray-300 font-sans pb-10">
-      {/* Espaçamento para Navbar fixa */}
-      <div className="h-16"></div>
-
-      <div className="container mx-auto px-2 md:px-4 py-6">
-        
-        {/* Layout Principal: Player (Esq) + Lista (Dir) */}
-        <div className="flex flex-col lg:flex-row gap-6">
-          
-          {/* Coluna Esquerda: Player e Controles */}
-          <div className="w-full lg:w-3/4 flex flex-col gap-4">
-            
-            {/* Player Container */}
-            <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden shadow-xl border border-gray-800">
-              {loadingSources && (
-                <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-20">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#ffbade] border-t-transparent" />
-                    <p className="text-[#ffbade] font-medium animate-pulse">Carregando stream...</p>
-                  </div>
-                </div>
-              )}
-
-              {error ? (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-center p-6">
-                  <div>
-                    <p className="text-red-500 text-xl mb-2">⚠️ {error}</p>
-                    <div className="flex gap-4 justify-center">
-                        <button onClick={() => window.location.reload()} className="text-white underline hover:text-[#ffbade]">Recarregar página</button>
-                        <button onClick={() => loadEpisodeServers(episodeId)} className="bg-[#ffbade] text-black px-4 py-2 rounded font-bold hover:bg-white transition">Tentar Novamente</button>
-                    </div>
-                  </div>
-                </div>
-              ) : selectedSource ? (
-                <VideoPlayer
-                  src={selectedSource.url}
-                  isM3U8={selectedSource.isM3U8}
-                  autoPlay={true}
-                  subtitles={subtitles}
-                  referer={referer}
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-gray-500">
-                  Selecione um servidor
-                </div>
-              )}
-            </div>
-
-            {/* Controles e Informações do Servidor */}
-            <div className="bg-[#201f31] p-4 rounded-lg border border-gray-800">
-              <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-4 border-b border-gray-700 pb-4">
-                <div className="text-sm text-gray-400">
-                  Você está assistindo <span className="text-[#ffbade] font-bold">Episódio {episodeId.split('ep=')[1]}</span>
-                </div>
-                <div className="flex gap-3 text-xs font-medium">
-                  <button className="flex items-center gap-1 hover:text-white transition"><MessageSquare size={14}/> Comentários</button>
-                  <button className="flex items-center gap-1 hover:text-white transition"><Share2 size={14}/> Compartilhar</button>
-                  <button className="flex items-center gap-1 hover:text-white transition"><Flag size={14}/> Reportar</button>
-                </div>
-              </div>
-
-              {/* Seleção de Categoria (Sub/Dub) */}
-              <div className="flex flex-wrap gap-2 mb-4">
-                {(['sub', 'dub', 'raw'] as EpisodeCategory[]).map((category) => {
-                  const count = servers[category]?.length || 0;
-                  if (count === 0) return null;
-                  return (
-                    <button
-                      key={category}
-                      onClick={() => handleCategoryChange(category)}
-                      className={`px-4 py-1.5 rounded text-sm font-bold uppercase transition-colors ${
-                        selectedCategory === category
-                          ? 'bg-[#ffbade] text-black'
-                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                      }`}
-                    >
-                      {CATEGORY_LABELS[category]} ({count})
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Lista de Servidores */}
-              <div className="space-y-2">
-                <div className="text-xs text-[#ffbade] uppercase font-bold mb-2">Servidores:</div>
-                <div className="flex flex-wrap gap-2">
-                  {(servers[selectedCategory] || []).map((server) => (
-                    <button
-                      key={server.serverId}
-                      onClick={() => handleServerChange(server)}
-                      className={`px-3 py-2 rounded text-xs font-medium transition-all ${
-                        selectedServer?.serverId === server.serverId
-                          ? 'bg-gray-600 text-[#ffbade] border border-[#ffbade]'
-                          : 'bg-gray-800 text-gray-400 hover:text-white border border-transparent hover:border-gray-600'
-                      }`}
-                    >
-                      {server.serverName}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Coluna Direita: Lista de Episódios (Sidebar) */}
-          <div className="w-full lg:w-1/4">
-            <div className="bg-[#201f31] rounded-lg border border-gray-800 overflow-hidden flex flex-col h-[600px] sticky top-20">
-              <div className="p-3 bg-[#2a2c31] border-b border-gray-700 flex justify-between items-center">
-                <span className="font-bold text-white text-sm">Lista de Episódios</span>
-                <span className="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded">{episodeList.length}</span>
-              </div>
-              
-              {/* Busca na lista (Visual) */}
-              <div className="p-2 border-b border-gray-700">
-                <div className="relative">
-                  <input type="text" placeholder="Número..." className="w-full bg-gray-800 text-white text-xs px-3 py-1.5 rounded outline-none focus:ring-1 focus:ring-[#ffbade]" />
-                  <Search size={12} className="absolute right-2 top-2 text-gray-500" />
-                </div>
-              </div>
-
-              <div className="overflow-y-auto flex-1 p-1 space-y-1 custom-scrollbar">
-                {episodeList.map((ep) => {
-                  const isActive = episodeId === ep.episodeId;
-                  return (
-                    <button
-                      key={ep.episodeId}
-                      onClick={() => navigate(`/watch/${encodeURIComponent(ep.episodeId)}`)}
-                      className={`w-full text-left px-3 py-2 rounded flex items-center gap-3 transition-colors ${
-                        isActive 
-                          ? 'bg-[#2a2c31] border-l-4 border-[#ffbade]' 
-                          : 'hover:bg-gray-700 border-l-4 border-transparent'
-                      }`}
-                    >
-                      <span className={`text-sm font-mono ${isActive ? 'text-[#ffbade]' : 'text-gray-400'}`}>
-                        {ep.number}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className={`text-xs truncate ${isActive ? 'text-white font-medium' : 'text-gray-300'}`}>
-                          {ep.title || `Episódio ${ep.number}`}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-                {episodeList.length === 0 && (
-                  <div className="text-center py-10 text-gray-500 text-xs">Carregando lista...</div>
-                )}
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
+  if (loading) return <main id="main-content" className="mx-auto flex min-h-[70vh] max-w-7xl items-center justify-center px-5 pt-24 text-white"><div role="status" className="flex items-center gap-3"><Loader2 className="h-6 w-6 animate-spin text-teal-400" />Preparando o player...</div></main>;
+  if (error || !session || !source) return <main id="main-content" className="mx-auto flex min-h-[75vh] max-w-4xl flex-col items-center justify-center gap-6 px-6 pt-24 text-center">
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-5"><Film className="h-10 w-10 text-teal-300" /></div>
+    <div><h1 className="mb-3 text-2xl font-bold text-white">{episodeId === 'demo' ? 'Não foi possível preparar o player' : 'Episódio indisponível'}</h1><p role="alert" className="max-w-xl text-sm leading-relaxed text-slate-400">{error}</p></div>
+    <div className="flex flex-wrap justify-center gap-3">{episodeId !== 'demo' && <Link className="rounded-lg bg-teal-400 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-teal-300" to="/watch/demo">Experimentar o player</Link>}<Link className="rounded-lg border border-white/15 px-5 py-3 text-sm font-medium text-white hover:bg-white/5" to={backPath}>{backLabel}</Link>
+      <button className="rounded-lg border border-white/15 px-5 py-3 text-sm text-white hover:bg-white/5" onClick={() => { setLoading(true); setAttempt(value => value + 1); }}>Tentar novamente</button>
     </div>
+  </main>;
+
+  const { playback, resumeTime } = session;
+  const activeSubtitles = subtitlesForSource(playback, source);
+  const portugueseRank = Math.min(4, ...activeSubtitles.map(track => portugueseCaptionRank(track.language)));
+  return (
+    <main id="main-content" className="mx-auto max-w-[1440px] px-4 pb-20 pt-24 sm:px-8 lg:px-12">
+      <Link to={backPath} className="mb-6 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={16} />{backLabel}</Link>
+      <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <section className="min-w-0">
+          <VideoPlayer ref={playerRef} key={`${episodeId}:${source.url}:${sourceAttempt}`} source={source} poster={playback.episode.thumbnail} subtitles={activeSubtitles} intro={playback.intro} initialTime={resumeTime} onProgress={saveProgress} onSourceError={recoverSource} onSourcePlaying={() => setRecoveryNotice(null)} autoPlay={continuePlaying} />
+          {recoveryNotice && <div role="status" className={`mt-3 rounded-lg border px-4 py-3 text-sm ${exhausted ? 'border-amber-400/20 bg-amber-400/5 text-amber-200' : 'border-teal-400/20 bg-teal-400/5 text-slate-300'}`}><p>{recoveryNotice}</p>{exhausted && <button type="button" className="mt-3 rounded-lg bg-teal-400 px-4 py-2 font-semibold text-slate-950 hover:bg-teal-300" onClick={() => { setLoading(true); setAttempt(value => value + 1); }}>Tentar fontes novamente</button>}</div>}
+          <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
+            <div><div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-300"><Film size={13} />{playback.isDemo ? 'Demonstração do player' : 'Agora assistindo'}</div><h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{playback.episode.title}</h1></div>
+            {playback.previousEpisodeId && <Link to={`/watch/${encodeURIComponent(playback.previousEpisodeId)}${hints}`} state={{ anime }} className="button-secondary"><ArrowLeft size={16} />Episódio anterior</Link>}
+            {playback.nextEpisodeId && <Link to={`/watch/${encodeURIComponent(playback.nextEpisodeId)}${hints}`} state={{ anime }} className="inline-flex items-center gap-2 rounded-lg bg-teal-400 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-teal-300">Próximo episódio<ArrowRight size={16} /></Link>}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-400">
+            <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-teal-400" />Fonte autorizada</span>
+            <span className="flex items-center gap-1.5"><Subtitles size={14} />{portugueseRank === 0 ? 'Faixa PT-BR disponível' : portugueseRank < 4 ? 'Legenda em português disponível' : activeSubtitles.length ? 'Outros idiomas de legenda disponíveis' : 'Sem legendas disponíveis'}</span>
+            {playback.audioLanguages.length > 0 && <span>Áudio: {playback.audioLanguages.join(', ')}</span>}
+          </div>
+          {activeSubtitles.some(track => track.id.startsWith('opensubtitles-')) && <p className="mt-4 text-xs leading-relaxed text-slate-400">Legendas externas do OpenSubtitles para este episódio. Se a versão tiver tempos diferentes, escolha outra faixa ou ajuste a sincronização nas configurações do player.</p>}
+          {playback.isDemo && <div className="mt-6 flex gap-3 rounded-xl border border-teal-400/15 bg-teal-400/5 p-4 text-sm leading-relaxed text-slate-300"><Info className="mt-0.5 h-5 w-5 shrink-0 text-teal-300" /><p>Este vídeo autorizado permite testar a reprodução, a qualidade e os controles. A faixa PT-BR contém orientações originais sobre o player. O catálogo de animes é separado da disponibilidade de episódios licenciados.</p></div>}
+          {playback.attribution && <p className="mt-5 text-xs leading-relaxed text-slate-500">Conteúdo: <a href={playback.attribution.url} target="_blank" rel="noreferrer" className="text-slate-300 underline decoration-white/20 underline-offset-4 hover:text-teal-300">{playback.attribution.label}</a> · {playback.attribution.license}</p>}
+        </section>
+
+        <aside className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+          <h2 className="text-base font-semibold text-white">Sua experiência</h2><p className="mt-2 text-xs leading-relaxed text-slate-500">A reprodução usa apenas as fontes disponíveis para este conteúdo.</p>
+          <label className="mt-6 block"><span className="mb-2 block text-xs font-medium text-slate-400">Fonte de vídeo</span><select className="w-full rounded-lg border border-white/15 bg-[#151d25] px-3 py-2.5 text-sm text-white focus:border-teal-400 focus:outline-none" value={source.url} onChange={event => {
+            const chosen = playback.sources.find(item => item.url === event.target.value);
+            if (!chosen || chosen.url === source.url) return;
+            chooseSource(chosen);
+          }}>{orderedPlaybackSources(playback).map((item, index) => {
+            const rank = Math.min(4, ...subtitlesForSource(playback, item).map(track => portugueseCaptionRank(track.language)));
+            return <option key={`${item.url}:${index}`} value={item.url}>{item.label ?? (item.type === 'hls' ? 'HLS · qualidade automática' : 'MP4 · original')}{rank === 0 ? ' · legendas PT-BR' : rank < 4 ? ' · legendas em português' : ''}</option>;
+          })}</select></label>
+          <div className="mt-6 border-t border-white/10 pt-5"><h3 className="text-xs font-semibold text-slate-300">Controles rápidos</h3><dl className="mt-3 space-y-3 text-xs text-slate-500"><div className="flex justify-between gap-4"><dt>Reproduzir / pausar</dt><dd className="text-slate-300">Espaço ou K</dd></div><div className="flex justify-between gap-4"><dt>Avançar / voltar 10s</dt><dd className="text-slate-300">← / →</dd></div><div className="flex justify-between gap-4"><dt>Tela cheia / som</dt><dd className="text-slate-300">F / M</dd></div></dl><p className="mt-3 text-[11px] leading-relaxed text-slate-600">Os atalhos funcionam com o foco no player.</p></div>
+          <div className="mt-6 rounded-lg bg-white/5 p-3 text-xs leading-relaxed text-slate-400">Seu progresso é salvo neste navegador. Use a página inicial para continuar assistindo depois.</div>
+          {playback.attribution && <a className="mt-5 flex items-center justify-between gap-2 text-xs text-slate-400 transition hover:text-teal-300" href={playback.attribution.url} target="_blank" rel="noreferrer">Conhecer o projeto do vídeo<ExternalLink size={13} /></a>}
+        </aside>
+      </div>
+    </main>
   );
-};
+}
