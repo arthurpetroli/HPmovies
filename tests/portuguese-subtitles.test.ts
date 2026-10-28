@@ -13,7 +13,8 @@ const identity = { meta: { id: imdb, videos: [
   { id: `${imdb}:1:1`, season: 1, episode: 1 }, { id: `${imdb}:1:2`, season: 1, episode: 2 },
 ] } };
 const row = (extra: object = {}) => ({ IDSubtitleFile: '123', SubLanguageID: 'pob', SubDownloadLink: 'https://dl.opensubtitles.org/en/download/file/123.gz',
-  SeriesIMDBParent: '123456', SeriesSeason: '2', SeriesEpisode: '1', MovieKind: 'episode', SubFormat: 'srt', SubEncoding: 'UTF-8', SubFileName: 'QA.S02E01.srt', SubDownloadsCnt: '10', ...extra });
+  SeriesIMDBParent: '123456', SeriesSeason: '2', SeriesEpisode: '1', MovieKind: 'episode', SubFormat: 'srt', SubEncoding: 'UTF-8',
+  SubFileName: `QA.S${'SeriesSeason' in extra ? extra.SeriesSeason : '2'}E${'SeriesEpisode' in extra ? extra.SeriesEpisode : '1'}.srt`, SubDownloadsCnt: '10', ...extra });
 const ownSrt = '1\n00:00:01,000 --> 00:00:03,000\nTexto original de teste em português.\n';
 const ownVtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nTexto original de teste em português.\n';
 const json = (data: unknown) => new Response(JSON.stringify(data), { headers: { 'content-type': 'application/json' } });
@@ -73,6 +74,29 @@ describe('Portuguese subtitle discovery and safe files', () => {
     const { provider, calls } = setup({ mappings: [{ ...mapping, season: { tvdb: 1, tmdb: 1 }, episode_offset: { tvdb: 1, tmdb: 1 } }], rows: [row({ SeriesSeason: '1', SeriesEpisode: '2' })] });
     expect(await provider.subtitles('42', 1)).toHaveLength(1);
     expect(calls.some(url => url.pathname.includes('episode-2/imdbid-0123456/season-1'))).toBe(true);
+  });
+  it('rejects explicit filename contradictions even when REST metadata claims the requested episode', async () => {
+    const { provider } = setup({ rows: [
+      row({ IDSubtitleFile: '120', SubFileName: 'QA.S02E101.srt' }),
+      row({ IDSubtitleFile: '121', SubFileName: 'QA.S01E01.srt' }),
+      row({ IDSubtitleFile: '122', SubFileName: 'QA.S02E01.S02E02.srt' }),
+      row({ IDSubtitleFile: '123', SubFileName: 'QA.S02E01.srt' }),
+      row({ IDSubtitleFile: '124', SubFileName: 'QA - E101.srt' }),
+    ] });
+    expect((await provider.subtitles('42', 3)).map(track => track.id)).toEqual(['opensubtitles-123', 'opensubtitles-124']);
+  });
+  it('keeps the regular series absolute numbering when a TV special explicitly shares only season zero', async () => {
+    const special = { ...mapping, anilist_id: 43, season: { tvdb: 0, tmdb: 0 } };
+    const mappings = [mapping, special];
+    expect(parseSubtitleMappings(mappings).get(42)).toMatchObject({ wholeSeries: true });
+    expect(parseSubtitleMappings(mappings).get(43)).toMatchObject({ season: 0, wholeSeries: false });
+    const { provider, calls } = setup({ mappings, rows: [row({ SeriesSeason: '1', SeriesEpisode: '1' })] });
+    expect(await provider.subtitles('42', 1)).toHaveLength(1);
+    expect(calls.some(url => url.pathname.includes('episode-1/imdbid-0123456/season-1'))).toBe(true);
+    // Incomplete or inconsistent season-zero mappings must remain ambiguous.
+    for (const season of [{ tvdb: 0 }, { tmdb: 0 }, { tvdb: 0, tmdb: 1 }, { tvdb: 1, tmdb: 1 }]) {
+      expect(parseSubtitleMappings([mapping, { ...special, season }]).has(42)).toBe(false);
+    }
   });
   it.each([['Frieren', 154587], ['Demon Slayer', 101922]])('discovers Portuguese captions for the modern AniList ID of %s', async (_title, anilistId) => {
     const { provider, calls } = setup({ mappings: [{ ...mapping, anilist_id: anilistId, season: { tvdb: 1, tmdb: 1 } }], rows: [row({ SeriesSeason: '1', SeriesEpisode: '1' })] });

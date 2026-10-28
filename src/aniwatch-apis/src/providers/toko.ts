@@ -23,8 +23,10 @@ export interface TokoStreamingOptions {
 /** Only explicit language metadata is trusted. A label such as "sub" is unknown. */
 export function normalizeTokoLanguage(value: string | undefined): string {
   const explicitNames: Record<string, string> = {
-    english: 'en', japanese: 'ja',
+    english: 'en', 'english(cr english)': 'en', 'english(cc)': 'en', 'english(forced)': 'en', japanese: 'ja',
     'portuguese(brazil)': 'pt-BR', 'português(brasil)': 'pt-BR',
+    'portuguese(cr portuguese(brazil))': 'pt-BR',
+    'portuguese(cr portuguese)': 'pt',
     'portuguese(-português(brasil))': 'pt-BR',
     'portuguese(-portuguese(brazil))': 'pt-BR', 'portuguese(-portugues(brasil))': 'pt-BR',
     'portuguese(-brazilian)': 'pt-BR', 'brazilian portuguese': 'pt-BR',

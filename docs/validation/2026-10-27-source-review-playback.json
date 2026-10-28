@@ -1,0 +1,345 @@
+{
+  "checkedAt": "2026-10-27T20:07:44.533Z",
+  "results": [
+    {
+      "id": 207329,
+      "title": "The Laid-Off Cheat-Granting Mage Enjoys a Second Lease on Life",
+      "episode": 1,
+      "passed": true,
+      "pageErrors": [],
+      "failedRequests": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "subtitleStatuses": [],
+      "entryPath": "/anime/207329",
+      "beforeSeek": {
+        "time": 10.011607,
+        "duration": 1420.0436359999953,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 244,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 230301,
+        "captionCues": [
+          {
+            "language": "pt-BR",
+            "count": 373
+          }
+        ]
+      },
+      "durationMatchesExpectedEpisode": true,
+      "afterSeek": {
+        "time": 21.026039,
+        "readyState": 4,
+        "paused": false,
+        "error": null
+      },
+      "portugueseCaptionVisible": true,
+      "machineTranslationWarningVisible": false,
+      "mobileOverflow": false,
+      "alerts": []
+    },
+    {
+      "id": 235,
+      "title": "Detective Conan",
+      "episode": 1,
+      "passed": true,
+      "pageErrors": [],
+      "failedRequests": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "subtitleStatuses": [
+        200
+      ],
+      "entryPath": "/anime/235",
+      "beforeSeek": {
+        "time": 10.007578,
+        "duration": 1496.5060000000005,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 223,
+        "droppedFrames": 1,
+        "decodedAudioBytes": 164477,
+        "captionCues": [
+          {
+            "language": "pt-BR",
+            "count": 350
+          }
+        ]
+      },
+      "durationMatchesExpectedEpisode": true,
+      "afterSeek": {
+        "time": 21.021017,
+        "readyState": 4,
+        "paused": false,
+        "error": null
+      },
+      "portugueseCaptionVisible": true,
+      "machineTranslationWarningVisible": false,
+      "mobileOverflow": false,
+      "alerts": []
+    },
+    {
+      "id": 198946,
+      "title": "Clevatess II: Majuu no Ou to Itsuwari no Yuusha Denshou",
+      "episode": 3,
+      "passed": true,
+      "pageErrors": [],
+      "failedRequests": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "subtitleStatuses": [
+        200
+      ],
+      "entryPath": "/anime/198946",
+      "beforeSeek": {
+        "time": 10.022186,
+        "duration": 1425.006991999995,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 245,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 168816,
+        "captionCues": [
+          {
+            "language": "pt-BR",
+            "count": 375
+          }
+        ]
+      },
+      "durationMatchesExpectedEpisode": true,
+      "afterSeek": {
+        "time": 21.036584,
+        "readyState": 4,
+        "paused": false,
+        "error": null
+      },
+      "portugueseCaptionVisible": true,
+      "machineTranslationWarningVisible": false,
+      "mobileOverflow": false,
+      "alerts": []
+    },
+    {
+      "id": 101922,
+      "title": "Kimetsu no Yaiba",
+      "episode": 1,
+      "passed": true,
+      "pageErrors": [],
+      "failedRequests": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "subtitleStatuses": [
+        200
+      ],
+      "entryPath": "/anime/101922",
+      "beforeSeek": {
+        "time": 10.014532,
+        "duration": 1419.960605,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 243,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 211660,
+        "captionCues": [
+          {
+            "language": "pt-BR",
+            "count": 301
+          }
+        ]
+      },
+      "durationMatchesExpectedEpisode": true,
+      "afterSeek": {
+        "time": 21.033879,
+        "readyState": 4,
+        "paused": false,
+        "error": null
+      },
+      "portugueseCaptionVisible": true,
+      "machineTranslationWarningVisible": false,
+      "mobileOverflow": false,
+      "alerts": []
+    },
+    {
+      "id": 11061,
+      "title": "Hunter x Hunter (2011)",
+      "episode": 1,
+      "passed": true,
+      "pageErrors": [],
+      "failedRequests": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "subtitleStatuses": [
+        200
+      ],
+      "entryPath": "/anime/11061",
+      "beforeSeek": {
+        "time": 10.015464,
+        "duration": 1411.4519229999996,
+        "width": 640,
+        "height": 360,
+        "decodedFrames": 245,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 165566,
+        "captionCues": [
+          {
+            "language": "pt-BR",
+            "count": 293
+          }
+        ]
+      },
+      "durationMatchesExpectedEpisode": true,
+      "afterSeek": {
+        "time": 21.029101,
+        "readyState": 4,
+        "paused": false,
+        "error": null
+      },
+      "portugueseCaptionVisible": true,
+      "machineTranslationWarningVisible": false,
+      "mobileOverflow": false,
+      "alerts": []
+    }
+  ],
+  "runtime": {
+    "tokoVersion": "4.5.7",
+    "bundleSource": "src/toko.kai (privado, fornecido pelo usuário)",
+    "selectedStreamProviders": [
+      "nebula",
+      "anizone"
+    ]
+  },
+  "validationScope": "Navegação real /anime/:id, episódio selecionado no índice, vídeo e áudio decodificados, avanço de dez segundos, seek, legenda PT-BR visível, captura desktop e layout móvel. Sem interceptação de rotas, fixtures ou demo.",
+  "limitations": [
+    "A duração é uma verificação de sanidade, não prova geral de identidade.",
+    "A amostra não valida o catálogo inteiro nem reprodução integral.",
+    "Fixtures dos testes unitários permanecem separadas desta execução real.",
+    "A resolução registrada é a observada no trecho, não garantia da qualidade máxima."
+  ]
+}

@@ -49,6 +49,22 @@ describe('reviewed Portuguese subtitle release identities', () => {
     const attempts = [url.replace('https:', 'http:'), url.replace('legendei.net', 'legendei.net.evil.org'), url.replace('legendei.net', 'a:b@legendei.net'), url.replace('legendei.net', 'legendei.net:8443'), `${url}?download=other`, `${url}#other`, url.replace('/2025/02/', '/2025/03/'), `${url}/../other.zip`, 'https://127.0.0.1/test.zip', 'invalid'];
     for (const attempt of attempts) expect(permittedCuratedSubtitleUrl(attempt)).toBeUndefined();
   });
+  it.each([3, 4, 6, 7, 8, 9, 11, 12])('binds the reviewed Clevatess S02E%s ASS file to its own episode and season', episode => {
+    const seriesIdentity = { imdb: 'tt32991344', kind: 'series' as const, season: 2, episode };
+    expect(curatedSubtitleIdentity('198946', episode)).toEqual(seriesIdentity);
+    const [track] = findCuratedPortugueseSubtitles('198946', episode, seriesIdentity);
+    expect(track).toMatchObject({ animeId: '198946', season: 2, episode, format: 'ass', language: 'pt-BR', archive: 'zip' });
+    expect(track.machineTranslated).toBeUndefined();
+    expect(permittedCuratedSubtitleUrl(track.url)?.hostname).toBe('dl.subdl.com');
+    expect(track.sourceUrl).toMatch(/^https:\/\/subdl\.com\/s\/info\/[a-zA-Z0-9]+\/clevatess$/);
+    for (const wrong of [{ ...seriesIdentity, season: 1 }, { ...seriesIdentity, episode: episode + 1 }, { ...seriesIdentity, imdb: 'tt0131179' }]) {
+      expect(findCuratedPortugueseSubtitles('198946', episode, wrong)).toEqual([]);
+    }
+  });
+  it.each([1, 2, 5, 10, 13])('does not fill unreviewed Clevatess S02E%s with another subtitle', episode => {
+    expect(curatedSubtitleIdentity('198946', episode)).toBeUndefined();
+    expect(findCuratedPortugueseSubtitles('198946', episode, { imdb: 'tt32991344', kind: 'series', season: 2, episode })).toEqual([]);
+  });
   it('removes only standalone vector lines and bidi controls from a machine-translated release', () => {
     const original = '1\r\n00:00:01,000 --> 00:00:03,000\r\n\u202bm 0 0 l 295 0 295 40 0 40\r\n\r\n'
       + '2\r\n00:00:04,000 --> 00:00:06,000\r\n\u2066Você chegou à vila. Tenho 0 moedas.\u2069\r\n\r\n'

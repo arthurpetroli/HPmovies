@@ -47,7 +47,7 @@ test('a failed child playlist changes source and preserves play intent, position
   await page.getByRole('region', { name: 'Player de vídeo' }).focus();
   await page.getByRole('button', { name: 'Abrir configurações' }).click();
   await expect(page.getByRole('combobox', { name: 'Idioma das legendas' })).toHaveValue('off');
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hpmovies.captions.v1') || '{}'))).toMatchObject({ offset: 1.5, size: 'large', background: false });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hpmovies.captions.v2') || '{}'))).toMatchObject({ offset: 1.5, size: 'large', background: false });
   expect(failures).toBeGreaterThan(0);
   expect(failures).toBeLessThanOrEqual(8);
   expect(errors).toEqual([]);

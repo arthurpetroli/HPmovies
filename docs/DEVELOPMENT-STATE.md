@@ -173,3 +173,221 @@ o código que está sendo salvo; não houve novas alterações funcionais nesta 
 O bundle privado `src/toko.kai` permanece somente local e foi incluído no
 `.gitignore` para evitar seu envio acidental. Arquivos de ambiente e artefatos
 de navegador continuam fora do versionamento. Não foi solicitado deploy.
+
+## Revisão das fontes e fallback português — 27/10/2026
+
+Os casos `/anime/207329`, `/anime/235` e `/anime/198946` foram revisados com
+Toko/TatakaiServer e o arquivo privado fornecido. O runtime local passou de
+Toko 4.5.5 para 4.5.7, preservando a instalação anterior, o bundle original e
+as licenças. A configuração local de CDNs foi ampliada somente após conferir
+manifestos, segmentos e legendas reais; pacotes e configuração continuam privados.
+
+Correções: aliases opcionais acima do limite não bloqueiam mais o ID AniList;
+rótulos portugueses CR normalizam para PT-BR; Conan deixa de ser bloqueado por
+um especial de temporada zero no Fribb. OpenSubtitles agora recusa filenames
+com `SxxEyyy` explicitamente incompatível com o episódio solicitado. Clevatess II
+recebeu oito referências PT-BR exatas para E03/E04/E06/E07/E08/E09/E11/E12.
+
+O player oferece **Gerar legenda em português** para faixas inglesas elegíveis.
+A tradução roda em CPU com Argos/OPUS-MT local, conserva os tempos e identifica
+o resultado como automático. O modelo e o ambiente Python ficam no cache do
+usuário. Já estão instalados neste ambiente; `npm run dev` inicia ou reaproveita
+o serviço `:5000`. Em outro ambiente, execute `npm run setup:translator` uma vez.
+Sem faixa de origem, não há transcrição automática de áudio nesta implementação.
+
+Validação final: **416 testes unitários em 39 arquivos**, lint, TypeScript e
+build aprovados; **24 cenários Playwright** afetados aprovados em desktop/celular.
+Seis casos reais, navegando pela página do anime, reproduziram vídeo/áudio com
+seek e texto português visível: 207329 E01, Conan E01, Clevatess II E01 e E03,
+Demon Slayer E01 e Hunter x Hunter E01. Clevatess E01 usou a nova geração local
+com 400 entradas; os demais usaram faixas nativas ou externas já disponíveis.
+Não houve erro observado ou overflow móvel nesses casos. Continua o aviso de
+bundle do player acima de 500 kB, sem falha no build.
+
+Fontes, causas, limites, comandos e JSONs de evidência estão em
+[SOURCE-REVIEW-2026-10-27.md](SOURCE-REVIEW-2026-10-27.md). O fallback e sua licença
+estão em [AUTOMATIC-SUBTITLES.md](AUTOMATIC-SUBTITLES.md). Não foi estabelecida
+cobertura integral do catálogo. Não houve commit, push ou deploy nesta etapa.
+
+## Apresentação das legendas — 27/10/2026
+
+A legenda agora segue a imagem fornecida pelo usuário: texto branco sem serifa,
+peso 700, contorno preto definido, sombra curta e fundo transparente por padrão.
+A opção **Fundo preto da legenda** continua nas configurações e persiste quando
+ativada. A fonte usada é Arial com fallbacks locais; não foi instalada uma fonte
+proprietária ou alterado o bundle privado das fontes de conteúdo.
+
+A escala foi deslocada conforme solicitado: pequena usa os antigos tamanhos da
+média (16px móvel/24px desktop), média usa os antigos da grande (20px/30px) e
+grande passa a 24px/36px. Em tela cheia, os tamanhos acompanham a largura do player,
+com limites. A composição mantém texto centralizado junto à base e eleva a
+legenda enquanto os controles estão visíveis. Em superfícies estreitas, o texto
+pode compartilhar esse espaço para não ser cortado acima do vídeo; permanece
+acima dos controles centrais sem bloquear cliques.
+
+As preferências passam a `hpmovies.captions.v2`. A migração mantém idioma, tamanho
+e sincronização da v1 e inicia sem a antiga caixa padrão uma vez. Escolhas de
+fundo feitas na v2 prevalecem nas próximas visitas. Armazenamento bloqueado ou
+corrompido continua usando valores seguros.
+
+A tentativa de conferir o vídeo público da Crunchyroll retornou HTTP 403 com
+verificação Cloudflare, sem disponibilizar o player. O ajuste visual usa a
+referência enviada, sem afirmar identidade de fonte ou medição do player oficial.
+O [suporte oficial sobre aparência de Closed Captions](https://crunchyroll.zendesk.com/hc/en-us/articles/38779221011092-How-to-set-custom-Closed-Captions-on-Crunchyroll)
+documenta personalização, mas não estabelece a fonte ou os pixels das legendas
+de anime exibidas na referência.
+
+Verificação desta etapa: 24 testes unitários afetados aprovados; 18 cenários
+Playwright de carregamento, aparência e recuperação de fontes aprovados em
+desktop/celular. Os seis cenários afetados por ajustes finais de layout e migração
+foram reexecutados com sucesso. Foram conferidos multiline, três tamanhos, fundo
+preto após reload, tela cheia e larguras de 320/360px com controles visíveis.
+Lint, TypeScript e build aprovados; permanece o aviso conhecido do chunk do player.
+
+Também houve inspeção separada de 207329 E01 real, sem fixtures ou interceptação:
+médio/grande no desktop, grande no celular e fundo preto opcional, sem texto fora
+do player ou overflow da página. Essa inspeção é de apresentação e não revalida
+todo o conteúdo externo. Capturas finais em `/tmp/hpmovies-caption-style-final/`;
+medidas sem URLs privadas em
+[validation/2026-10-27-caption-appearance.json](validation/2026-10-27-caption-appearance.json).
+Não houve commit, push ou deploy nesta etapa.
+
+## Aviso automático fora do vídeo e execução local — 27/10/2026
+
+O aviso “Tradução automática: pode conter erros.” foi movido do overlay do
+player para **Sua experiência**. O painel acompanha a faixa efetivamente
+selecionada: exibe o aviso para tradução automática e o remove ao escolher
+uma faixa humana, desativar legendas ou mudar para uma fonte sem essa seleção.
+O vídeo e a tela cheia não recebem mais essa mensagem sobre a imagem.
+
+Nos testes móveis foi identificado que o gradiente dos controles interceptava
+o clique no botão central de reprodução. Os controles centrais agora ficam
+acima do gradiente e abaixo da legenda, preservando texto legível e cliques.
+
+O projeto foi iniciado novamente com `npm run dev`: frontend `:5173`, API
+`:4000`, host das fontes `:8099` e tradutor local `:5000`, com respostas HTTP 200.
+As verificações de disponibilidade não equivalem a novos testes de conteúdo.
+Verificação do ajuste: 24 testes unitários afetados e quatro cenários de navegador
+em desktop/celular aprovados; lint, TypeScript e build aprovados. O aviso fica
+no painel, acompanha as escolhas humana/automática/desativada e está ausente do
+player. As bibliotecas do navegador nesta execução estão no cache persistente:
+`LD_LIBRARY_PATH=/home/arthu/.cache/hpmovies-qa/libs/usr/lib/x86_64-linux-gnu`.
+Nenhum commit, push ou deploy foi realizado.
+
+## Pular abertura — 27/10/2026
+
+O botão **Pular abertura** agora usa marcações reais por episódio. O player já
+aceitava `Playback.intro`, mas as fontes atuais não preenchiam esse campo. O novo
+fallback consulta AniSkip somente depois de conhecer a duração real do vídeo,
+pela rota `GET /api/streaming/episodes/:id/intro?duration=...`, separada da
+resolução e da reprodução. O botão aparece apenas durante o intervalo e salta
+para seu fim; conserva o estado de reprodução ou pausa.
+
+A identidade AniList é convertida para MAL pelo campo exato `idMal` do AniList,
+sem busca por título ou inferência de temporada. Para a abertura, o provider solicita `op`
+ao [AniSkip](https://api.aniskip.com/api-docs). A API upstream aceita diferenças
+de duração de até 20 segundos; o filtro local permite no máximo **dois segundos**,
+recusa intervalos contraditórios ou fora do vídeo e não escala os tempos.
+Faixas de abertura fornecidas diretamente por uma fonte continuam restritas à
+fonte primária. Mudanças de fonte cancelam consultas pendentes e invalidam os
+tempos anteriores.
+
+A consulta tem timeout, limite de bytes, concorrência e cache. Ausência de dados,
+incompatibilidade de edição ou falha externa deixam o vídeo funcionar sem o
+botão. Não foi usada uma duração fixa estimada. Episódios fracionários, episódio
+zero e IDs fora de Toko/Tatakai não usam esse fallback.
+
+O botão tem posição estável no canto superior direito, alvo mínimo de 44px,
+foco visível e suporte a teclado, celular e tela cheia. Não muda de lugar quando
+os controles comuns reaparecem e fica oculto durante configurações ou mensagens
+de erro. A reprodução começa sem esperar a consulta de abertura.
+
+Verificações: **24 testes unitários afetados** em quatro arquivos, lint,
+TypeScript e build aprovados; **oito cenários Playwright** em desktop e celular
+aprovados. As fixtures de abertura usam vídeo público de teste e não comprovam
+marcações de animes reais. Cobrem início/fim, clique e teclado, seek retroativo,
+pausa, tela cheia, ausência e intervalos inválidos.
+
+Em uma execução real separada, Conan 235 E01 teve duração de 1.496,506 segundos
+e abertura cadastrada entre **0,625 e 104,875 segundos**. O botão foi usado em
+desktop e celular, avançou para depois da abertura, desapareceu e manteve o
+vídeo reproduzindo, sem erros, alertas ou overflow. Os trechos antes/depois
+também foram inspecionados visualmente para confirmar a transição.
+
+Amostras incompatíveis foram recusadas: Kimetsu E01 tinha diferença de 15,23s e
+Hunter E01 de 5,71s em relação às durações cadastradas. O 207329 E01 não tinha
+registro de abertura nesta consulta. O recurso depende da cobertura e qualidade
+das marcações; não representa detecção automática da música ou de cenas.
+
+As duas reproduções reais aprovadas estão em
+[validation/2026-10-27-intro-playback.json](validation/2026-10-27-intro-playback.json).
+O arquivo separa uma tentativa adicional de Kimetsu E02: a fonte de vídeo falhou
+na verificação inicial e não chegou a consultar a abertura. Essa tentativa não
+foi classificada como falha do botão nem como reprodução aprovada.
+
+Capturas temporárias em `/tmp/hpmovies-intro-real-final/`. O projeto continua
+local em `http://127.0.0.1:5173`. Não houve commit, push ou deploy nesta etapa.
+
+## Próximo episódio durante o ending — 27/10/2026
+
+O player agora mostra **Próximo episódio** durante um encerramento marcado e
+também após o fim completo do vídeo. O botão usa a mesma posição e aparência de
+**Pular abertura**. Ao clicar, a navegação abre o ID do próximo episódio emitido
+pela fonte, mantém o anime e os aliases de busca, carrega a nova mídia e solicita
+reprodução desde o início. A tela de preparação permanece visível enquanto o
+episódio seguinte é resolvido. Se o navegador bloquear autoplay, continua valendo
+a recuperação existente pelo botão de reprodução.
+
+As marcações `ed` usam a mesma identidade AniList→MAL e tolerância de dois segundos
+da abertura, pela rota `/api/streaming/episodes/:id/ending?duration=...`. Cache e
+consultas em andamento distinguem `op` de `ed`, mantendo a identidade compartilhada.
+Marcações nativas de `Playback.ending` ficam restritas à fonte primária, e mudanças
+de fonte cancelam consultas anteriores. No último episódio disponível não há
+botão ou consulta de encerramento desnecessária.
+
+A transição exige clique. Sair do intervalo de ending não avança o episódio;
+cenas posteriores continuam disponíveis. Sem marcação compatível, o botão ainda
+pode aparecer quando o evento nativo `ended` confirma o fim do vídeo.
+
+A intenção de iniciar o próximo do zero é consumida uma vez. Recarregar a página,
+voltar pelo histórico ou tentar novamente uma fonte preserva a retomada salva,
+sem repetir esse reinício. Há proteção contra cliques duplicados durante a troca.
+
+Validação: **30 testes unitários afetados** em quatro arquivos; lint, TypeScript
+e build aprovados. **22 cenários distintos de navegador** das suítes de abertura,
+encerramento e recuperação de fontes foram aprovados em desktop/celular, com
+reexecuções pontuais. Os contratos com fixtures verificam carregamento do episódio
+seguinte, autoplay, aliases, teclado/tela cheia, retomada após reload, ausência
+de navegação sem clique, pós-ending, evento `ended` e último episódio.
+
+Separadamente, Conan E01→E02 passou em duas execuções reais, sem interceptação:
+desktop e celular de 393px. O ED cadastrado é **1313,25–1405,125s**, compatível
+com o vídeo de 1496,506s. O botão apareceu aos 1314s, abriu o E02 correto e o novo
+vídeo começou do início com áudio e quadros decodificados em 1080p, sem erros,
+alertas, requisições falhas ou overflow. O E01 contém cerca de 91s depois do ED;
+esse trecho é preservado quando o usuário não solicita a troca.
+
+Evidências numéricas sem URLs privadas ou tokens em
+[validation/2026-10-27-ending-next-playback.json](validation/2026-10-27-ending-next-playback.json).
+Capturas temporárias em `/tmp/hpmovies-ending-next-real/` e uma prévia móvel
+completa em `/tmp/hpmovies-ending-next-mobile-preview/conan-mobile-before.png`.
+O projeto segue em `http://127.0.0.1:5173`. Não houve commit, push ou deploy.
+
+## Reinício local solicitado — 27/10/2026
+
+Os quatro serviços foram encerrados e suas portas verificadas como inativas.
+Em seguida, `npm run dev` iniciou novamente o frontend `:5173`, a API `:4000`,
+o host de fontes `:8099` e o tradutor local `:5000`. Todos responderam HTTP 200
+na checagem de disponibilidade; isso não representa uma nova auditoria de mídia.
+
+Para o uso diário neste ambiente já configurado:
+
+```bash
+cd /home/arthu/Prog/HPmovies
+npm run dev
+```
+
+Abrir `http://127.0.0.1:5173` e manter o terminal aberto. `Ctrl+C` encerra os
+serviços; executar o mesmo comando novamente os reinicia. O modelo local já
+está instalado, sem necessidade de repetir o setup a cada execução.
+Não houve alteração funcional, commit, push ou deploy neste reinício.

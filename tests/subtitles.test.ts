@@ -41,7 +41,7 @@ describe('subtitle normalization', () => {
 });
 
 describe('caption preferences', () => {
-  const defaults = { language: 'pt-br', size: 'medium', background: true, offset: 0 };
+  const defaults = { language: 'pt-br', size: 'medium', background: false, offset: 0 };
   it('validates stored types, bounds sync, and keeps actual language subtags', () => {
     expect(normalizeCaptionPreferences({ size: 'huge', background: 'false', offset: '3', language: '<script>' })).toMatchObject(defaults);
     expect(normalizeCaptionPreferences({ size: 'large', background: false, offset: 400, language: ' PT_BR ' })).toEqual({ size: 'large', background: false, offset: 10, language: 'pt-br' });
@@ -64,11 +64,18 @@ describe('caption preferences', () => {
     vi.stubGlobal('localStorage', { setItem });
     saveCaptionPreferences({ size: 'small', background: false, offset: Infinity, language: 'x'.repeat(5000) });
     const [key, raw] = setItem.mock.calls[0];
-    expect(key).toBe('hpmovies.captions.v1');
+    expect(key).toBe('hpmovies.captions.v2');
     expect(JSON.parse(raw)).toEqual({ language: 'pt-br', size: 'small', background: false, offset: 0 });
     expect(raw.length).toBeLessThan(200);
     setItem.mockImplementation(() => { throw new Error('Quota exceeded'); });
     expect(() => saveCaptionPreferences({ size: 'medium', background: true, offset: 1.5, language: 'off' })).not.toThrow();
+  });
+  it('starts legacy preferences with the outlined style once and preserves a new explicit black background', () => {
+    const stored = new Map([['hpmovies.captions.v1', JSON.stringify({ language: 'en', size: 'large', offset: 1.5, background: true })]]);
+    vi.stubGlobal('localStorage', { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => stored.set(key, value) });
+    expect(readCaptionPreferences()).toEqual({ language: 'en', size: 'large', offset: 1.5, background: false });
+    saveCaptionPreferences({ ...readCaptionPreferences(), background: true });
+    expect(readCaptionPreferences()).toEqual({ language: 'en', size: 'large', offset: 1.5, background: true });
   });
 });
 

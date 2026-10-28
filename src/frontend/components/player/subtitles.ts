@@ -8,25 +8,31 @@ export interface CaptionPreferences {
   offset: number;
 }
 
-const KEY = 'hpmovies.captions.v1';
+const KEY = 'hpmovies.captions.v2';
+const LEGACY_KEY = 'hpmovies.captions.v1';
 
 export function normalizeCaptionPreferences(input: unknown): CaptionPreferences {
-  const defaults: CaptionPreferences = { language: 'pt-br', size: 'medium', background: true, offset: 0 };
+  const defaults: CaptionPreferences = { language: 'pt-br', size: 'medium', background: false, offset: 0 };
   if (!input || typeof input !== 'object' || Array.isArray(input)) return defaults;
   const value = input as Record<string, unknown>;
   const language = typeof value.language === 'string' ? value.language.trim().replace(/_/g, '-').toLowerCase() : '';
   return {
     language: language.length <= 39 && /^(?:off|[a-z]{2,8}(?:-[a-z0-9]{1,8})*)$/.test(language) ? language : defaults.language,
     size: value.size === 'small' || value.size === 'large' ? value.size : defaults.size,
-    background: typeof value.background === 'boolean' ? value.background : true,
+    background: typeof value.background === 'boolean' ? value.background : defaults.background,
     offset: typeof value.offset === 'number' && Number.isFinite(value.offset) ? Math.max(-10, Math.min(10, value.offset)) : 0,
   };
 }
 
 export function readCaptionPreferences(): CaptionPreferences {
   try {
-    const raw = localStorage.getItem(KEY) || '{}';
-    return normalizeCaptionPreferences(raw.length <= 2048 ? JSON.parse(raw) : null);
+    const current = localStorage.getItem(KEY);
+    if (current !== null) return normalizeCaptionPreferences(current.length <= 2048 ? JSON.parse(current) : null);
+    const legacy = localStorage.getItem(LEGACY_KEY);
+    const preferences = normalizeCaptionPreferences(legacy && legacy.length <= 2048 ? JSON.parse(legacy) : null);
+    // Start the new outlined presentation without the old default box once;
+    // language, size and synchronization remain intact. Explicit v2 choices win.
+    return { ...preferences, background: false };
   } catch { return normalizeCaptionPreferences(null); }
 }
 

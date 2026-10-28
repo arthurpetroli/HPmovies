@@ -1,0 +1,91 @@
+{
+  "checkedAt": "2026-10-28T02:22:16.801Z",
+  "scope": "Real ending-to-next-episode navigation without fixtures or request interception.",
+  "results": [
+    {
+      "id": 235,
+      "episode": 1,
+      "nextEpisode": 2,
+      "label": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "passed": true,
+      "pageErrorCount": 0,
+      "requestFailureCount": 0,
+      "endingResponses": [
+        200,
+        200,
+        200
+      ],
+      "hiddenBeforeEnding": true,
+      "before": {
+        "duration": 1496.5060000000005,
+        "time": 1314.000738,
+        "paused": false,
+        "width": 1920,
+        "height": 1080
+      },
+      "buttonInside": true,
+      "newHeading": "The Kidnapped Debutante",
+      "after": {
+        "time": 3.014565,
+        "duration": 1496.457000000001,
+        "paused": false,
+        "error": null,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 73,
+        "decodedAudioBytes": 60384
+      },
+      "newEpisodePath": "/watch/tatakai:235:2",
+      "nextButtonHiddenAtNewStart": true,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "id": 235,
+      "episode": 1,
+      "nextEpisode": 2,
+      "label": "mobile",
+      "viewport": {
+        "width": 393,
+        "height": 851
+      },
+      "passed": true,
+      "pageErrorCount": 0,
+      "requestFailureCount": 0,
+      "endingResponses": [
+        200,
+        200,
+        200,
+        200
+      ],
+      "hiddenBeforeEnding": true,
+      "before": {
+        "duration": 1496.5060000000005,
+        "time": 1314.018997,
+        "paused": false,
+        "width": 1920,
+        "height": 1080
+      },
+      "buttonInside": true,
+      "newHeading": "The Kidnapped Debutante",
+      "after": {
+        "time": 3.022303,
+        "duration": 1496.457000000001,
+        "paused": false,
+        "error": null,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 70,
+        "decodedAudioBytes": 57725
+      },
+      "newEpisodePath": "/watch/tatakai:235:2",
+      "nextButtonHiddenAtNewStart": true,
+      "overflow": false,
+      "alerts": []
+    }
+  ]
+}

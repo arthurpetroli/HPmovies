@@ -4,7 +4,7 @@ export const API_BASE_URL = configuredBase
   : '/api';
 
 /** Opaque backend media tickets follow a separately configured API origin. */
-export const apiMediaUrl = (url: string): string => /^\/api\/(?:content\/image|streaming\/media|subtitles\/file)\/[a-zA-Z0-9_-]+(?:[.?/]|$)/.test(url)
+export const apiMediaUrl = (url: string): string => /^\/api\/(?:content\/image|streaming\/media|subtitles\/(?:automatic\/)?file)\/[a-zA-Z0-9_-]+(?:[.?/]|$)/.test(url)
   ? `${API_BASE_URL}${url.slice(4)}` : url;
 
 const pending = new Map<string, Promise<unknown>>();

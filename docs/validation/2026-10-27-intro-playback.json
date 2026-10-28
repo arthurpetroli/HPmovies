@@ -1,0 +1,96 @@
+{
+  "checkedAt": "2026-10-28T02:11:24.765Z",
+  "results": [
+    {
+      "id": 235,
+      "episode": 1,
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "label": "conan-desktop",
+      "passed": true,
+      "pageErrors": [],
+      "failedRequests": [],
+      "introResponses": [
+        200
+      ],
+      "before": {
+        "time": 5.005695,
+        "duration": 1496.5060000000005,
+        "paused": false,
+        "width": 1920,
+        "height": 1080
+      },
+      "buttonVisible": true,
+      "buttonInside": true,
+      "after": {
+        "time": 105.884995,
+        "duration": 1496.5060000000005,
+        "paused": false,
+        "error": null,
+        "decodedFrames": 98,
+        "decodedAudioBytes": 57561
+      },
+      "buttonGone": true,
+      "overflow": false,
+      "alerts": []
+    },
+    {
+      "id": 235,
+      "episode": 1,
+      "viewport": {
+        "width": 393,
+        "height": 851
+      },
+      "label": "conan-mobile",
+      "passed": true,
+      "pageErrors": [],
+      "failedRequests": [],
+      "introResponses": [
+        200,
+        200
+      ],
+      "before": {
+        "time": 5.011402,
+        "duration": 1496.5060000000005,
+        "paused": false,
+        "width": 1920,
+        "height": 1080
+      },
+      "buttonVisible": true,
+      "buttonInside": true,
+      "after": {
+        "time": 105.882226,
+        "duration": 1496.5060000000005,
+        "paused": false,
+        "error": null,
+        "decodedFrames": 102,
+        "decodedAudioBytes": 60303
+      },
+      "buttonGone": true,
+      "overflow": false,
+      "alerts": []
+    }
+  ],
+  "unavailableProbes": [
+    {
+      "id": 101922,
+      "episode": 2,
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "label": "kimetsu-e2",
+      "passed": false,
+      "pageErrors": [],
+      "failedRequests": [],
+      "introResponses": [],
+      "error": "locator.waitFor: Timeout 75000ms exceeded.",
+      "alerts": [
+        "Nenhuma fonte passou na verificação inicial de vídeo. Reabra o episódio ou escolha outra fonte."
+      ]
+    }
+  ],
+  "scope": "Reprodução real sem fixtures; Conan E01 desktop e celular. Kimetsu E02 não alcançou o player por indisponibilidade da fonte de vídeo."
+}

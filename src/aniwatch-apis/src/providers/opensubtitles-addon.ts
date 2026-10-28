@@ -48,6 +48,16 @@ function formatFromFilename(filename: unknown): ParsedAddonPortugueseSubtitle['f
   return extension === 'srt' || extension === 'ass' || extension === 'vtt' ? extension : undefined;
 }
 
+/** Explicit release numbering may contradict metadata; a bare absolute number cannot. */
+export function contradictsSubtitleEpisode(filename: unknown, identity: SubtitleAddonIdentity): boolean {
+  if (identity.kind !== 'series' || typeof filename !== 'string') return false;
+  const declarations = filename.matchAll(/(?:^|[^a-z0-9])s(\d+)[ ._-]*e(\d+)(?=$|[^a-z0-9])/gi);
+  for (const match of declarations) {
+    if (Number(match[1]) !== identity.season || Number(match[2]) !== identity.episode) return true;
+  }
+  return false;
+}
+
 /** Parse only Portuguese rows bound to the exact identity requested from the official addon. */
 export function parseAddonPortugueseSubtitles(input: unknown, identity: SubtitleAddonIdentity): ParsedAddonPortugueseSubtitle[] {
   addonSubtitleUrl(identity);
@@ -63,12 +73,12 @@ export function parseAddonPortugueseSubtitles(input: unknown, identity: Subtitle
       : row.season !== undefined && row.season !== 0 || row.episode !== undefined && row.episode !== 0) continue;
     const url = permittedAddonSubtitleDownloadUrl(row.url);
     const format = formatFromFilename(row.subtitleFileName);
-    if (!url || !format) continue;
+    const release = typeof row.subtitleFileName === 'string' && row.subtitleFileName.trim() ? row.subtitleFileName : row.movieReleaseName;
+    if (!url || !format || contradictsSubtitleEpisode(release, identity)) continue;
     // The row id is not IDSubtitleFile. The download path is the shared file
     // identity used by the legacy REST source, so both sources can deduplicate.
     const id = `opensubtitles-${url.pathname.split('/').at(-1)!}`;
     if (seen.has(id)) continue;
-    const release = typeof row.subtitleFileName === 'string' && row.subtitleFileName.trim() ? row.subtitleFileName : row.movieReleaseName;
     const label = typeof release === 'string' ? release.replace(/\p{Cc}/gu, ' ').trim().slice(0, 170) : id;
     result.push({ id, url: url.href, format, encoding: 'utf-8', language, label: `OpenSubtitles v3 · ${language} · ${label || id}` });
     seen.add(id); counts[language]++;

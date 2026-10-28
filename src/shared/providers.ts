@@ -61,6 +61,15 @@ export interface StreamSubtitle {
   kind?: 'subtitles' | 'captions';
   default?: boolean;
   machineTranslated?: boolean;
+  /** Opaque server offer bound to this existing subtitle, never a remote URL. */
+  translationToken?: string;
+}
+
+export interface AutomaticSubtitleJob {
+  id: string;
+  state: 'pending' | 'complete' | 'failed';
+  subtitle?: StreamSubtitle;
+  message?: string;
 }
 
 export interface StreamSource {
@@ -91,6 +100,7 @@ export interface Playback {
   subtitles: StreamSubtitle[];
   audioLanguages: string[];
   intro?: { start: number; end: number };
+  ending?: { start: number; end: number };
   nextEpisodeId?: string;
   previousEpisodeId?: string;
   expiresAt?: string;

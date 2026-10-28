@@ -9,7 +9,7 @@ import { ApiError } from '../config/apiError.js';
 import { AniwatchAPICache } from '../config/cache.js';
 import { pinnedRequest, publicImageAddress } from './content-image.js';
 import type { ImageRequest, ImageResponse } from './content-image.js';
-import { addonSubtitleUrl, parseAddonPortugueseSubtitles, permittedAddonSubtitleDownloadUrl } from './opensubtitles-addon.js';
+import { addonSubtitleUrl, contradictsSubtitleEpisode, parseAddonPortugueseSubtitles, permittedAddonSubtitleDownloadUrl } from './opensubtitles-addon.js';
 import { curatedSubtitleIdentity, findCuratedPortugueseSubtitles, permittedCuratedSubtitleUrl, sanitizeCuratedSubtitleText } from './curated-portuguese-subtitles.js';
 import { extractSubtitleArchive } from './subtitle-archive.js';
 
@@ -44,6 +44,10 @@ export function parseSubtitleMappings(input: unknown): Map<number, Mapping> {
   const owners = new Map<string, Set<number>>();
   for (const row of candidates) {
     if (row.type !== 'TV' || !Array.isArray(row.imdb_id)) continue;
+    // A TV special explicitly assigned to season zero does not own the regular
+    // series numbering. Conan shares its IMDb with such a special in Fribb.
+    const seasons = object(row.season) ? row.season : {};
+    if (seasons.tvdb === 0 && seasons.tmdb === 0) continue;
     for (const id of row.imdb_id) if (typeof id === 'string' && /^tt\d{7,10}$/.test(id)) owners.set(id, new Set([...(owners.get(id) ?? []), row.anilist_id as number]));
   }
   const result = new Map<number, Mapping>();
@@ -149,6 +153,7 @@ export class PortugueseSubtitleProvider {
     if (row.SubLanguageID !== (language === 'pt-BR' ? 'pob' : 'por') || typeof row.SubDownloadLink !== 'string' || !/^\d{1,20}$/.test(String(row.IDSubtitleFile))) return undefined;
     if (identity.kind === 'series' ? row.MovieKind !== 'episode' || numeric(row.SeriesIMDBParent) !== Number(identity.imdb.slice(2)) || numeric(row.SeriesSeason) !== identity.season || numeric(row.SeriesEpisode) !== identity.episode
       : row.MovieKind !== 'movie' || numeric(row.IDMovieImdb) !== Number(identity.imdb.slice(2))) return undefined;
+    if (contradictsSubtitleEpisode(row.SubFileName, identity)) return undefined;
     const format = row.SubFormat === 'ssa' ? 'ass' : row.SubFormat;
     if (format !== 'srt' && format !== 'ass' && format !== 'vtt') return undefined;
     let url: URL;

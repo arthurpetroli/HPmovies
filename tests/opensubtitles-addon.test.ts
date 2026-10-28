@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addonSubtitleUrl, parseAddonPortugueseSubtitles, permittedAddonSubtitleDownloadUrl } from '../src/aniwatch-apis/src/providers/opensubtitles-addon';
+import { addonSubtitleUrl, contradictsSubtitleEpisode, parseAddonPortugueseSubtitles, permittedAddonSubtitleDownloadUrl } from '../src/aniwatch-apis/src/providers/opensubtitles-addon';
 import type { SubtitleAddonIdentity } from '../src/aniwatch-apis/src/providers/opensubtitles-addon';
 
 const series: SubtitleAddonIdentity = { imdb: 'tt1910272', kind: 'series', season: 1, episode: 2 };
@@ -50,6 +50,25 @@ describe('official OpenSubtitles addon identities and Portuguese metadata', () =
       row({ lang: 'eng' }), row({ url: 'https://private.example/123.srt' }), row({ subtitleFileName: 'archive.zip' }), row(),
     ] }, series);
     expect(tracks.map(track => track.id)).toEqual(['opensubtitles-123']);
+  });
+
+  it('rejects contradictory filenames before deduplication even when addon metadata matches', () => {
+    const tracks = parseAddonPortugueseSubtitles({ subtitles: [
+      row({ subtitleFileName: 'Original.S01E101.ass' }), row({ subtitleFileName: 'Original.S02E02.ass' }),
+      row({ subtitleFileName: 'Original.S01E02.S01E03.ass' }),
+      row({ subtitleFileName: undefined, movieReleaseName: 'Original.S01E101' }), row(),
+      row({ url: download('124'), subtitleFileName: 'Original - E101.ass' }),
+    ] }, series);
+    expect(tracks.map(track => track.id)).toEqual(['opensubtitles-123', 'opensubtitles-124']);
+  });
+
+  it('compares only explicit season/episode declarations to the resolved identity without guessing absolute numbering', () => {
+    for (const filename of ['QA.S01E02.ass', 'QA.s001-e0002.ass', 'QA.S01 E02.ass', 'QA - 101.ass', 'QA - E101.ass', 'QA [00101].ass', undefined]) {
+      expect(contradictsSubtitleEpisode(filename, series)).toBe(false);
+    }
+    expect(contradictsSubtitleEpisode('QA.S01E101.ass', { ...series, episode: 101 })).toBe(false);
+    expect(contradictsSubtitleEpisode('QA.S01E101.ass', series)).toBe(true);
+    expect(contradictsSubtitleEpisode('QA.S02E02.ass', series)).toBe(true);
   });
 
   it('accepts a movie only without contradictory series numbering', () => {

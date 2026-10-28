@@ -76,6 +76,8 @@ describe('source normalization', () => {
     ['Portuguese (- Brazilian)', 'pt-BR'], ['Portuguese 2', 'pt'],
     ['Portuguese (Portuguese - Brazilian [Full])', 'pt-BR'], ['Portuguese (Portuguese - Brazilian)', 'pt-BR'],
     ['Portuguese (Portuguese - [Full])', 'pt'], ['Portuguese (- European)', 'pt-PT'],
+    ['Portuguese (CR Portuguese(Brazil))', 'pt-BR'], ['Portuguese (CR Portuguese)', 'pt'],
+    ['English (CR English)', 'en'], ['English (CC)', 'en'], ['English (Forced)', 'en'],
   ])('normalizes explicit language %s as %s without inventing PT-BR', (raw, expected) => expect(normalizeTokoLanguage(raw)).toBe(expected));
 
   it.each([

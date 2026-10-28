@@ -1,0 +1,62 @@
+{
+  "checkedAt": "2026-10-27T20:06:23.307Z",
+  "results": [
+    {
+      "id": 198946,
+      "title": "Clevatess II: Majuu no Ou to Itsuwari no Yuusha Denshou",
+      "episode": 1,
+      "passed": true,
+      "pageErrors": [],
+      "failedRequests": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "subtitleStatuses": [
+        200
+      ],
+      "entryPath": "/anime/198946",
+      "generatedTranslation": true,
+      "beforeSeek": {
+        "time": 10.0144,
+        "duration": 1419.9604689999953,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 245,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 172429,
+        "captionCues": [
+          {
+            "language": "pt",
+            "count": 400
+          }
+        ]
+      },
+      "durationMatchesExpectedEpisode": true,
+      "afterSeek": {
+        "time": 21.027259,
+        "readyState": 4,
+        "paused": false,
+        "error": null
+      },
+      "portugueseCaptionVisible": true,
+      "machineTranslationWarningVisible": true,
+      "mobileOverflow": false,
+      "alerts": []
+    }
+  ]
+}

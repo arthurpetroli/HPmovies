@@ -1,0 +1,103 @@
+.video-player {
+  container-type: inline-size;
+  --caption-small: 1rem;
+  --caption-medium: 1.25rem;
+  --caption-large: 1.5rem;
+}
+
+.player-captions {
+  position: absolute;
+  inset-inline: 0.75rem;
+  top: 0.5rem;
+  bottom: max(5%, 0.75rem);
+  z-index: 23;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Long captions may share the controls' space on narrow video surfaces,
+     but must never be pushed above the video and clipped. */
+  justify-content: safe flex-end;
+  pointer-events: none;
+  text-align: center;
+  transition: bottom 150ms ease;
+}
+
+.player-captions[data-controls-visible="true"] {
+  bottom: 4.75rem;
+}
+
+.player-caption-text {
+  display: inline-block;
+  flex-shrink: 0;
+  max-inline-size: 100%;
+  padding: 0.1em 0.3em;
+  color: #fff;
+  background: transparent;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: var(--caption-medium);
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  /* Paint the outline first so it never eats into the white letterforms. */
+  -webkit-text-stroke: 0.12em #000;
+  paint-order: stroke fill;
+  text-shadow: 0 0.06em 0.08em rgb(0 0 0 / 90%);
+}
+
+.player-caption-text[data-size="small"] {
+  font-size: var(--caption-small);
+}
+
+.player-caption-text[data-size="large"] {
+  font-size: var(--caption-large);
+}
+
+.player-caption-text[data-background="true"] {
+  background: rgb(0 0 0 / 85%);
+  border-radius: 0.1em;
+}
+
+@media (min-width: 640px) {
+  .video-player {
+    --caption-small: 1.5rem;
+    --caption-medium: 1.875rem;
+    --caption-large: 2.25rem;
+  }
+
+  .player-captions[data-controls-visible="true"] {
+    bottom: 5.5rem;
+  }
+
+  .player-caption-text {
+    max-inline-size: 90%;
+  }
+}
+
+.video-player:fullscreen {
+  --caption-small: clamp(1rem, 2.4cqw, 3rem);
+  --caption-medium: clamp(1.25rem, 3cqw, 3.75rem);
+  --caption-large: clamp(1.5rem, 3.6cqw, 4.5rem);
+}
+
+@supports not (paint-order: stroke fill) {
+  .player-caption-text {
+    -webkit-text-stroke: 0;
+    text-shadow:
+      -0.06em -0.06em 0 #000,
+      0 -0.06em 0 #000,
+      0.06em -0.06em 0 #000,
+      -0.06em 0 0 #000,
+      0.06em 0 0 #000,
+      -0.06em 0.06em 0 #000,
+      0 0.06em 0 #000,
+      0.06em 0.06em 0 #000;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-captions {
+    transition: none;
+  }
+}

@@ -1,7 +1,8 @@
 import type { AnimeStreamingProvider, Playback, StreamingAvailability } from '../../shared/providers';
 import { apiMediaUrl, requestData } from './http';
+import { normalizedTitleHints } from '../../shared/titleHints';
 
-const hints = (titles?: string[]) => { const params = new URLSearchParams(); titles?.filter(Boolean).slice(0, 5).forEach(title => params.append('titles[]', title)); return params.size ? `?${params}` : ''; };
+const hints = (titles?: string[]) => { const params = new URLSearchParams(); normalizedTitleHints(titles).forEach(title => params.append('titles[]', title)); return params.size ? `?${params}` : ''; };
 
 export function isPlayback(value: unknown): value is Playback {
   const playback = value as Playback | null;

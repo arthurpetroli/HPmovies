@@ -1,0 +1,38 @@
+[
+  {
+    "name": "desktop-medium",
+    "fontSize": "30px",
+    "weight": "700",
+    "stroke": "3.6px",
+    "background": "rgba(0, 0, 0, 0)",
+    "inside": true,
+    "overflow": false
+  },
+  {
+    "name": "desktop-large",
+    "fontSize": "36px",
+    "weight": "700",
+    "stroke": "4.32px",
+    "background": "rgba(0, 0, 0, 0)",
+    "inside": true,
+    "overflow": false
+  },
+  {
+    "name": "desktop-black",
+    "fontSize": "36px",
+    "weight": "700",
+    "stroke": "4.32px",
+    "background": "rgba(0, 0, 0, 0.85)",
+    "inside": true,
+    "overflow": false
+  },
+  {
+    "name": "mobile-large",
+    "fontSize": "24px",
+    "weight": "700",
+    "stroke": "2.88px",
+    "background": "rgba(0, 0, 0, 0)",
+    "inside": true,
+    "overflow": false
+  }
+]

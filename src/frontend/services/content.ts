@@ -2,6 +2,7 @@ import type { ChapterQuery, ContentChapter, ContentChapterList, ContentPages, Re
 import type { Playback } from '../../shared/providers';
 import { apiMediaUrl, requestData } from './http';
 import { isPlayback, playbackMedia } from './streaming';
+import { normalizedTitleHints } from '../../shared/titleHints';
 
 export interface SourceQuery extends ChapterQuery { source?: 'tatakai' | 'toko' }
 
@@ -11,14 +12,14 @@ export function sourceQuery(params: URLSearchParams): SourceQuery {
     source: source === 'tatakai' || source === 'toko' ? source : undefined,
     provider: params.get('provider') || undefined,
     language: params.get('language') === 'all' ? undefined : params.get('language') || undefined,
-    titles: [...params.getAll('title'), ...params.getAll('titles[]')].filter(Boolean).slice(0, 5),
+    titles: normalizedTitleHints([...params.getAll('title'), ...params.getAll('titles[]')]),
   };
 }
 
 export function sourceParams(query: SourceQuery = {}): URLSearchParams {
   const params = new URLSearchParams();
   for (const key of ['source', 'provider', 'language'] as const) if (query[key]) params.set(key, query[key]!);
-  query.titles?.filter(Boolean).slice(0, 5).forEach(title => params.append('title', title));
+  normalizedTitleHints(query.titles).forEach(title => params.append('title', title));
   return params;
 }
 
@@ -33,12 +34,12 @@ export const sourceTitles = {
   get(kind: string, id: string): string[] {
     try {
       const value: unknown = JSON.parse(localStorage.getItem(`hpmovies.source-titles:${kind}:${id}`) || '[]');
-      return Array.isArray(value) ? value.filter((title): title is string => typeof title === 'string' && title.length > 0 && title.length <= 200).slice(0, 5) : [];
+      return Array.isArray(value) ? normalizedTitleHints(value.filter((title): title is string => typeof title === 'string')) : [];
     } catch { return []; }
   },
   save(kind: string, id: string, titles?: string[]) {
     if (!titles?.length) return;
-    try { localStorage.setItem(`hpmovies.source-titles:${kind}:${id}`, JSON.stringify(titles.slice(0, 5))); } catch { /* Hints in the URL remain usable. */ }
+    try { localStorage.setItem(`hpmovies.source-titles:${kind}:${id}`, JSON.stringify(normalizedTitleHints(titles))); } catch { /* Hints in the URL remain usable. */ }
   },
 };
 
