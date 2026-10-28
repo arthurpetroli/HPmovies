@@ -108,4 +108,25 @@ describe('automatic subtitle offers and jobs', () => {
     expect((await app.request('/api/subtitles/automatic/fake?url=https://example.com', { method: 'POST', headers: { 'Content-Type': 'application/json' } })).status).toBe(400);
     expect(start).not.toHaveBeenCalled();
   });
+
+  it('starts translation from the production origin while rejecting other origins and forged forwarding headers', async () => {
+    const { jobs } = setup();
+    const token = (await jobs.offer(playback())).subtitles[0].translationToken!;
+    const app = createApp({ automaticSubtitles: jobs });
+    const start = vi.spyOn(jobs, 'start');
+    const url = `http://127.0.0.1:4000/api/subtitles/automatic/${token}`;
+    const blocked = await app.request(url, {
+      method: 'POST',
+      headers: { Origin: 'https://other.example', 'Content-Type': 'application/json', 'X-Forwarded-Host': 'other.example', 'X-Forwarded-Proto': 'https' },
+    });
+    expect(blocked.status).toBe(403);
+    expect(start).not.toHaveBeenCalled();
+    const allowed = await app.request(url, {
+      method: 'POST', headers: { Origin: 'http://127.0.0.1:4000', 'Content-Type': 'application/json' }, body: '{}',
+    });
+    expect(allowed.status).toBe(202);
+    const job = (await allowed.json()).data;
+    await vi.waitFor(() => expect(jobs.status(job.id).state).toBe('complete'));
+    expect(start).toHaveBeenCalledExactlyOnceWith(token);
+  });
 });

@@ -117,7 +117,8 @@ export function createApp(options: AppOptions = {}) {
 
   app.post('/api/subtitles/automatic/:token', c => {
     const origin = c.req.header('origin');
-    if (origin && !runtimeConfig.allowedOrigins.includes(origin)) return c.json({ error: 'INVALID_ORIGIN', message: 'Origem da solicitação não permitida.' }, 403);
+    const sameOrigin = origin === new URL(c.req.url).origin;
+    if (origin && !sameOrigin && !runtimeConfig.allowedOrigins.includes(origin)) return c.json({ error: 'INVALID_ORIGIN', message: 'Origem da solicitação não permitida.' }, 403);
     if (new URL(c.req.url).search || c.req.header('content-type') !== 'application/json') throw new ApiError(400, 'INVALID_SUBTITLE_REQUEST', 'Use a opção de tradução do player.');
     return c.json({ data: automaticSubtitles.start(c.req.param('token')) }, 202);
   });

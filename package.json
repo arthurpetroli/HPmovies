@@ -8,7 +8,7 @@
     "dev:backend": "tsx watch src/aniwatch-apis/src/server.ts",
     "dev:frontend": "vite",
     "build": "npm run typecheck && vite build && npm run build:backend",
-    "start": "npm run start:backend",
+    "start": "node scripts/start-production.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "build:backend": "tsc -p tsconfig.backend.json",
@@ -17,6 +17,7 @@
     "test": "vitest run --config vitest.config.ts",
     "diagnose:aniwatch": "node scripts/diagnose-aniwatch.mjs",
     "test:e2e": "playwright test",
+    "test:e2e:production": "npm run build && playwright test --config playwright.production.config.ts",
     "test:streaming:real": "node scripts/check-real-playback.mjs",
     "dev:source-host": "node scripts/start-source-host.cjs",
     "setup:translator": "python3 scripts/setup-subtitle-translator.py"

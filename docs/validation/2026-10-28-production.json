@@ -1,0 +1,104 @@
+{
+  "checkedAt": "2026-10-28T12:52:05.356420+00:00",
+  "scope": "Produção compilada local, sem deploy, sem APK e sem teste de carga.",
+  "unit": {
+    "files": 44,
+    "passed": 454
+  },
+  "lint": "passed",
+  "build": {
+    "status": "passed",
+    "warning": "Chunk do player maior que 500 kB."
+  },
+  "browser": {
+    "passed": 10,
+    "projects": [
+      "desktop",
+      "mobile"
+    ],
+    "fixtureScenarios": 6,
+    "realLocalOriginalTextScenarios": 2,
+    "externalDemoVideoScenarios": 2,
+    "usesVite": false,
+    "loadsPrivateSources": false
+  },
+  "isolatedCompiledSmoke": {
+    "cwdOutsideProject": true,
+    "deepLinksIncludingDecimalEpisode": true,
+    "apiAndWebVtt": true,
+    "privatePathsRejected": true,
+    "sameOriginTranslationRequest": true,
+    "sigtermReleasesPorts": true,
+    "occupiedApiPortCleansHelpers": true,
+    "occupiedSourcePortStopsStartup": true
+  },
+  "publicBuild": {
+    "files": 24,
+    "privateEnvironmentSentinelAbsent": true,
+    "hiddenFilesAndBackendAbsent": true
+  },
+  "realPlayback": {
+    "id": 235,
+    "title": "Detective Conan",
+    "episode": 1,
+    "passed": true,
+    "entryPath": "/anime/235",
+    "beforeSeek": {
+      "time": 10.008142,
+      "duration": 1496.5060000000005,
+      "width": 1920,
+      "height": 1080,
+      "decodedFrames": 223,
+      "droppedFrames": 1,
+      "decodedAudioBytes": 162552,
+      "captionCues": [
+        {
+          "language": "pt-BR",
+          "count": 350
+        }
+      ]
+    },
+    "afterSeek": {
+      "time": 21.019919,
+      "readyState": 4,
+      "paused": false,
+      "error": null
+    },
+    "portugueseCaptionVisible": true,
+    "mobileOverflow": false,
+    "alerts": [],
+    "pageErrors": [],
+    "failedRequests": []
+  },
+  "mediaStatuses": [
+    200
+  ],
+  "subtitleStatuses": [
+    200
+  ],
+  "visualInspection": {
+    "sampleSeconds": [
+      150,
+      700,
+      1280
+    ],
+    "finding": "Personagens e cenas da investigação, encontro com Ran e envenenamento compatíveis com Detective Conan E01; legenda portuguesa visível.",
+    "spokenAudioLanguageIndependentlyVerified": false
+  },
+  "temporaryEvidence": [
+    "/tmp/hpmovies-playback-1793191642224",
+    "/tmp/hpmovies-production-content-review"
+  ],
+  "limits": [
+    "A amostra não comprova disponibilidade de outros episódios ou fontes.",
+    "Não houve validação Android/Fire TV, cloud, HTTPS, autenticação ou dez reproduções simultâneas."
+  ],
+  "liveRuntime": {
+    "origin": "http://127.0.0.1:4000",
+    "apiHealth": true,
+    "sourceHostHealth": true,
+    "translatorHealth": true,
+    "decimalDeepLink": true,
+    "originalTestSentenceTranslated": true
+  }
+}

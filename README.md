@@ -1,10 +1,10 @@
-# HPmovies V2 — execução local
+# HPmovies V2 — desenvolvimento e produção
 
-Plataforma de descoberta de animes, mangás e light novels, com biblioteca pessoal, histórico, player HLS e leitores. React, TypeScript, Vite, Tailwind, React Router, Hono e HLS.js foram preservados. Esta entrega prioriza o computador local; não exige Redis, conta ou deploy.
+Plataforma de descoberta de animes, mangás e light novels, com biblioteca pessoal, histórico, player HLS e leitores. React, TypeScript, Vite, Tailwind, React Router, Hono e HLS.js foram preservados. Desenvolvimento e produção compilada podem ser verificados localmente, sem exigir Redis, conta ou deploy. A preparação local não exige manter o computador ligado quando os serviços forem futuramente hospedados na nuvem.
 
-**Retomada em 27/10/2026:** as três [skills locais](docs/PROJECT-SKILLS.md) estão instaladas. O [estado de desenvolvimento](docs/DEVELOPMENT-STATE.md) registra as mudanças de episódios, streaming e legendas, os testes atuais e as pendências; os relatórios anteriores preservam suas datas de validação.
+**Retomada em 28/10/2026:** a execução compilada usa `npm run build` e `npm start`, com site e API na mesma origem. Veja [produção e limites desta etapa](docs/PRODUCTION.md). As três [skills locais](docs/PROJECT-SKILLS.md) estão instaladas; o [estado de desenvolvimento](docs/DEVELOPMENT-STATE.md) registra entregas, verificações e pendências. Relatórios anteriores preservam suas datas de validação.
 
-## Iniciar
+## Desenvolvimento
 
 Requer **Node.js 22.12+** e npm.
 
@@ -16,6 +16,17 @@ npm run dev
 Abra **http://127.0.0.1:5173**. O comando inicia o frontend, a API em **http://127.0.0.1:4000** e o host de fontes em **http://127.0.0.1:8099**; `Ctrl+C` encerra os três processos. As portas são fixas para evitar abrir outra instância silenciosamente. Encerre processos anteriores se estiverem ocupadas.
 
 O `.env` é opcional. Para personalizar, copie `.env.example` para `.env`. `BACKEND_PORT` define a porta da API; o proxy Vite acompanha esse valor. `PORT` continua aceito para compatibilidade. `VITE_API_BASE_URL` vazio usa `/api` com encaminhamento local; preenchido, aceita a origem da API ou uma base terminando em `/api`. `DEV_API_PROXY_URL` permite escolher o destino do proxy sem expor configurações privadas no frontend.
+
+## Produção compilada
+
+```bash
+npm run build
+npm start
+```
+
+Abra **http://127.0.0.1:4000**, ou a porta definida em `BACKEND_PORT`. O comando serve somente `dist/web`, encaminha a API internamente e inicia o host privado de fontes e o tradutor opcional instalado. Não inicia Vite. `Ctrl+C` encerra os serviços desta execução; portas ocupadas causam erro explícito. Encerre o modo de desenvolvimento antes de usar as mesmas portas.
+
+Deixe `VITE_API_BASE_URL` vazio para site e API na mesma origem; essa variável é definida durante o build. O backend compilado fica em `dist/backend` e não é servido como arquivo público. Fontes privadas e modelo do tradutor continuam provisionados separadamente. A produção ainda usa loopback por padrão; esta etapa não publica o site nem configura hospedagem. Instruções completas em [PRODUCTION.md](docs/PRODUCTION.md).
 
 **Disponibilidade externa verificada em 21/10/2026:** AniList recusou consultas GraphQL reais com HTTP 403 e mensagem de indisponibilidade temporária. O MangaDex recuperou o acesso após o HTTP 503 inicial: catálogo PT-BR, feeds de oito obras e imagens reais responderam HTTP 200. Falhas externas continuam visíveis, com opção de tentar novamente. Não existem dados de demonstração disfarçados de catálogo.
 
@@ -79,6 +90,18 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
+Para executar os cenários de plataforma contra o site compilado, sem Vite e sem
+carregar fontes privadas, use:
+
+```bash
+npm run test:e2e:production
+```
+
+Essa suíte usa portas isoladas `4173` e `18099`. Catálogos e mangás usam fixtures
+de navegador; texto original usa a API real local e o HLS de demonstração depende
+de mídia externa. Ela não comprova disponibilidade de animes ou compatibilidade
+Android/Fire TV.
+
 O Playwright inicia a aplicação ou reutiliza uma instância local. Para usar um Chromium compatível já instalado, informe `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/caminho/do/chrome`. Em Linux, as bibliotecas nativas necessárias ao navegador também precisam estar disponíveis.
 
 Com `npm run dev` e as fontes reais já configuradas, verifique separadamente vídeo, áudio, legenda PT-BR e seek nos cinco títulos da amostra:
@@ -101,7 +124,7 @@ curl 'http://127.0.0.1:4000/api/manga/search?language=pt-br&sort=popular'
 curl http://127.0.0.1:4000/api/novels/demo/chapters/1/content
 ```
 
-Para verificar a versão compilada, use `npm run start:backend` e, em outro terminal, `npm run preview`. O frontend de preview também usa a API local. Para desenvolver no dia a dia, `npm run dev` já basta.
+Para verificar a versão compilada completa, use `npm run build` e `npm start`. `npm run start:backend` continua disponível para iniciar somente a API; `npm run preview` é uma prévia do frontend, não o servidor de produção. Para desenvolver no dia a dia, use `npm run dev`.
 
 ## Segurança, limites e próximos passos
 

@@ -1,7 +1,9 @@
-# Estado de desenvolvimento — 27/10/2026
+# Estado de desenvolvimento — 28/10/2026
 
-Execução local em `http://127.0.0.1:5173`, API em `:4000` e host de fontes em
-`:8099`, iniciados por `npm run dev`. Branch integrada: `main`.
+Retomada atual: produção compilada em `http://127.0.0.1:4000`, com site/API,
+fontes em `:8099` e tradutor opcional em `:5000`, iniciados por `npm start`.
+O desenvolvimento com `npm run dev` continua em `:5173`; não execute ambos nas
+mesmas portas auxiliares. Branch integrada: `main`.
 
 ## Skills instaladas
 
@@ -391,3 +393,159 @@ Abrir `http://127.0.0.1:5173` e manter o terminal aberto. `Ctrl+C` encerra os
 serviços; executar o mesmo comando novamente os reinicia. O modelo local já
 está instalado, sem necessidade de repetir o setup a cada execução.
 Não houve alteração funcional, commit, push ou deploy neste reinício.
+
+## Viabilidade de hospedagem, Android e Fire TV — 28/10/2026
+
+A pedido do usuário, foi feita auditoria de possibilidades sem alterar o
+aplicativo. Resultado e fontes oficiais em
+[DEPLOY-ANDROID-FIRE-TV-FEASIBILITY.md](DEPLOY-ANDROID-FIRE-TV-FEASIBILITY.md).
+
+Hospedagem completa é viável, mas exige inicialização de produção do frontend,
+API, host privado de fontes e tradutor quando habilitado. `npm start` inicia
+somente a API. A recomendação inicial é uma VPS com proxy HTTPS e uma instância
+da API, devido aos serviços restritos a loopback e tickets em memória. Revisar
+rate limit atrás do proxy, provisionar os arquivos privados fora do Git e validar
+fontes e transferência de mídia a partir do servidor escolhido.
+
+Android pode reaproveitar o frontend via Capacitor/WebView; ainda não há projeto
+nativo ou APK. Fire TV depende do sistema: Fire OS pode usar APK conforme versão
+e WebView; Vega exige VPKG e wrapper próprio. Ambos precisam navegação completa
+por controle e testes reais de mídia. Histórico e biblioteca continuam locais a
+cada dispositivo.
+
+O usuário confirmou Fire OS **6.7.1.1 (NS6711/5908)** e uso pessoal/familiar para
+**8–10 pessoas no total**. O destino da TV é APK Fire OS; o sistema atende à API
+mínima do Capacitor, mas falta medir o WebView. O Vite atual compila para Chrome
+107 e equivalentes, sem polyfills automáticos de APIs modernas. Prever adaptação
+do bundle conforme diagnóstico no aparelho, sem prometer compatibilidade pronta.
+
+Simultaneidade ainda não foi informada. Referência inicial para avaliação: uma
+VPS de 2 vCPU/4 GB RAM com uma API persistente e acesso restrito à família. Não é
+capacidade medida. A 5 Mbps, dez sessões representariam 50 Mbps de saída; duas
+horas por dia para dez pessoas representariam cerca de 1,35 TB em 30 dias, antes
+de overhead. Dimensionar por medição e franquia de transferência. Distribuição
+Android familiar também deve considerar o limite de aparelhos do caminho de
+distribuição limitada documentado pelo Google. Nenhuma conta foi criada.
+
+Verificação: 42 arquivos/436 testes unitários aprovados; lint e build aprovados.
+O build mantém aviso do chunk do player acima de 500 kB. A API compilada foi
+iniciada em produção local isolada, sem `.env` ou fontes externas: saúde e texto
+original aprovados; raiz 404 confirmou ausência de servidor estático integrado.
+Nenhuma reprodução real, carga, emulador, APK ou Fire TV foi validado nesta etapa.
+Não houve instalação de ferramentas, alteração funcional, commit, push ou deploy.
+
+## Primeira etapa recomendada — 28/10/2026
+
+O usuário pediu uma recomendação para começar. A sequência recomendada é preparar
+e validar a execução de produção local, criar um APK de teste para o Fire OS 6
+informado e então escolher a hospedagem. O teste no Fire Stick deve ocorrer
+antes da contratação, devido à versão ainda desconhecida do WebView.
+
+A preparação proposta é servir o frontend compilado e `/api` pela mesma origem,
+manter os serviços de fontes e tradução em loopback e coordenar seu início e
+encerramento. Separar os artefatos públicos dos arquivos do backend e preservar
+as rotas profundas do React Router. A inspeção confirmou que o `npm start`
+atual continua iniciando somente a API. Nenhum launcher, servidor de produção,
+Dockerfile ou projeto Android foi implementado nesta etapa; a aplicação e os
+resultados dos testes registrados acima permanecem sem alterações.
+
+## Hospedagem gratuita sem dependência do PC — 28/10/2026
+
+O usuário definiu que todos os serviços deverão executar fora do computador
+pessoal e pediu opções gratuitas. Testes locais continuam sendo uma etapa de
+preparação; não representam a topologia de uso definitivo. A preferência atual
+é pesquisar e escolher uma hospedagem gratuita antes de preparar sua implantação.
+
+Fontes oficiais atuais foram consultadas e registradas no final de
+[DEPLOY-ANDROID-FIRE-TV-FEASIBILITY.md](DEPLOY-ANDROID-FIRE-TV-FEASIBILITY.md).
+Primeira candidata: Oracle Always Free, cuja documentação atual informa A1 ARM
+com até 2 OCPU/12 GB RAM e 10 TB/mês de saída para a conta gratuita, sujeita a
+cotas e disponibilidade regional. Cadastro exige verificação por cartão; VMs
+ociosas podem ser retomadas. Não prometer os antigos 4 OCPU/24 GB.
+
+Render/Koyeb gratuitos são candidatos a protótipos com suspensão e limitações.
+Cloudflare Pages/Vercel gratuitos podem hospedar a interface; a arquitetura
+atual ainda exige outro servidor para API, fontes e tradutor. Railway oferece
+trial e crédito Free mensal pequeno; Google e2-micro tem franquia de saída
+insuficiente para o cenário avaliado. Nenhum serviço foi contratado, conectado
+ou publicado. Só documentação foi atualizada; não houve alteração funcional ou
+nova execução de testes da aplicação.
+
+## Produção compilada implementada e validada — 28/10/2026
+
+O usuário priorizou concluir a preparação de produção e deixar a hospedagem para
+depois. Essa é a etapa atual; a preferência de não depender do PC no uso futuro
+continua válida para quando os serviços forem implantados na nuvem.
+
+`npm run build` agora separa frontend em `dist/web` e backend em `dist/backend`.
+`npm start` inicia o novo launcher de produção: site compilado e API Hono na
+mesma origem, host privado de fontes e tradutor opcional instalado. Não inicia
+Vite, não instala fontes ou modelos e não modifica o bundle privado. O servidor
+recusa arquivos ocultos/privados, traversal e symlinks indevidos; entrega MIME
+correto, HEAD, cache e fallback de rotas React, inclusive IDs com pontos.
+
+O launcher verifica o build antes dos serviços, respeita o `.env` privado e
+`DOTENV_CONFIG_PATH`, trata portas ocupadas e sinais durante o início, encerra
+recursos próprios com prazo e preserva tradutor de outra execução. A API mantém
+informações da conexão e headers de mídia. A validação de origem da tradução
+passou a aceitar a própria origem de produção, preservando a rejeição de origens
+externas fora da allowlist.
+
+Verificações concluídas:
+
+- 44 arquivos/454 testes unitários aprovados; lint e build final aprovados.
+- 10 cenários Playwright em produção aprovados em desktop/celular: seis com
+  fixtures de contratos, dois com texto original da API e dois com HLS externo
+  de demonstração. Vite e fontes privadas não participam dessa suíte.
+- Launcher compilado iniciado de fora da raiz do projeto, sem `.env` ou fontes:
+  rotas profundas/decimais, API, WebVTT e bloqueio de arquivos privados aprovados.
+  SIGTERM liberou as portas; ocupação da porta HTTP ou das fontes produziu erro
+  explícito e limpeza correta dos serviços próprios.
+- 24 arquivos públicos conferidos, sem arquivos ocultos/backend ou uma variável
+  privada sentinela usada na compilação.
+- Reprodução real de Detective Conan, E01, a partir da versão de produção:
+  1080p, duração de 1.496,506 s, vídeo e áudio decodificados, seek, 350 cues PT-BR
+  carregados e legenda visível, sem erros ou overflow. Cenas em 150, 700 e
+  1.280 s foram inspecionadas e são compatíveis com o episódio. O idioma falado
+  não foi auditado manualmente; a amostra não valida outros episódios.
+
+O Chromium inicialmente não abriu por ausência de bibliotecas nativas no PATH
+do loader. A validação foi concluída reutilizando as bibliotecas já existentes
+em `/home/arthu/.cache/hpmovies-qa/libs/usr/lib/x86_64-linux-gnu` via
+`LD_LIBRARY_PATH`, sem instalar pacotes do sistema. Permanece o aviso do chunk
+do player acima de 500 kB; não impede o build.
+
+Instruções em [PRODUCTION.md](PRODUCTION.md), evidência normalizada em
+[validation/2026-10-28-production.json](validation/2026-10-28-production.json).
+Capturas e resultados temporários em `/tmp/hpmovies-playback-1793191642224` e
+`/tmp/hpmovies-production-content-review`, sem persistir URLs de mídia/tickets.
+
+A execução final foi reiniciada com o build atualizado e está em
+`http://127.0.0.1:4000`. Hospedagem, domínio/HTTPS, autenticação familiar, proxy
+externo confiável, teste de carga e APK continuam pendentes. Não houve commit,
+push ou deploy.
+
+## Preferência atual: servidor doméstico e clientes na LAN — 28/10/2026
+
+O usuário reconsiderou a hospedagem e propôs começar com uso individual,
+mantendo o PC ligado com site, backend, fontes e tradução, e usando navegador
+no computador e futuros APKs no celular e Fire Stick. Esse passa a ser o cenário
+preferido de curto prazo; hospedagem na nuvem fica adiada.
+
+A revisão confirmou que a produção atual atende à topologia após configurar
+o bind do site/API para acesso pela rede doméstica. O padrão continua em
+loopback; nenhuma configuração ou firewall foi alterado nesta conversa. Somente
+site/API deve receber conexões dos aparelhos. Fontes e tradutor permanecem
+privados em loopback. Reservar IP do PC, evitar suspensão durante uso e validar
+primeiro no navegador do celular, depois no APK e controle do Fire Stick.
+
+Na mesma LAN, o transporte de vídeo PC→aparelho usa a rede local; o cálculo
+anterior de upload residencial para usuários remotos não se aplica a esse
+trecho. Download das fontes e capacidade de Wi-Fi/Ethernet continuam relevantes.
+Biblioteca e progresso permanecem locais a cada cliente; acesso fora de casa
+e sincronização não estão configurados. APK ainda não foi criado, e o WebView
+do Fire OS 6 continua exigindo medição e teste no aparelho.
+
+Foi feita somente revisão de código e documentação das possibilidades. Não houve
+alteração funcional, exposição de serviço na LAN, novo teste de dispositivo,
+mudança de energia do PC, instalação, commit, push ou deploy.
