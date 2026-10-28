@@ -706,3 +706,23 @@ cenários em `/tmp/hpmovies-compact-search-verified` e
 
 Ajuste restrito às legendas e à busca solicitadas, além dos testes e desta
 retomada. Site local continua em `http://127.0.0.1:5173`; sem commit, push ou deploy.
+
+## Sistema desligado para início manual pelo usuário — 28/10/2026
+
+A pedido do usuário, a execução local de desenvolvimento foi encerrada com
+SIGTERM no grupo de processos que a iniciou. Frontend, API, host de fontes e
+tradutor foram encerrados; as portas 5173, 4000, 8099 e 5000 foram verificadas
+como livres. Os processos correspondentes também não apareceram na conferência
+final. Nenhum serviço foi reiniciado após essa solicitação.
+
+Para aprender iniciando cada parte: abrir três terminais na raiz
+`/home/arthu/Prog/HPmovies` e executar, respectivamente,
+`npm run dev:source-host`, `npm run dev:backend` e `npm run dev:frontend`.
+O primeiro inclui o tradutor opcional já instalado. O site ficará em
+`http://127.0.0.1:5173`. Manter os terminais abertos e usar Ctrl+C em cada um para
+encerrar. O atalho `npm run dev` coordena os mesmos três grupos em um terminal;
+utilizar uma dessas formas por vez para evitar portas ocupadas.
+
+Foram feitos somente encerramento, conferência de processos/portas e registro
+de retomada. Código, configuração privada, dependências e dados foram preservados.
+Não houve nova execução de testes da aplicação, commit, push ou deploy.
