@@ -5,7 +5,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import type { AnimeCatalogProvider, AnimeStreamingProvider, ProviderDiagnostic } from '../../shared/providers.js';
 import { ApiError } from './config/apiError.js';
 import type { ServerContext } from './config/context.js';
-import { AniListCatalogProvider, validateAnimeId, validateCatalogQuery } from './providers/anilist.js';
+import { AniListCatalogProvider, validateAnimeId, validateCatalogQuery, validateScheduleQuery } from './providers/anilist.js';
 import { StreamingRegistry } from './providers/registry.js';
 import { cache } from './config/cache.js';
 import { runtimeConfig } from './config/runtime.js';
@@ -87,6 +87,11 @@ export function createApp(options: AppOptions = {}) {
   app.get('/api/catalog/home', async (c) => c.json({ data: await catalog.home() }));
   app.get('/api/catalog/search', async (c) => c.json({ data: await catalog.search(validateCatalogQuery(c.req.query())) }));
   app.get('/api/catalog/genres', async (c) => c.json({ data: await catalog.genres() }));
+  app.get('/api/catalog/schedule', async c => {
+    const { start, end } = validateScheduleQuery(new URL(c.req.url).searchParams);
+    if (!catalog.schedule) throw new ApiError(503, 'SCHEDULE_UNAVAILABLE', 'O catálogo conectado ainda não fornece uma agenda de exibição.');
+    return c.json({ data: await catalog.schedule(start, end) });
+  });
   app.get('/api/catalog/anime/:id', async (c) => c.json({ data: await catalog.details(validateAnimeId(c.req.param('id'))) }));
   app.get('/api/streaming/anime/:id/episodes', async (c) => {
     const id = c.req.param('id');

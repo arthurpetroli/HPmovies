@@ -67,11 +67,17 @@ async function noPageOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 }
 
+async function watchEntryIsVisible(page: Page, anime: typeof first) {
+  await expect(page).toHaveURL(new RegExp(`/watch/anime/${anime.id}\\?`));
+  await expect(page.locator('.watch-stage')).toBeVisible();
+  await expect(page.locator('.anime-details')).toHaveCount(0);
+}
+
 test.beforeEach(async ({ page }) => {
   await catalogFixtures(page);
 });
 
-test('featured anime controls update title, artwork and detail navigation', async ({ page }) => {
+test('featured anime controls update title, artwork and direct watch navigation', async ({ page }) => {
   await page.goto('/');
   const hero = page.getByRole('region', { name: 'Anime em destaque', exact: true });
   await expect(hero.getByRole('heading', { level: 1 })).toHaveText(first.title);
@@ -84,9 +90,8 @@ test('featured anime controls update title, artwork and detail navigation', asyn
   await hero.getByRole('button', { name: 'Destaque 3', exact: true }).click();
   await expect(hero.getByRole('heading', { level: 1 })).toHaveText(animes[2].title);
   await noPageOverflow(page);
-  await hero.getByRole('link', { name: 'Explorar anime', exact: true }).click();
-  await expect(page).toHaveURL(`/anime/${animes[2].id}`);
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText(animes[2].title);
+  await hero.getByRole('link', { name: 'Assistir agora', exact: true }).click();
+  await watchEntryIsVisible(page, animes[2]);
 });
 
 test('card preview exposes real fixture synopsis and rating, and saves persistently', async ({ page, isMobile }) => {
@@ -111,7 +116,7 @@ test('card preview exposes real fixture synopsis and rating, and saves persisten
   await noPageOverflow(page);
 });
 
-test('keyboard focus reveals preview, Escape dismisses it and details remain reachable', async ({ page, isMobile }) => {
+test('keyboard focus reveals preview, Escape dismisses it and the player remains reachable', async ({ page, isMobile }) => {
   test.skip(isMobile, 'Keyboard preview is covered on desktop; mobile uses an explicit touch control.');
   await page.goto('/');
   const card = firstCard(page);
@@ -124,20 +129,14 @@ test('keyboard focus reveals preview, Escape dismisses it and details remain rea
   await previewIsVisible(card);
   await card.getByRole('link', { name: first.title, exact: true }).focus();
   await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(`/anime/${first.id}`);
+  await watchEntryIsVisible(page, first);
 });
 
-test('header navigation and keyboard search work across viewport sizes', async ({ page, isMobile }) => {
+test('header navigation and keyboard search work across viewport sizes', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
-  if (isMobile) {
-    await page.getByRole('button', { name: 'Abrir menu', exact: true }).tap();
-    await page.getByRole('navigation', { name: 'Principal no celular', exact: true }).getByRole('link', { name: 'Animes', exact: true }).tap();
-    await expect(page.getByRole('navigation', { name: 'Principal no celular', exact: true })).toHaveCount(0);
-  } else {
-    await page.getByRole('navigation', { name: 'Principal', exact: true }).getByRole('link', { name: 'Animes', exact: true }).click();
-  }
+  await page.getByRole('navigation', { name: 'Navegação lateral', exact: true }).getByRole('link', { name: 'Explorar animes', exact: true }).click();
   await expect(page).toHaveURL('/explore');
   await noPageOverflow(page);
   await page.getByRole('button', { name: 'Buscar animes', exact: true }).click();
@@ -147,9 +146,8 @@ test('header navigation and keyboard search work across viewport sizes', async (
   await expect(page.getByRole('option').first()).toContainText(first.title);
   await search.press('ArrowDown');
   await search.press('Enter');
-  await expect(page).toHaveURL(`/anime/${first.id}`);
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText(first.title);
-  await expect(page.getByRole('combobox', { name: 'Buscar animes', exact: true })).toHaveCount(0);
+  await watchEntryIsVisible(page, first);
+  await expect(page.getByRole('combobox', { name: 'Buscar animes', exact: true })).toHaveAttribute('aria-expanded', 'false');
   await noPageOverflow(page);
   expect(errors).toEqual([]);
 });
@@ -165,11 +163,11 @@ test('narrow mobile cards expose preview without hover or document overflow', as
   await previewIsVisible(card);
   await noPageOverflow(page);
   await card.getByText(first.description, { exact: true }).tap();
-  await expect(page).toHaveURL(`/anime/${first.id}`);
+  await watchEntryIsVisible(page, first);
   await noPageOverflow(page);
 });
 
-test('the whole card opens the anime, including synopsis and empty preview space', async ({ page, isMobile }) => {
+test('the whole card opens the player, including synopsis and empty preview space', async ({ page, isMobile }) => {
   await page.goto('/');
   let card = firstCard(page);
   await card.scrollIntoViewIfNeeded();
@@ -179,7 +177,7 @@ test('the whole card opens the anime, including synopsis and empty preview space
   await expect(card.getByRole('link')).toHaveCount(1);
   await expect(card.locator('a button, a a')).toHaveCount(0);
   await card.getByText(first.description, { exact: true }).click();
-  await expect(page).toHaveURL(`/anime/${first.id}`);
+  await watchEntryIsVisible(page, first);
 
   await page.goto('/');
   card = firstCard(page);
@@ -191,5 +189,5 @@ test('the whole card opens the anime, including synopsis and empty preview space
   const box = await link.boundingBox();
   expect(box).not.toBeNull();
   await link.click({ position: { x: 6, y: box!.height - 6 } });
-  await expect(page).toHaveURL(`/anime/${first.id}`);
+  await watchEntryIsVisible(page, first);
 });

@@ -1,0 +1,72 @@
+.watch-page { position: relative; isolation: isolate; width: min(100%, 1800px); margin-inline: auto; padding: 96px 36px 72px; animation: watch-enter .22s ease-out both; }
+.watch-backdrop { position: fixed; z-index: -1; inset: 0 0 auto; height: 100vh; overflow: hidden; opacity: .3; pointer-events: none; mask-image: linear-gradient(#000 20%, #0009 65%, transparent); }
+.watch-backdrop .watch-artwork { filter: blur(22px); transform: scale(1.07); }
+.watch-breadcrumb { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+.watch-breadcrumb:hover { color: var(--text); }
+.watch-breadcrumb.skeleton { width: 150px; min-height: 20px; margin-block: 12px 24px; }
+.watch-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 22%); gap: 18px; align-items: start; }
+.watch-screen, .watch-details, .watch-sidebar, .watch-preferences { min-width: 0; }
+.watch-stage { position: relative; aspect-ratio: 16 / 9; isolation: isolate; overflow: hidden; border-radius: 9px; background: #080a0c; }
+.watch-stage > .video-player { height: 100%; border-radius: inherit; box-shadow: none; }
+.watch-stage:fullscreen { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 0; background: #000; }
+.watch-stage:fullscreen > .video-player { width: 100%; height: 100%; aspect-ratio: auto; }
+.watch-artwork { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.watch-artwork-empty { display: grid; place-items: center; color: #58e0bc45; background: radial-gradient(ellipse at 50% 70%, #173b35, #10171b 65%); }
+.watch-transition { position: absolute; z-index: 45; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; background: #080d12b8; color: var(--accent); animation: watch-enter .18s ease-out both; }
+.watch-transition > .watch-artwork { z-index: -2; opacity: .45; }
+.watch-transition::before { content: ''; position: absolute; z-index: -1; inset: 0; background: linear-gradient(0deg, #080d12e8, #080d1240 65%); }
+.watch-transition > span { font-size: 13px; color: var(--text); }
+.watch-transition > small { max-width: 85%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #d0d5da; }
+.watch-transition.is-error { color: var(--text); text-align: center; }
+.watch-transition.is-error h2 { font-size: clamp(16px, 2vw, 24px); font-weight: 700; }
+.watch-transition.is-error p { max-width: 520px; font-size: 13px; line-height: 1.6; color: #c0c7cc; }
+.watch-transition.is-error button { min-height: 44px; }
+.watch-transport { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; min-height: 58px; border-bottom: 1px solid var(--border); }
+.watch-autonext { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; color: #c2c8ce; font-size: 12px; cursor: pointer; }
+.watch-autonext input { width: 16px; height: 16px; accent-color: var(--accent); }
+.watch-navigation { display: flex; gap: 4px; margin-left: auto; }
+.watch-navigation a { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 12px; font-size: 12px; color: var(--text); border-radius: 5px; }
+.watch-navigation a:hover { background: #ffffff0a; color: var(--accent); }
+.watch-navigation .is-disabled { pointer-events: none; opacity: .4; }
+.watch-details { grid-column: 1; }
+.watch-details h1 { font-size: clamp(22px, 2vw, 30px); font-weight: 700; letter-spacing: -.025em; line-height: 1.3; overflow-wrap: anywhere; }
+.watch-anime-summary { display: flex; align-items: flex-start; gap: 16px; margin-top: 20px; padding: 18px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.watch-anime-poster { position: relative; flex: 0 0 56px; width: 56px; aspect-ratio: 2 / 3; overflow: hidden; border-radius: 4px; }
+.watch-anime-copy { min-width: 0; flex: 1; }
+.watch-anime-title { display: inline-block; margin-bottom: 6px; color: var(--text); font-size: 15px; font-weight: 650; line-height: 1.5; }
+.watch-anime-title:hover { color: var(--accent); }
+.watch-anime-copy > p { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.watch-anime-description { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 10px; }
+.watch-anime-summary > .button-secondary { flex-shrink: 0; min-height: 44px; padding: 10px 13px; font-size: 12px; }
+.watch-episode-label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--muted); font-size: 12px; }
+.watch-preferences { grid-column: 2; padding: 20px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
+.watch-sidebar { align-self: stretch; }
+.watch-sidebar-skeleton { padding: 18px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
+.watch-sidebar-skeleton h2 { margin-bottom: 20px; font-weight: 650; }
+.watch-sidebar-skeleton > .skeleton { height: 70px; margin-top: 12px; border-radius: 5px; }
+@keyframes watch-enter { from { opacity: 0; } to { opacity: 1; } }
+@media (min-width: 1101px) { .watch-screen { grid-column: 1; grid-row: 1; } .watch-sidebar { grid-column: 2; grid-row: 1; } }
+@media (max-width: 1100px) {
+  .watch-page { padding-inline: 28px; }
+  .watch-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .watch-details, .watch-preferences { grid-column: 1; }
+}
+@media (max-width: 600px) {
+  .watch-page { padding: 68px 8px 48px; }
+  .watch-breadcrumb { margin-bottom: 8px; }
+  .watch-stage { border-radius: 6px; }
+  .watch-transport { gap: 0; padding-block: 6px; }
+  .watch-autonext { font-size: 11px; }
+  .watch-navigation a { padding-inline: 8px; font-size: 11px; }
+  .watch-transition { gap: 8px; padding: 12px; }
+  .watch-transition > span, .watch-transition.is-error p { font-size: 12px; }
+  .watch-transition.is-error { gap: 6px; }
+  .watch-transition.is-error button { padding: 8px 14px; }
+  .watch-anime-summary { flex-wrap: wrap; padding: 14px; gap: 12px; }
+  .watch-anime-summary > .button-secondary { margin-left: 68px; }
+}
+@media (prefers-reduced-motion: reduce) { .watch-page, .watch-transition { animation: none; } }
+
+::view-transition-old(root) { animation: watch-catalog-out .18s ease-out both; }
+::view-transition-new(root) { animation: watch-enter .22s ease-out both; mix-blend-mode: normal; }
+@keyframes watch-catalog-out { to { opacity: 0; } }

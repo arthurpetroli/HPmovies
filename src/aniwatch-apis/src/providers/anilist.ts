@@ -1,5 +1,5 @@
 import type {
-  AnimeCatalogProvider, CatalogAnime, CatalogHome, CatalogPage, CatalogQuery,
+  AnimeAiring, AnimeCatalogProvider, CatalogAnime, CatalogHome, CatalogPage, CatalogQuery, CatalogSchedule,
 } from '../../../shared/providers.js';
 import { runtimeConfig } from '../config/runtime.js';
 import { ApiError } from '../config/apiError.js';
@@ -34,6 +34,10 @@ const SEARCH_QUERY = `query CatalogSearch(
 const DETAILS_QUERY = `query CatalogDetails($id: Int) {
   Media(id: $id, type: ANIME, isAdult: false) {
     ${MEDIA_FIELDS}
+    popularity countryOfOrigin
+    startDate { month day } endDate { year month day }
+    studios(isMain: true) { nodes { name } }
+    trailer { id site thumbnail }
     externalLinks { site url }
     characters(perPage: 12, sort: ROLE) { edges { role node { id name { full } image { medium } } } }
     relations { edges { relationType(version: 2) node { ${MEDIA_FIELDS} } } }
@@ -41,9 +45,36 @@ const DETAILS_QUERY = `query CatalogDetails($id: Int) {
   }
 }`;
 
+const SCHEDULE_QUERY = `query CatalogSchedule($page: Int!, $from: Int!, $end: Int!) {
+  Page(page: $page, perPage: 50) {
+    pageInfo { currentPage hasNextPage }
+    airingSchedules(airingAt_greater: $from, airingAt_lesser: $end, sort: [TIME, ID]) {
+      id airingAt episode
+      media { ${MEDIA_FIELDS} }
+    }
+  }
+}`;
+
 const FORMATS = new Set(['TV', 'TV_SHORT', 'MOVIE', 'SPECIAL', 'OVA', 'ONA', 'MUSIC']);
 const STATUSES = new Set(['FINISHED', 'RELEASING', 'NOT_YET_RELEASED', 'CANCELLED', 'HIATUS']);
 const SORTS = { popular: 'POPULARITY_DESC', score: 'SCORE_DESC', trending: 'TRENDING_DESC', newest: 'START_DATE_DESC' };
+
+export function validateScheduleRange(start: number, end: number): { start: number; end: number } {
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end > 2_147_483_647
+    || end <= start || end - start > 8 * 86_400) {
+    throw new ApiError(400, 'INVALID_SCHEDULE_RANGE', 'Informe início e fim em segundos Unix, em um intervalo de até oito dias.');
+  }
+  return { start, end };
+}
+
+export function validateScheduleQuery(params: URLSearchParams): { start: number; end: number } {
+  if (params.getAll('start').length !== 1 || params.getAll('end').length !== 1
+    || [...params.keys()].some(key => key !== 'start' && key !== 'end')
+    || !/^\d{1,10}$/.test(params.get('start') || '') || !/^\d{1,10}$/.test(params.get('end') || '')) {
+    throw new ApiError(400, 'INVALID_SCHEDULE_RANGE', 'Informe somente início e fim da agenda em segundos Unix.');
+  }
+  return validateScheduleRange(Number(params.get('start')), Number(params.get('end')));
+}
 
 export function validateAnimeId(id: string): string {
   if (!/^[1-9]\d{0,8}$/.test(id)) {
@@ -123,6 +154,27 @@ function plainDescription(value: unknown): string | undefined {
   return description?.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '')
     .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').slice(0, 6000);
+}
+
+function optionalRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function mediaDate(value: unknown): CatalogAnime['startDate'] {
+  const date = optionalRecord(value);
+  const integer = (value: unknown, maximum: number) => typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= maximum ? value : undefined;
+  const year = integer(date.year, 9999);
+  const month = integer(date.month, 12);
+  const day = integer(date.day, 31);
+  return year || month || day ? { year, month, day } : undefined;
+}
+
+function mediaTrailer(value: unknown): CatalogAnime['trailer'] {
+  const trailer = optionalRecord(value);
+  const id = text(trailer.id);
+  const site = text(trailer.site)?.toLowerCase();
+  if (!id || !(site === 'youtube' && /^[a-zA-Z0-9_-]{11}$/.test(id) || site === 'dailymotion' && /^[a-zA-Z0-9]{1,32}$/.test(id))) return undefined;
+  return { id, site: site as 'youtube' | 'dailymotion', thumbnail: safeUrl(trailer.thumbnail) };
 }
 
 function normalizeMedia(value: unknown): CatalogAnime {
@@ -244,6 +296,17 @@ export class AniListCatalogProvider implements AnimeCatalogProvider {
       if (data.Media === null) throw new ApiError(404, 'ANIME_NOT_FOUND', 'Anime não encontrado no catálogo.');
       const media = record(data.Media);
       const anime = normalizeMedia(media);
+      anime.titleNative = text(optionalRecord(media.title).native);
+      anime.popularity = number(media.popularity);
+      anime.countryOfOrigin = text(media.countryOfOrigin);
+      anime.startDate = mediaDate(media.startDate);
+      anime.endDate = mediaDate(media.endDate);
+      anime.trailer = mediaTrailer(media.trailer);
+      const studios = optionalRecord(media.studios).nodes;
+      anime.studios = Array.isArray(studios) ? [...new Set(studios.flatMap(value => {
+        const name = text(optionalRecord(value).name);
+        return name ? [name] : [];
+      }))] : [];
       const relations = media.relations ? record(media.relations).edges : undefined;
       const recommendations = media.recommendations ? record(media.recommendations).nodes : undefined;
       anime.relations = Array.isArray(relations) ? relations.flatMap((value) => {
@@ -280,7 +343,44 @@ export class AniListCatalogProvider implements AnimeCatalogProvider {
         return id && name ? [{ id: String(id), name, image, role: text(edge.role) }] : [];
       }) : [];
       return anime;
-    }, `catalog:anilist:details:${id}`, 3600);
+    }, `catalog:anilist:details:v2:${id}`, 3600);
+  }
+
+  schedule(start: number, end: number): Promise<CatalogSchedule> {
+    validateScheduleRange(start, end);
+    return this.cache.getOrSet(async () => {
+      const items = new Map<string, AnimeAiring>();
+      let truncated = false;
+      for (let page = 1; page <= 10; page += 1) {
+        // AniList bounds are exclusive; subtract one second to include start.
+        const data = await this.request(SCHEDULE_QUERY, { page, from: start - 1, end });
+        const result = record(data.Page);
+        const info = record(result.pageInfo);
+        if (info.currentPage !== page || typeof info.hasNextPage !== 'boolean' || !Array.isArray(result.airingSchedules)) {
+          throw new ApiError(502, 'INVALID_CATALOG_RESPONSE', 'O catálogo respondeu com uma agenda inválida. Tente novamente.');
+        }
+        for (const value of result.airingSchedules) {
+          if (!value) continue;
+          const airing = record(value);
+          if (!airing.media) continue;
+          const media = record(airing.media);
+          if (media.type !== 'ANIME' || media.isAdult !== false) continue;
+          const id = number(airing.id);
+          const airingAt = number(airing.airingAt);
+          const episode = number(airing.episode);
+          if (!id || !Number.isInteger(id) || airingAt === undefined || !Number.isInteger(airingAt)
+            || episode === undefined || !Number.isInteger(episode)) {
+            throw new ApiError(502, 'INVALID_CATALOG_RESPONSE', 'O catálogo respondeu com um horário de exibição inválido.');
+          }
+          if (airingAt < start || airingAt >= end) continue;
+          const key = String(id);
+          items.set(key, { id: key, airingAt, episode, anime: normalizeMedia(media) });
+        }
+        if (!info.hasNextPage) break;
+        if (page === 10) truncated = true;
+      }
+      return { start, end, items: [...items.values()].sort((a, b) => a.airingAt - b.airingAt || Number(a.id) - Number(b.id)), ...(truncated ? { truncated: true } : {}) };
+    }, `catalog:anilist:schedule:${start}:${end}`, 300);
   }
 
   genres(): Promise<string[]> {

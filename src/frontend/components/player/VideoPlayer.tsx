@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
-import type { Ref } from 'react';
+import type { Ref, RefObject } from 'react';
 import Hls from 'hls.js';
 import { Check, Loader2, Maximize, Minimize, Pause, Play, RotateCcw, Settings, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
 import type { StreamSource, StreamSubtitle } from '../../../shared/providers';
@@ -18,12 +18,17 @@ interface VideoPlayerProps {
   ending?: IntroTiming;
   endingResolver?: (duration: number, signal: AbortSignal) => Promise<IntroTiming | undefined>;
   onNextEpisode?: () => void;
+  onPrepareNextEpisode?: () => void;
   initialTime?: number;
   onProgress?: (currentTime: number, duration: number) => void;
   onSourceError?: (failure: VideoSourceError) => void;
   onSourcePlaying?: () => void;
+  onEnded?: () => void;
   onSubtitleChange?: (subtitle: StreamSubtitle | undefined) => void;
   autoPlay?: boolean;
+  autoSkipIntro?: boolean;
+  suspended?: boolean;
+  fullscreenContainerRef?: RefObject<HTMLDivElement | null>;
   className?: string;
 }
 
@@ -62,14 +67,18 @@ function useEpisodeTiming(native: IntroTiming | undefined, resolver: VideoPlayer
   return hasValidIntro(native, duration) ? native : resolved.key === key ? resolved.value : undefined;
 }
 
-export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, intro, introResolver, ending, endingResolver, onNextEpisode, initialTime = 0, onProgress, onSourceError, onSourcePlaying, onSubtitleChange, autoPlay = false, className = '' }: VideoPlayerProps) {
+export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, intro, introResolver, ending, endingResolver, onNextEpisode, onPrepareNextEpisode, initialTime = 0, onProgress, onSourceError, onSourcePlaying, onEnded, onSubtitleChange, autoPlay = false, autoSkipIntro = false, suspended = false, fullscreenContainerRef, className = '' }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const captionTrackRef = useRef<HTMLTrackElement>(null);
+  const captionTextRef = useRef<HTMLSpanElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const progressCallbackRef = useRef(onProgress);
   const sourceErrorCallbackRef = useRef(onSourceError);
   const sourcePlayingCallbackRef = useRef(onSourcePlaying);
+  const endedCallbackRef = useRef(onEnded);
+  const suspendedRef = useRef(suspended);
+  const nextPreparationRef = useRef(0);
   const playRequestedRef = useRef(autoPlay);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const lastSavedRef = useRef(0);
@@ -119,6 +128,7 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
   useEffect(() => { progressCallbackRef.current = onProgress; }, [onProgress]);
   useEffect(() => { sourceErrorCallbackRef.current = onSourceError; }, [onSourceError]);
   useEffect(() => { sourcePlayingCallbackRef.current = onSourcePlaying; }, [onSourcePlaying]);
+  useLayoutEffect(() => { endedCallbackRef.current = onEnded; }, [onEnded]);
   useEffect(() => { onSubtitleChange?.(selectedSubtitle); }, [onSubtitleChange, selectedSubtitle]);
   useEffect(() => {
     saveCaptionPreferences({ language: captionLanguage, size: captionSize, background: captionBackground, offset: captionOffset });
@@ -164,6 +174,14 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
     }
   }, []);
 
+  useLayoutEffect(() => {
+    suspendedRef.current = suspended;
+    if (suspended) {
+      saveProgress(true);
+      videoRef.current?.pause();
+    }
+  }, [suspended, saveProgress]);
+
   // Flush while the media element is still mounted and retains its exact position.
   useLayoutEffect(() => {
     const video = videoRef.current;
@@ -195,10 +213,11 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
       sourceErrorCallbackRef.current?.(failure);
     };
     const playIfRequested = () => {
-      if (autoPlay && !destroyed && !failed) {
+      if (autoPlay && !suspendedRef.current && !destroyed && !failed) {
         playRequestedRef.current = true;
         lastAdvance = Date.now();
         void video.play().catch(() => {
+          if (suspendedRef.current || destroyed) return;
           playRequestedRef.current = false;
           setNotice('Clique em reproduzir para continuar nesta fonte.');
           setControlsVisible(true);
@@ -224,10 +243,10 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
     const updateDuration = () => { if (Number.isFinite(video.duration)) setDuration(video.duration); };
     const waiting = () => setBuffering(true);
     const ready = () => setBuffering(false);
-    const play = () => { playRequestedRef.current = true; lastAdvance = Date.now(); setPlaying(true); setError(null); setNotice(null); };
-    const actuallyPlaying = () => { ready(); sourcePlayingCallbackRef.current?.(); };
-    const pause = () => { if (!failed && !video.error) playRequestedRef.current = false; setPlaying(false); setControlsVisible(true); saveProgress(true); };
-    const ended = () => { playRequestedRef.current = false; setHasEnded(true); setPlaying(false); setControlsVisible(true); saveProgress(true); };
+    const play = () => { if (suspendedRef.current) { video.pause(); return; } playRequestedRef.current = true; lastAdvance = Date.now(); setPlaying(true); setError(null); setNotice(null); };
+    const actuallyPlaying = () => { if (suspendedRef.current) { video.pause(); return; } ready(); sourcePlayingCallbackRef.current?.(); };
+    const pause = () => { if (!failed && !video.error && !suspendedRef.current) playRequestedRef.current = false; setPlaying(false); setControlsVisible(true); saveProgress(true); };
+    const ended = () => { playRequestedRef.current = false; setHasEnded(true); setPlaying(false); setControlsVisible(true); saveProgress(true); if (!suspendedRef.current) endedCallbackRef.current?.(); };
     const volumeChanged = () => { setVolume(video.volume); setMuted(video.muted); };
     const rateChanged = () => setSpeed(video.playbackRate);
     const nativeError = () => fail('Não foi possível reproduzir esta fonte. Confira sua conexão ou escolha outra fonte disponível.');
@@ -240,7 +259,7 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
     // A healthy manifest is not enough: bounded preparation/stall detection also
     // covers child playlists, unavailable fragments and a pending play promise.
     const watchdog = setInterval(() => {
-      if (failed || destroyed) return;
+      if (failed || destroyed || suspendedRef.current) return;
       if (video.readyState < 1 && Date.now() - startedAt >= 15000) {
         fail('Esta fonte demorou para preparar o vídeo. Escolha outra fonte ou tente novamente.');
       } else if (playRequestedRef.current && !video.ended && Date.now() - lastAdvance >= 15000) {
@@ -314,10 +333,11 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
   }, [saveProgress]);
 
   useEffect(() => {
-    const changed = () => setFullscreen(document.fullscreenElement === containerRef.current);
+    const changed = () => setFullscreen(document.fullscreenElement === (fullscreenContainerRef?.current || containerRef.current));
+    const frame = requestAnimationFrame(changed);
     document.addEventListener('fullscreenchange', changed);
-    return () => document.removeEventListener('fullscreenchange', changed);
-  }, []);
+    return () => { cancelAnimationFrame(frame); document.removeEventListener('fullscreenchange', changed); };
+  }, [fullscreenContainerRef]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -393,10 +413,10 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || suspendedRef.current) return;
     if (video.paused) {
       playRequestedRef.current = true;
-      void video.play().catch(() => { playRequestedRef.current = false; setNotice('O navegador não iniciou o vídeo. Tente novamente pelo botão de reprodução.'); setControlsVisible(true); });
+      void video.play().catch(() => { if (suspendedRef.current) return; playRequestedRef.current = false; setNotice('O navegador não iniciou o vídeo. Tente novamente pelo botão de reprodução.'); setControlsVisible(true); });
     } else { playRequestedRef.current = false; video.pause(); }
   }, []);
   const seek = (seconds: number) => {
@@ -412,25 +432,54 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
     } else video.muted = true;
   };
   const toggleFullscreen = async () => {
+    if (suspendedRef.current) return;
+    const container = fullscreenContainerRef?.current || containerRef.current;
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
-      else if (containerRef.current?.requestFullscreen) await containerRef.current.requestFullscreen();
+      else if (container?.requestFullscreen) await container.requestFullscreen();
       else setNotice('A tela cheia não está disponível neste navegador.');
     } catch { setNotice('O navegador não permitiu a tela cheia. Você pode continuar assistindo nesta janela.'); }
   };
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!autoSkipIntro || suspended || !video || !hasValidIntro(currentIntro, duration)) return;
+    if (time >= currentIntro.start && time < currentIntro.end && video.currentTime >= currentIntro.start && video.currentTime < currentIntro.end) video.currentTime = currentIntro.end;
+  }, [autoSkipIntro, suspended, currentIntro, duration, time]);
+  useEffect(() => {
+    if (!onPrepareNextEpisode || suspended || !duration || !playing) return;
+    const nearEnd = time >= duration - 20 || hasValidIntro(currentEnding, duration) && time >= currentEnding.start && time < currentEnding.end;
+    if (nearEnd && Date.now() - nextPreparationRef.current >= 10_000) {
+      nextPreparationRef.current = Date.now();
+      onPrepareNextEpisode();
+    }
+  }, [onPrepareNextEpisode, suspended, duration, playing, time, currentEnding]);
   const canSkipIntro = hasValidIntro(currentIntro, duration) && time >= currentIntro.start && time < currentIntro.end;
   const canGoNext = !!onNextEpisode && (hasEnded || hasValidIntro(currentEnding, duration) && time >= currentEnding.start && time < currentEnding.end);
   const showEpisodeAction = !error && !notice && !captionError && !conversionError && !settingsOpen;
   const chosenQuality = qualities.find(level => level.index === quality);
   const qualityLabel = quality === -1 ? `Automática${activeHeight ? ` · ${activeHeight}p` : ''}` : chosenQuality?.height ? `${chosenQuality.height}p` : chosenQuality ? `${Math.round(chosenQuality.bitrate / 1000)} kbps` : 'Original';
 
+  useLayoutEffect(() => {
+    const text = captionTextRef.current;
+    const player = containerRef.current;
+    if (!text || !player) return;
+    // Keep the chosen preset for normal dialogue. Exceptionally long captions
+    // must still fit the whole video on narrow phones instead of being clipped.
+    const fit = () => text.style.setProperty('--caption-fit', String(Math.min(1, Math.max(0, player.clientHeight - 16) / Math.max(1, text.offsetHeight))));
+    const observer = new ResizeObserver(fit);
+    observer.observe(player);
+    observer.observe(text);
+    fit();
+    return () => observer.disconnect();
+  }, [captionText, captionSize]);
+
   return (
-    <div ref={containerRef} role="region" aria-label="Player de vídeo" tabIndex={0}
+    <div ref={containerRef} role="region" aria-label="Player de vídeo" tabIndex={0} inert={suspended ? true : undefined}
       className={`video-player relative aspect-video w-full overflow-hidden rounded-xl bg-black text-white shadow-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-400 ${!controlsVisible && playing ? 'cursor-none' : ''} ${className}`}
       onPointerMove={revealControls} onPointerDown={revealControls} onFocus={revealControls}
       onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) revealControls(); }}
       onKeyDown={event => {
-        if (error) return;
+        if (error || suspendedRef.current) return;
         if ((event.target as HTMLElement).closest('button, input, select')) return;
         if (event.key === ' ' || event.key.toLowerCase() === 'k') { event.preventDefault(); togglePlay(); }
         else if (event.key === 'ArrowLeft') { event.preventDefault(); seek(-10); }
@@ -464,7 +513,7 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
       </div>
 
       {captionText && !captionError && !conversionError && <div aria-live="off" className="player-captions" data-controls-visible={controlsVisible}>
-        <span className="player-caption-text" data-size={captionSize} data-background={captionBackground}>{captionText}</span>
+        <span ref={captionTextRef} className="player-caption-text" data-size={captionSize} data-background={captionBackground}>{captionText}</span>
       </div>}
       {canSkipIntro && !canGoNext && showEpisodeAction && <button type="button" className={episodeActionClass} onClick={() => {
         const video = videoRef.current;

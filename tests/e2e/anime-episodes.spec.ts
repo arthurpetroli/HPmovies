@@ -55,8 +55,8 @@ test('real episode index is paginated and searchable with title hints preserved'
   await page.reload();
   await expect.poll(() => playbackRequests.length).toBe(2);
   expect(playbackRequests[1].searchParams.getAll('titles[]')).toEqual([anime.title, anime.titleOriginal]);
-  await expect(page.getByRole('link', { name: 'Voltar ao anime', exact: true })).toHaveAttribute('href', '/anime/21');
-  await page.getByRole('link', { name: 'Voltar ao anime', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Ver anime', exact: true })).toHaveAttribute('href', '/anime/21');
+  await page.getByRole('link', { name: 'Ver anime', exact: true }).click();
   await expect(section.getByRole('link', { name: /^Assistir episódio/ })).toHaveCount(24);
   expect(errors).toEqual([]);
 });

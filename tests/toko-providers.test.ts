@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { loadIntegrationsConfig } from '../src/aniwatch-apis/src/config/integrations';
 import { AniwatchAPICache } from '../src/aniwatch-apis/src/config/cache';
 import { TokoHttpClient } from '../src/aniwatch-apis/src/providers/toko-http';
-import type { TokoStream } from '../src/aniwatch-apis/src/providers/toko-http';
+import type { TokoEpisodeIndex, TokoStream } from '../src/aniwatch-apis/src/providers/toko-http';
 import { normalizeTokoLanguage, normalizeTokoSource, permittedMediaUrl, TokoStreamingProvider } from '../src/aniwatch-apis/src/providers/toko';
 import { TatakaiStreamingProvider } from '../src/aniwatch-apis/src/providers/tatakai';
 import { streamMediaGateway } from '../src/aniwatch-apis/src/providers/stream-media';
@@ -143,6 +143,57 @@ describe('verified Toko JSON HTTP contract', () => {
     const special = await provider.playback('toko:1:0.5');
     expect(special.nextEpisodeId).toBe('toko:1:1');
     expect(special.previousEpisodeId).toBeUndefined();
+  });
+
+  it('passes validated episode thumbnails through the HTTP index and playback metadata', async () => {
+    const thumbnails = ['https://images.example.com/first.jpg', 'https://images.example.com/second.webp'];
+    const rejected = ['http://images.example.com/third.jpg', 'https://user:pass@images.example.com/third.jpg',
+      'https://127.0.0.1/third.jpg', 'https://[::1]/third.jpg', 'https://images.internal/third.jpg',
+      'https://images.example.com/third.jpg#fragment', 'https://images.example.com/third.mp4',
+      'https://images.example.com/' + 'a'.repeat(2048) + '.jpg'];
+    const rows = [{ number: 1, title: 'First', thumbnail: thumbnails[0] }, { number: 2, image: thumbnails[1] },
+      ...rejected.map((thumbnail, i) => ({ number: i + 3, thumbnail }))];
+    const fetcher = vi.fn(async (raw: string) => raw.includes('/health') ? json(health)
+      : raw.includes('/index/episodes') ? json({ provider: 'permitted', episodeCount: rows.length, episodes: rows }) : json({ sources: [stream()] }));
+    const client = new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch });
+    const provider = new TokoStreamingProvider({ client, probe: async () => {} });
+    const availability = await provider.episodes('1');
+    expect(availability.episodes.slice(0, 2).map(episode => episode.thumbnail)).toEqual(thumbnails);
+    expect(availability.episodes.slice(2).every(episode => !episode.thumbnail)).toBe(true);
+    expect((await provider.playback('toko:1:1')).episode.thumbnail).toBe(thumbnails[0]);
+  });
+
+  it('starts verified playback while the index is pending and uses its real neighbours once ready', async () => {
+    let release!: (value: TokoEpisodeIndex) => void;
+    const pendingIndex = new Promise<TokoEpisodeIndex>(resolve => { release = resolve; });
+    const fetcher = vi.fn(async (raw: string) => raw.includes('/health') ? json(health) : json({ sources: [stream()] }));
+    const client = new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch });
+    vi.spyOn(client, 'episodes').mockReturnValue(pendingIndex);
+    const provider = new TokoStreamingProvider({ client, probe: async () => {} });
+    const playback = await provider.playback('toko:1:1');
+    expect(playback).toMatchObject({ episode: { id: 'toko:1:1', number: 1, title: 'Episódio 1', available: true } });
+    expect(playback.sources).toHaveLength(1);
+    expect(playback.previousEpisodeId).toBeUndefined();
+    expect(playback.nextEpisodeId).toBeUndefined();
+    release(index);
+    expect(await provider.playback('toko:1:1')).toMatchObject({ episode: { title: 'Começo' }, nextEpisodeId: 'toko:1:2' });
+  });
+
+  it('handles an index rejection after verified playback without inventing neighbours or an unhandled rejection', async () => {
+    let rejectIndex!: (error: Error) => void;
+    const pendingIndex = new Promise<TokoEpisodeIndex>((_resolve, reject) => { rejectIndex = reject; });
+    const fetcher = vi.fn(async (raw: string) => raw.includes('/health') ? json(health) : json({ sources: [stream()] }));
+    const client = new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch });
+    vi.spyOn(client, 'episodes').mockReturnValue(pendingIndex);
+    const provider = new TokoStreamingProvider({ client, probe: async () => {} });
+    const playback = await provider.playback('toko:1:7');
+    expect(playback).toMatchObject({ episode: { id: 'toko:1:7', number: 7, title: 'Episódio 7' } });
+    rejectIndex(new Error('Episode index unavailable'));
+    // Let the rejection reach the handler that playback attached before returning.
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(playback.sources).toHaveLength(1);
+    expect(playback.previousEpisodeId).toBeUndefined();
+    expect(playback.nextEpisodeId).toBeUndefined();
   });
 
   it('does not claim the presence of an episode index means playback permission', async () => {

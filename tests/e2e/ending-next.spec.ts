@@ -6,6 +6,8 @@ const first = 'tatakai:235:1', second = 'tatakai:235:2';
 interface FixtureOptions { next?: boolean; ending?: { start: number; end: number } | null; delayNext?: Promise<void> }
 async function fixture(page: Page, options: FixtureOptions = {}) {
   const requests = { first: 0, second: 0, ending: 0, nextHints: [] as string[] };
+  await page.route('**/api/catalog/anime/235', route => route.fulfill({ json: { data: { id: '235', title: 'Detetive fixture', poster: '', genres: [] } } }));
+  await page.route('**/api/streaming/anime/235/episodes**', route => route.fulfill({ json: { data: { available: false, episodes: [] } } }));
   await page.route('**/api/streaming/episodes/**', async route => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/intro')) return route.fulfill({ json: { data: null } });
@@ -53,8 +55,15 @@ test('the ending action opens and loads the next episode from the start with aut
     await page.keyboard.press('Enter');
   } else await nextButton(page).click();
   await expect(page).toHaveURL(/\/watch\/tatakai%3A235%3A2\?title=Detetive\+fixture$/);
-  await expect(page.getByRole('status')).toHaveText('Preparando o player...');
+  await expect(page.locator('.watch-transition')).toBeVisible();
+  await expect(page.getByText('Preparando o player...', { exact: true })).toHaveCount(0);
+  if (!isMobile) await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains('watch-stage'))).toBe(true);
   release();
+  await expect(page.locator('.watch-transition')).toHaveCount(0);
+  if (!isMobile) {
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains('watch-stage'))).toBe(true);
+    await page.evaluate(() => document.exitFullscreen());
+  }
   await expect(page.getByRole('heading', { name: 'Segundo episódio fixture' })).toBeVisible();
   await expect.poll(() => page.locator('video').evaluate(video => video.currentTime)).toBeGreaterThan(1);
   expect(await page.locator('video').evaluate(video => video.currentTime)).toBeLessThan(10);
@@ -86,9 +95,10 @@ test('does not navigate without a click and preserves scenes after the ending', 
   await expect(nextButton(page)).toBeVisible();
 });
 
-test('offers the next episode after the native video end even without ending metadata', async ({ page }) => {
+test('offers manual navigation at the native end when automatic advance is disabled', async ({ page }) => {
   await fixture(page, { ending: null });
   await start(page);
+  await page.getByRole('checkbox', { name: 'Avançar ao terminar' }).uncheck();
   await expect(nextButton(page)).toHaveCount(0);
   await page.locator('video').evaluate(video => { video.currentTime = video.duration - 0.3; });
   await expect.poll(() => page.locator('video').evaluate(video => video.ended), { timeout: 20000 }).toBe(true);
@@ -105,4 +115,31 @@ test('the last available episode has no ending action or ending lookup', async (
   await expect.poll(() => page.locator('video').evaluate(video => video.currentTime)).toBeGreaterThan(22);
   await expect(nextButton(page)).toHaveCount(0);
   expect(requests.ending).toBe(0);
+});
+
+
+test('automatically opens the next episode only at the native end and preserves the stage', async ({ page }) => {
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  await fixture(page, { delayNext: pending, ending: null });
+  await start(page);
+  const stage = await page.locator('.watch-stage').elementHandle();
+  await expect(page.getByRole('checkbox', { name: 'Avançar ao terminar' })).toBeChecked();
+  await page.locator('video').evaluate(video => { video.currentTime = video.duration - 0.3; });
+  await expect(page).toHaveURL(/watch\/tatakai%3A235%3A2/);
+  await expect(page.locator('.watch-transition')).toBeVisible();
+  expect(await page.locator('.watch-stage').evaluate((element, previous) => element === previous, stage)).toBe(true);
+  release();
+  await expect(page.locator('.watch-transition')).toHaveCount(0);
+  await expect.poll(() => page.locator('video').evaluate(video => video.currentTime)).toBeGreaterThan(1);
+  expect(await page.locator('video').evaluate(video => video.currentTime)).toBeLessThan(10);
+  expect(await page.locator('video').evaluate(video => video.paused)).toBe(false);
+});
+
+test('keeps the automatic advance preference after a reload', async ({ page }) => {
+  await fixture(page, { ending: null });
+  await start(page);
+  await page.getByRole('checkbox', { name: 'Avançar ao terminar' }).uncheck();
+  await page.reload();
+  await expect(page.getByRole('checkbox', { name: 'Avançar ao terminar' })).not.toBeChecked();
 });

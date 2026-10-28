@@ -40,6 +40,8 @@
   text-align: center;
   white-space: pre-line;
   overflow-wrap: anywhere;
+  transform: scale(var(--caption-fit, 1));
+  transform-origin: top center;
   /* Paint the outline first so it never eats into the white letterforms. */
   -webkit-text-stroke: 0.12em #000;
   paint-order: stroke fill;
@@ -75,7 +77,7 @@
   }
 }
 
-.video-player:fullscreen {
+.video-player:fullscreen, .watch-stage:fullscreen .video-player {
   --caption-small: clamp(1rem, 2.4cqw, 3rem);
   --caption-medium: clamp(1.25rem, 3cqw, 3.75rem);
   --caption-large: clamp(1.5rem, 3.6cqw, 4.5rem);

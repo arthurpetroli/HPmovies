@@ -1,0 +1,156 @@
+{
+  "checkedAt": "2026-10-28T22:18:46.300Z",
+  "kind": "live-browser-no-fixtures",
+  "animeId": 235,
+  "playedEpisodes": [
+    1
+  ],
+  "context": "Fresh browser storage after coordinated development-service restart. Provider/CDN caches outside HPmovies are not controlled.",
+  "pageErrors": [],
+  "imageFailures": 1,
+  "mediaStatuses": {
+    "200": 20
+  },
+  "passed": true,
+  "firstPlaybackAfterClickMs": 12279,
+  "indexReadyAtFirstPlayback": false,
+  "initialPlayback": {
+    "time": 1.013199,
+    "duration": 1496.5060000000005,
+    "readyState": 4,
+    "paused": false,
+    "width": 854,
+    "height": 480,
+    "decodedFrames": 27,
+    "decodedAudioBytes": 24005,
+    "error": null,
+    "captions": [
+      {
+        "language": "pt-BR",
+        "cues": 350,
+        "mode": "hidden"
+      }
+    ]
+  },
+  "index": {
+    "count": 1217,
+    "thumbnailCount": 1217,
+    "firstTwo": [
+      {
+        "id": "tatakai:235:1",
+        "number": 1,
+        "title": "The Big Shrink",
+        "hasThumbnail": true
+      },
+      {
+        "id": "tatakai:235:2",
+        "number": 2,
+        "title": "The Kidnapped Debutante",
+        "hasThumbnail": true
+      }
+    ]
+  },
+  "thumbnailBrowserCheck": [
+    {
+      "number": 1,
+      "loaded": true,
+      "naturalWidth": 300,
+      "naturalHeight": 169,
+      "matchesProviderThumbnail": true
+    },
+    {
+      "number": 2,
+      "loaded": true,
+      "naturalWidth": 300,
+      "naturalHeight": 169,
+      "matchesProviderThumbnail": true
+    }
+  ],
+  "thumbnailsAreDistinct": true,
+  "at150": {
+    "time": 150.739636,
+    "duration": 1496.5060000000005,
+    "readyState": 4,
+    "paused": true,
+    "width": 1920,
+    "height": 1080,
+    "decodedFrames": 160,
+    "decodedAudioBytes": 41998,
+    "error": null,
+    "captions": [
+      {
+        "language": "pt-BR",
+        "cues": 350,
+        "mode": "hidden"
+      }
+    ]
+  },
+  "desktop": {
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "overflow": false,
+    "topbarPresent": false,
+    "floatingSearchPresent": true,
+    "railBackground": "rgba(0, 0, 0, 0)",
+    "captionFontSize": "36px",
+    "captionVisible": true
+  },
+  "fullscreen": {
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "overflow": false,
+    "topbarPresent": false,
+    "floatingSearchPresent": true,
+    "railBackground": "rgba(0, 0, 0, 0)",
+    "captionFontSize": "51.84px",
+    "captionVisible": true
+  },
+  "mobile": {
+    "viewport": 393,
+    "documentWidth": 393,
+    "overflow": false,
+    "topbarPresent": false,
+    "floatingSearchPresent": true,
+    "railBackground": "rgba(0, 0, 0, 0)",
+    "captionFontSize": "24px",
+    "captionVisible": true
+  },
+  "alerts": [],
+  "entryTimings": [
+    {
+      "route": "verified-episode1-entry",
+      "requestAfterClickMs": 17,
+      "responseAfterClickMs": 10116,
+      "durationMs": 10100
+    },
+    {
+      "route": "complete-episode-index",
+      "requestAfterClickMs": 17,
+      "responseAfterClickMs": 18617,
+      "durationMs": 18600
+    }
+  ],
+  "visualAssessment": "Manual screenshot review confirms distinct Conan artwork in the first two thumbnails. The first shows Conan in the blue suit/red bow tie seen in the sampled episode1 video; the second shows Conan, Ran and Kogoro in a car. The provider binds them to episode rows1/2. Only episode1 was played in this final round; this limited review does not certify the exact scene timeline of episode2 or spoken audio language.",
+  "screenshots": [
+    "/tmp/hpmovies-watch-thumbnails-real-desktop.png",
+    "/tmp/hpmovies-watch-thumbnails-real-mobile.png",
+    "/tmp/hpmovies-watch-real-thumb-1.png",
+    "/tmp/hpmovies-watch-real-thumb-2.png"
+  ],
+  "passedScope": "Live entry and video/audio decoding, normalized per-episode thumbnails loaded in the browser, no topbar, transparent collapsed navigation, larger caption sizes including fullscreen, and desktop/mobile layout.",
+  "imageFailureAssessment": "One image request failed during the catalog flow. The two sampled episode thumbnails loaded with their own distinct provider artwork; visible player and sidebar artwork rendered.",
+  "earlierFlowEvidence": "2026-10-28-watch-flow-real.json contains the earlier two-episode navigation/progress/DOM-continuity check, before thumbnail propagation and the final navigation/caption styling.",
+  "backendValidation": {
+    "affectedTests": 85,
+    "testFiles": [
+      "toko-providers",
+      "streaming-registry",
+      "content-backend",
+      "episode-index",
+      "source-host"
+    ],
+    "targetedLint": "passed",
+    "backendBuild": "passed",
+    "upstreamBundleOrEnvironmentChanged": false
+  }
+}

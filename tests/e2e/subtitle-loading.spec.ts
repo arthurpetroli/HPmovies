@@ -142,7 +142,7 @@ test('automatic Portuguese shows its notice only in Sua experiência while that 
   await expect(page.getByText(automaticText, { exact: true })).toHaveCount(0);
 });
 
-test('outlined captions use the larger size scale and retain the optional black background after reload', async ({ page, isMobile }) => {
+test('outlined captions use the reduced size presets and retain the optional black background after reload', async ({ page, isMobile }) => {
   await playback(page, [{ id: 'pt-style', url: '/qa-caption-style.vtt', language: 'pt-BR', label: 'Português QA', format: 'vtt' }]);
   await page.route('**/qa-caption-style.vtt', route => route.fulfill({ contentType: 'text/vtt', body: vtt(pt) }));
   await page.addInitScript(() => {
@@ -158,6 +158,7 @@ test('outlined captions use the larger size scale and retain the optional black 
   await expect(caption).toHaveCSS('color', 'rgb(255, 255, 255)');
   await expect(caption).toHaveCSS('-webkit-text-stroke-color', 'rgb(0, 0, 0)');
   await expect(caption).toHaveCSS('paint-order', 'stroke');
+  await page.locator('.watch-stage').screenshot({ path: test.info().outputPath('captions-medium.png') });
   await page.getByRole('button', { name: 'Abrir configurações' }).click();
   const size = page.getByRole('combobox', { name: 'Tamanho da legenda' });
   await size.selectOption('small');
@@ -196,6 +197,7 @@ test('large multiline captions stay centered inside the video and scale in fulls
       fontSize: Number.parseFloat(getComputedStyle(element).fontSize), overflow: document.documentElement.scrollWidth > innerWidth + 1 };
   });
   expect(await geometry()).toMatchObject({ inside: true, centered: true, overflow: false });
+  await page.locator('.watch-stage').screenshot({ path: test.info().outputPath('captions-large-multiline.png') });
   if (isMobile) {
     for (const width of [320, 360]) {
       await page.setViewportSize({ width, height: 851 });

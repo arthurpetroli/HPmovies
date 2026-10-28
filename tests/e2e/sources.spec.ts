@@ -117,6 +117,7 @@ test('a source without a stream shows its real failure without opening a demo', 
 
 test('resolved anime opens the existing player and returns to its source form without a redirect loop', async ({ page }) => {
   await mockSources(page);
+  await page.route(`**/api/catalog/anime/${id}`, route => route.fulfill({ json: { data: { id, title, poster: '', genres: [] } } }));
   const episodeId = `tatakai:${id}:1`;
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
@@ -128,6 +129,7 @@ test('resolved anime opens the existing player and returns to its source form wi
   await expect(page.getByRole('heading', { name: 'Episódio da fonte QA' })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Episódio da fonte QA' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Ver anime', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Voltar às fontes' }).click();
   await expect(page.getByRole('textbox', { name: 'ID no AniList' })).toHaveValue(id);
   await expect(page.getByRole('textbox', { name: 'Título da obra' })).toHaveValue(title);

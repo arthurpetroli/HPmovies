@@ -40,6 +40,23 @@ describe('real source episode indexing', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves real per-episode image artwork while discarding unsafe optional URLs', async () => {
+    const rejected = ['http://images.example.com/episode.jpg', 'https://user:pass@images.example.com/episode.jpg',
+      'https://127.0.0.1/episode.jpg', 'https://[::1]/episode.jpg', 'https://localhost/episode.jpg',
+      'https://images.internal/episode.jpg', 'https://images.example.com:8443/episode.jpg',
+      'https://images.example.com/episode.jpg#fragment', 'https://images.example.com/video.mp4',
+      'https://images.example.com/page.html', 'https://images.example.com/' + 'a'.repeat(2048) + '.jpg'];
+    const rows = [{ number: 1, title: 'First', image: 'https://images.example.com/first.jpg' },
+      { number: 2, thumbnail: 'https://images.example.com/second.webp?size=320' },
+      ...rejected.map((image, i) => ({ number: i + 3, image }))];
+    const resolve = createEpisodeIndexResolver({ fetcher: async () => json({ ...page(1), totalResults: rows.length, episodes: rows }) });
+    const index = await resolve(params());
+    expect(index.episodes[0]).toEqual({ number: 1, title: 'First', thumbnail: 'https://images.example.com/first.jpg' });
+    expect(index.episodes[1]).toEqual({ number: 2, thumbnail: 'https://images.example.com/second.webp?size=320' });
+    expect(index.episodes.slice(2).every((row: { thumbnail?: string }) => row.thumbnail === undefined)).toBe(true);
+    expect(index.episodeCount).toBe(rows.length);
+  });
+
   it('returns an empty result for missing titles without caching a false full catalog', async () => {
     const fetcher = vi.fn(async () => json({}, 404));
     expect(await createEpisodeIndexResolver({ fetcher })(params())).toEqual({ provider: null, episodeCount: 0, episodes: [] });

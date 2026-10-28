@@ -6,7 +6,7 @@ import { ApiError } from '../config/apiError.js';
 import { integrationsConfig, normalizeProviderKey } from '../config/integrations.js';
 import type { TokoConfig } from '../config/integrations.js';
 import { TokoHttpClient } from './toko-http.js';
-import type { TokoStream } from './toko-http.js';
+import type { TokoEpisodeIndex, TokoStream } from './toko-http.js';
 import { streamMediaGateway } from './stream-media.js';
 import { isKnownSourceMismatch } from './source-mismatches.js';
 
@@ -161,6 +161,7 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
       const episodes: StreamingEpisode[] = indexed.map((episode) => ({
         id: `${this.id}:${animeId}:${episode.number}`, number: episode.number,
         title: episode.title || `Episódio ${episode.number}`,
+        ...(episode.thumbnail ? { thumbnail: episode.thumbnail } : {}),
         // A failed initial check can be transient. Keep indexed entries open
         // for individual resolution rather than disabling their links.
         ...(episode.number === first.number && available ? { available: true } : {}),
@@ -214,10 +215,16 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
     if (!this.config.enabled) throw new ApiError(503, 'TOKO_DISABLED', 'A integração Toko está desativada.');
     if (!this.contentPermitted) throw new ApiError(503, 'TOKO_UNAUTHORIZED', 'Nenhuma fonte autorizada foi configurada para reprodução no Toko.');
     await this.client.ready();
-    const [result, episodeIndex] = await Promise.all([
-      this.resolveSources(Number(match[1]), Number(match[2]), titles),
-      this.client.episodes(Number(match[1]), titles).catch(() => null),
-    ]);
+    // A long series can require many index pages. Playback is confirmed by the
+    // scoped media probes, so optional titles/neighbours must not delay it.
+    // Keep the existing bounded, deduplicated index request running for the
+    // sidebar and use its metadata when it finishes before the video sources.
+    const episodeIndex: { value?: TokoEpisodeIndex } = {};
+    void this.client.episodes(Number(match[1]), titles).then(
+      value => { episodeIndex.value = value; },
+      () => { /* An unavailable index does not invalidate verified media. */ },
+    );
+    const result = await this.resolveSources(Number(match[1]), Number(match[2]), titles);
     if (!result.sources.length) {
       if (result.failureState === 'unauthorized') throw new ApiError(503, 'TOKO_UNAUTHORIZED', 'As fontes retornadas não atendem às permissões de domínio, provedor ou cabeçalhos configuradas.');
       if (result.returnedSources > 0) throw new ApiError(502, 'STREAM_MEDIA_UNAVAILABLE', 'Nenhuma fonte passou na verificação inicial de vídeo. Reabra o episódio ou escolha outra fonte.');
@@ -225,12 +232,14 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
     }
     const subtitles = [...new Map(result.sources.flatMap((source) => source.subtitles).map((track) => [`${track.url}:${track.language}`, track])).values()];
     subtitles.sort((a, b) => Number(b.language === 'pt-BR') - Number(a.language === 'pt-BR'));
-    const indexed = [...new Map((episodeIndex?.episodes ?? []).map((episode) => [episode.number, episode])).values()].sort((a, b) => a.number - b.number);
+    const indexed = [...new Map((episodeIndex.value?.episodes ?? []).map((episode) => [episode.number, episode])).values()].sort((a, b) => a.number - b.number);
     const position = indexed.findIndex((episode) => episode.number === Number(match[2]));
     const previous = position > 0 ? indexed[position - 1] : undefined;
     const next = position >= 0 ? indexed[position + 1] : undefined;
     return {
-      episode: { id: episodeId, title: indexed[position]?.title || `Episódio ${match[2]}`, number: Number(match[2]), available: true },
+      episode: { id: episodeId, title: indexed[position]?.title || `Episódio ${match[2]}`, number: Number(match[2]), available: true,
+        ...(indexed[position]?.thumbnail ? { thumbnail: indexed[position].thumbnail } : {}),
+      },
       sources: result.sources, subtitles,
       audioLanguages: [...new Set(result.sources.map((source) => source.audioLanguage).filter((language): language is string => !!language && language !== 'und'))],
       isDemo: false,

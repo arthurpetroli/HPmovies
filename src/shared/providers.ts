@@ -2,6 +2,14 @@ export interface CatalogAnime {
   id: string;
   title: string;
   titleOriginal?: string;
+  titleNative?: string;
+  studios?: string[];
+  /** Number of AniList users who have this title on a list, not a ranking. */
+  popularity?: number;
+  countryOfOrigin?: string;
+  startDate?: { year?: number; month?: number; day?: number };
+  endDate?: { year?: number; month?: number; day?: number };
+  trailer?: { id: string; site: 'youtube' | 'dailymotion'; thumbnail?: string };
   characters?: Array<{ id: string; name: string; image?: string; role?: string }>;
   season?: string;
   poster: string;
@@ -45,11 +53,27 @@ export interface CatalogHome {
   upcoming: CatalogAnime[];
 }
 
+/** Original airing metadata from the catalog; this is not a playable episode. */
+export interface AnimeAiring {
+  id: string;
+  airingAt: number;
+  episode: number;
+  anime: CatalogAnime;
+}
+
+export interface CatalogSchedule {
+  start: number;
+  end: number;
+  items: AnimeAiring[];
+  truncated?: boolean;
+}
+
 export interface AnimeCatalogProvider {
   home(): Promise<CatalogHome>;
   search(query: CatalogQuery): Promise<CatalogPage>;
   details(id: string): Promise<CatalogAnime>;
   genres(): Promise<string[]>;
+  schedule?(start: number, end: number): Promise<CatalogSchedule>;
 }
 
 export interface StreamSubtitle {

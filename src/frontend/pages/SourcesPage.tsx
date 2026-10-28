@@ -78,7 +78,7 @@ function SourceResults({ params }: { params: URLSearchParams }) {
     const query = sourceQuery(new URLSearchParams(serialized));
     if (kind === 'anime') {
       const playback = await contentService.playback(id, episode, query);
-      navigate(`/watch/${encodeURIComponent(playback.episode.id)}${sourceSuffix(query)}`, { replace: true });
+      navigate(`/watch/${encodeURIComponent(playback.episode.id)}${sourceSuffix(query)}`, { replace: true, state: { fromSources: true } });
       return null;
     }
     if (kind !== 'manga' && kind !== 'novel') throw new Error('Escolha anime, mangá ou light novel.');

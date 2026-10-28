@@ -1,0 +1,122 @@
+{
+  "checkedAt": "2026-10-28",
+  "source": "https://www.miruro.cx/",
+  "evidenceKind": "Live Chromium browser without fixtures or request interception",
+  "httpStatus": 200,
+  "desktop": {
+    "viewport": [
+      1440,
+      1000
+    ],
+    "initialNavigation": "Horizontal header with menu button; sidebar is initially closed.",
+    "sidebar": {
+      "role": "dialog",
+      "width": 300,
+      "height": 1000,
+      "overlay": "Content behind drawer is visibly darkened and blurred.",
+      "closeControl": "X in upper right"
+    }
+  },
+  "mobile": {
+    "viewport": [
+      393,
+      851
+    ],
+    "sidebar": {
+      "width": 393,
+      "height": 851,
+      "layout": "Full viewport drawer with same links and bottom preferences."
+    },
+    "escapeAssessment": "Escape was pressed; the close control subsequently moved outside the viewport and became hidden. A single isVisible sample during transition did not describe its open state reliably."
+  },
+  "navigation": [
+    {
+      "label": "Home",
+      "path": "/"
+    },
+    {
+      "label": "Trending",
+      "path": "/trending"
+    },
+    {
+      "label": "Schedule",
+      "path": "/schedule"
+    },
+    {
+      "label": "History",
+      "path": "/history"
+    },
+    {
+      "label": "Announcements",
+      "path": "/announcements"
+    },
+    {
+      "label": "Profile",
+      "path": "/profile"
+    }
+  ],
+  "footer": [
+    "Status",
+    "Domains",
+    "v1.15.8",
+    "System theme",
+    "Light theme",
+    "Dark theme",
+    "AniList theme",
+    "Catppuccin theme",
+    "Profile",
+    "Settings"
+  ],
+  "preferences": {
+    "appBehavior": [
+      "AniList sync",
+      "Sync threshold",
+      "AutoList",
+      "Hide spoilers",
+      "Watch or Info Page"
+    ],
+    "entryDefaultObserved": "Watch",
+    "appearance": [
+      "Theme",
+      "Primary accent color",
+      "Border radius",
+      "Episode list layout",
+      "Watch history on home page",
+      "Card layout",
+      "Card size"
+    ],
+    "media": [
+      "Default provider",
+      "Subtitles or dubbing",
+      "Auto Play",
+      "Auto Skip",
+      "Auto Next Episode"
+    ],
+    "freshContextMediaToggles": {
+      "autoPlay": false,
+      "autoSkip": false,
+      "autoNextEpisode": false
+    },
+    "ambientAssessment": "No separate ambient/background option was observed in Appearance or Media Settings; this does not establish that none exists on the watch page."
+  },
+  "globalShortcuts": {
+    "shortcuts": "Shift+?",
+    "settings": "Ctrl/Cmd/Shift+,",
+    "search": "/ or Ctrl/Cmd+S",
+    "notifications": "Shift+M",
+    "sideMenu": "Shift+T or Shift+V",
+    "theme": "Shift+D"
+  },
+  "screenshots": [
+    "/tmp/hpmovies-miruro-sidebar-desktop.png",
+    "/tmp/hpmovies-miruro-menu-expanded-desktop.png",
+    "/tmp/hpmovies-miruro-menu-expanded-mobile.png",
+    "/tmp/hpmovies-miruro-appearance-settings.png",
+    "/tmp/hpmovies-miruro-media-settings.png",
+    "/tmp/hpmovies-miruro-shortcuts.png"
+  ],
+  "limitations": [
+    "This verifies UI behavior, not a public streaming API contract, media identity, or PT-BR availability.",
+    "No upstream source code, media URLs, tokens, cookies, or response bodies are recorded."
+  ]
+}

@@ -59,7 +59,8 @@ try {
         await page.getByText('Tradução automática: pode conter erros.', { exact: true }).waitFor({ timeout: 6 * 60_000 });
         result.generatedTranslation = true;
       }
-      await page.getByRole('button', { name: 'Reproduzir', exact: true }).click();
+      await page.waitForFunction(() => (document.querySelector('video')?.readyState ?? 0) >= 2, null, { timeout: 60000 });
+      if (await page.locator('video').evaluate(video => video.paused)) await page.getByRole('button', { name: 'Reproduzir', exact: true }).click();
       await page.waitForFunction(() => {
         const video = document.querySelector('video');
         return video && video.currentTime >= 10 && video.videoWidth > 0 && [...video.textTracks].some(track => /^pt(?:-|$)/i.test(track.language) && track.mode === 'hidden' && track.cues?.length > 0);

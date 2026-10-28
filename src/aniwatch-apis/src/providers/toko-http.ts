@@ -39,7 +39,7 @@ export interface TokoStreamResponse {
 export interface TokoEpisodeIndex {
   provider: string | null;
   episodeCount: number;
-  episodes: Array<{ number: number; title?: string }>;
+  episodes: Array<{ number: number; title?: string; thumbnail?: string }>;
 }
 
 export interface TokoLanguage {
@@ -104,6 +104,19 @@ const count = (value: unknown, max = 100_000): number => {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > max) return invalid();
   return value;
 };
+
+/** Browser artwork only: no proxy request, local host, credentials or video URL. */
+function thumbnailUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length > 2048 || [...value].some(char => char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127)) return undefined;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hash
+      || !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/.test(url.hostname)
+      || /(?:^|\.)(?:localhost|local|internal|invalid|test|lan|home|onion)(?:\.|$)/.test(url.hostname)
+      || !/\.(?:jpe?g|png|webp|avif|gif)$/i.test(url.pathname)) return undefined;
+    return url.href;
+  } catch { return undefined; }
+}
 
 function responseHeaders(value: unknown): Record<string, string> {
   const raw = value === undefined || value === null ? {} : object(value);
@@ -257,7 +270,8 @@ export class TokoHttpClient {
         episodes: list(data.episodes, 5_000).map((item) => {
           const row = object(item);
           if (typeof row.number !== 'number' || !Number.isFinite(row.number) || row.number <= 0 || row.number > 100_000) return invalid();
-          return { number: row.number, title: text(row.title) };
+          const thumbnail = thumbnailUrl(row.thumbnail) || thumbnailUrl(row.image);
+          return { number: row.number, title: text(row.title), ...(thumbnail ? { thumbnail } : {}) };
         }),
       };
     }, 120);

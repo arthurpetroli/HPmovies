@@ -15,6 +15,21 @@ function integer(value, maximum) {
   return Number.isSafeInteger(value) && value >= 0 && value <= maximum;
 }
 
+// These are browser image URLs, never destinations for a backend proxy. Reject
+// local/IP hosts, credentials and video/HTML paths; unusable optional artwork
+// falls back in the UI without discarding a genuine episode index.
+function thumbnailUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048 || [...value].some(char => char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127)) return undefined;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hash
+      || !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/.test(url.hostname)
+      || /(?:^|\.)(?:localhost|local|internal|invalid|test|lan|home|onion)(?:\.|$)/.test(url.hostname)
+      || !/\.(?:jpe?g|png|webp|avif|gif)$/i.test(url.pathname)) return undefined;
+    return url.href;
+  } catch { return undefined; }
+}
+
 function normalizeIndex(value, providers) {
   if (!value || typeof value !== 'object' || !Array.isArray(value.episodes) || value.episodes.length > 5000) throw invalid();
   if (!value.episodes.length) return EMPTY();
@@ -23,7 +38,8 @@ function normalizeIndex(value, providers) {
   for (const row of value.episodes) {
     if (!row || typeof row !== 'object' || typeof row.number !== 'number' || !Number.isFinite(row.number) || row.number <= 0 || row.number > 100000) throw invalid();
     const title = typeof row.title === 'string' && row.title.trim() && row.title.length <= 500 ? row.title.trim() : undefined;
-    episodes.set(row.number, { number: row.number, ...(title ? { title } : {}) });
+    const thumbnail = thumbnailUrl(row.thumbnail) || thumbnailUrl(row.image);
+    episodes.set(row.number, { number: row.number, ...(title ? { title } : {}), ...(thumbnail ? { thumbnail } : {}) });
   }
   return { provider: value.provider, episodeCount: episodes.size, episodes: [...episodes.values()].sort((a, b) => a.number - b.number) };
 }

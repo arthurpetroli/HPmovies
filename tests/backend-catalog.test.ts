@@ -145,6 +145,44 @@ describe('AniList catalog integration', () => {
     expect(anime.externalLinks).toEqual([{ site: 'Official', url: 'https://example.com/' }]);
   });
 
+  it('normalizes real detail metadata without turning popularity into a ranking or inventing date parts', async () => {
+    const fetcher = vi.fn(async () => providerResponse({ Media: {
+      ...media(), title: { english: 'Cowboy Bebop', romaji: 'Cowboy Bebop', native: 'カウボーイビバップ' },
+      popularity: 123456, countryOfOrigin: 'JP',
+      startDate: { year: 1998, month: 4, day: null }, endDate: { year: 1999, month: null, day: null },
+      studios: { nodes: [{ name: 'Sunrise' }, null, { name: ' Sunrise ' }, { name: '' }] },
+      trailer: { id: 'qig4KOK2R2g', site: 'youtube', thumbnail: 'https://example.com/trailer.jpg' },
+    } }));
+    const provider = new AniListCatalogProvider({ fetcher: fetcher as typeof fetch, cache: new AniwatchAPICache() });
+    const anime = await provider.details('1');
+    expect(anime).toMatchObject({
+      titleNative: 'カウボーイビバップ', popularity: 123456, countryOfOrigin: 'JP', studios: ['Sunrise'],
+      startDate: { year: 1998, month: 4 }, endDate: { year: 1999 },
+      trailer: { id: 'qig4KOK2R2g', site: 'youtube', thumbnail: 'https://example.com/trailer.jpg' },
+    });
+    expect(anime.startDate?.day).toBeUndefined();
+    expect(anime.endDate?.month).toBeUndefined();
+    const request = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    const { query } = JSON.parse(String(request[1].body));
+    expect(query).toContain('studios(isMain: true)');
+    expect(query).toContain('trailer { id site thumbnail }');
+  });
+
+  it.each([
+    { trailer: { id: '../unsafe', site: 'youtube' }, studios: 'invalid', popularity: -1, startDate: { year: 1998, month: 99, day: -1 } },
+    { trailer: { id: 'qig4KOK2R2g', site: 'unknown' }, studios: { nodes: [false, {}, { name: 42 }] }, popularity: null, startDate: false },
+  ])('omits malformed optional detail metadata while preserving usable anime details', async optional => {
+    const fetcher = vi.fn(async () => providerResponse({ Media: { ...media(), ...optional } }));
+    const provider = new AniListCatalogProvider({ fetcher: fetcher as typeof fetch, cache: new AniwatchAPICache() });
+    const anime = await provider.details('1');
+    expect(anime.id).toBe('1');
+    expect(anime.trailer).toBeUndefined();
+    expect(anime.studios).toEqual([]);
+    expect(anime.popularity).toBeUndefined();
+    expect(anime.startDate?.month).toBeUndefined();
+    expect(anime.startDate?.day).toBeUndefined();
+  });
+
   it.each([
     [async () => new Response('not json'), 502, 'INVALID_CATALOG_RESPONSE'],
     [async () => providerResponse({ Page: { pageInfo: {}, media: [] } }), 502, 'INVALID_CATALOG_RESPONSE'],

@@ -1,0 +1,16 @@
+# Requer Caddy 2.8 ou superior. Substitua o dominio e o hash antes de validar.
+# Gere o hash com caddy hash-password; nunca coloque a senha em texto puro aqui.
+example.com {
+    encode zstd gzip
+
+    basic_auth {
+        familiar REPLACE_WITH_BCRYPT_HASH
+    }
+
+    reverse_proxy 127.0.0.1:4000 {
+        # A credencial familiar e validada apenas pelo Caddy.
+        header_up -Authorization
+    }
+}
+
+# Sem diretiva log: nao habilitar access logs com URLs de midia ou tickets.

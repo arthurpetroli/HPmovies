@@ -1,0 +1,311 @@
+{
+  "checkedAt": "2026-10-28T17:41:23.661Z",
+  "kind": "live-browser-no-fixtures",
+  "origin": "http://127.0.0.1:5173",
+  "anime": {
+    "id": 235,
+    "title": "Detective Conan"
+  },
+  "entry": "/search?q=Detective%20Conan",
+  "context": "Fresh browser storage; local API/server caches may already be warm; timing applies only to this connection.",
+  "episodes": [
+    {
+      "number": 1,
+      "path": "/watch/tatakai%3A235%3A1",
+      "readyAfterCardClickMs": 4560,
+      "initialPlayback": {
+        "time": 1.010286,
+        "duration": 1496.5060000000005,
+        "readyState": 4,
+        "paused": false,
+        "width": 854,
+        "height": 480,
+        "decodedFrames": 27,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 23982,
+        "error": null,
+        "captions": [
+          {
+            "language": "pt-BR",
+            "label": "OpenSubtitles · pt-BR · [CR] Case Closed (Detective Conan) S01E01 The Roller Coaster Murder Case.pt-BR.ass",
+            "mode": "hidden",
+            "cues": 350
+          }
+        ]
+      },
+      "desktop": {
+        "viewport": 1440,
+        "documentWidth": 1440,
+        "overflow": false,
+        "stage": true,
+        "sidebar": true,
+        "sidebarImages": [],
+        "ambientPresent": true,
+        "plainLoadingPlayer": false
+      },
+      "at150": {
+        "time": 150.842657,
+        "duration": 1496.5060000000005,
+        "readyState": 4,
+        "paused": true,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 162,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 43451,
+        "error": null,
+        "captions": [
+          {
+            "language": "pt-BR",
+            "label": "OpenSubtitles · pt-BR · [CR] Case Closed (Detective Conan) S01E01 The Roller Coaster Murder Case.pt-BR.ass",
+            "mode": "hidden",
+            "cues": 350
+          }
+        ]
+      },
+      "captionVisible": true,
+      "mobile": {
+        "viewport": 393,
+        "documentWidth": 393,
+        "overflow": false,
+        "stage": true,
+        "sidebar": true,
+        "sidebarImages": [],
+        "ambientPresent": true,
+        "plainLoadingPlayer": false
+      },
+      "alerts": []
+    },
+    {
+      "number": 2,
+      "path": "/watch/tatakai%3A235%3A2",
+      "readyAfterEpisodeClickMs": 14026,
+      "initialPlayback": {
+        "time": 1.022835,
+        "duration": 1496.457000000001,
+        "readyState": 4,
+        "paused": false,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 25,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 24641,
+        "error": null,
+        "captions": [
+          {
+            "language": "pt-BR",
+            "label": "OpenSubtitles · pt-BR · [CR] Case Closed (Detective Conan) S01E02 The Kidnapping of the Company President's Daugh.ass",
+            "mode": "hidden",
+            "cues": 410
+          }
+        ]
+      },
+      "desktop": {
+        "viewport": 1440,
+        "documentWidth": 1440,
+        "overflow": false,
+        "stage": true,
+        "sidebar": true,
+        "sidebarImages": [
+          {
+            "loaded": true,
+            "width": 1900
+          },
+          {
+            "loaded": true,
+            "width": 1900
+          },
+          {
+            "loaded": true,
+            "width": 1900
+          },
+          {
+            "loaded": true,
+            "width": 1900
+          },
+          {
+            "loaded": true,
+            "width": 1900
+          },
+          {
+            "loaded": true,
+            "width": 1900
+          },
+          {
+            "loaded": true,
+            "width": 1900
+          },
+          {
+            "loaded": true,
+            "width": 1900
+          },
+          {
+            "loaded": true,
+            "width": 1900
+          },
+          {
+            "loaded": true,
+            "width": 1900
+          }
+        ],
+        "ambientPresent": true,
+        "plainLoadingPlayer": false
+      },
+      "at150": {
+        "time": 150.847526,
+        "duration": 1496.457000000001,
+        "readyState": 4,
+        "paused": true,
+        "width": 1920,
+        "height": 1080,
+        "decodedFrames": 172,
+        "droppedFrames": 0,
+        "decodedAudioBytes": 44274,
+        "error": null,
+        "captions": [
+          {
+            "language": "pt-BR",
+            "label": "OpenSubtitles · pt-BR · [CR] Case Closed (Detective Conan) S01E02 The Kidnapping of the Company President's Daugh.ass",
+            "mode": "hidden",
+            "cues": 410
+          }
+        ]
+      },
+      "captionVisible": true,
+      "mobile": {
+        "viewport": 393,
+        "documentWidth": 393,
+        "overflow": false,
+        "stage": true,
+        "sidebar": true,
+        "sidebarImages": [
+          {
+            "loaded": true,
+            "width": 1900
+          },
+          {
+            "loaded": true,
+            "width": 1900
+          },
+          {
+            "loaded": true,
+            "width": 1900
+          },
+          {
+            "loaded": true,
+            "width": 1900
+          }
+        ],
+        "ambientPresent": true,
+        "plainLoadingPlayer": false
+      },
+      "alerts": []
+    }
+  ],
+  "pageErrors": [],
+  "failedRequests": [
+    {
+      "resourceType": "image",
+      "reason": "net::ERR_FAILED"
+    },
+    {
+      "resourceType": "image",
+      "reason": "net::ERR_FAILED"
+    }
+  ],
+  "mediaStatusCounts": {
+    "200": 42
+  },
+  "subtitleStatusCounts": {
+    "200": 2
+  },
+  "passed": true,
+  "cardTarget": "/watch/anime/235?title=Detective+Conan&title=Meitantei+Conan",
+  "resolvedEpisodeAfterClickMs": 2500,
+  "secondUrlAfterClickMs": 7849,
+  "stageContinuity": {
+    "sameNode": true,
+    "removed": false,
+    "bareLoadingPlayerSeen": false
+  },
+  "savedHistoryAfterSwitch": [
+    {
+      "episodeId": "tatakai:235:2",
+      "time": 0.157591,
+      "duration": 1496.457000000001,
+      "completed": false,
+      "animeId": "235"
+    },
+    {
+      "episodeId": "tatakai:235:1",
+      "time": 150.842657,
+      "duration": 1496.5060000000005,
+      "completed": false,
+      "animeId": "235"
+    }
+  ],
+  "episode1PositionBeforeSwitch": 150.842657,
+  "episodeIndex": {
+    "count": 1217,
+    "thumbnailCount": 0,
+    "firstTwo": [
+      {
+        "id": "tatakai:235:1",
+        "number": 1,
+        "title": "The Big Shrink",
+        "hasThumbnail": false
+      },
+      {
+        "id": "tatakai:235:2",
+        "number": 2,
+        "title": "The Kidnapped Debutante",
+        "hasThumbnail": false
+      }
+    ]
+  },
+  "progressPreserved": true,
+  "identityAssessment": "Screenshots at 150s visibly show Detective Conan and Portuguese text. This limited frame review does not independently certify exact episode numbering, subtitle synchronization across the whole episode, or spoken audio language.",
+  "passedScope": "Live player navigation, autoplay, media decoding, persistent stage, saved progress and responsive layout; exact episode identity and spoken audio language are not certified.",
+  "beforeOptimization": {
+    "checkedAt": "2026-10-28T17:36:04.367Z",
+    "cardReadyMs": 19286,
+    "episode1UrlMs": 15660,
+    "episode2ReadyMs": 6926
+  },
+  "timingAssessment": "Entry improved in these two observations; episode2 was slower in the later observation. Server/provider caches and upstream latency were not controlled, so these observations are not a guaranteed performance comparison.",
+  "thumbnailAssessment": {
+    "episodeThumbnailCount": 0,
+    "indexEpisodeCount": 1217,
+    "displayedImages": "Anime banner fallback, loaded successfully in the visible sidebar; not episode-specific thumbnails.",
+    "scope": "Observation before propagation of upstream image fields; the normalized HPmovies index dropped these fields. Raw upstream image.tmdb.org artwork was subsequently confirmed, and propagation is implemented pending source-host restart and browser validation.",
+    "followUpEvidence": "2026-10-28-watch-thumbnails-real.json validates1217 real episode thumbnails after propagation and coordinated source-host restart."
+  },
+  "imageWarnings": "Two image requests failed during the catalog flow. Visible sidebar fallback images and ambient artwork loaded. Media and subtitle requests recorded success.",
+  "screenshots": [
+    "/tmp/hpmovies-watch-real-1-150s-desktop.png",
+    "/tmp/hpmovies-watch-real-1-150s-mobile.png",
+    "/tmp/hpmovies-watch-real-2-150s-desktop.png",
+    "/tmp/hpmovies-watch-real-2-150s-mobile.png"
+  ],
+  "entryTimingProbe": {
+    "checkedAt": "2026-10-28T17:42:31.093Z",
+    "context": "Separate fresh browser storage; backend/provider caches not cleared or controlled.",
+    "entry": "/search?q=Detective%20Conan",
+    "cardTargetAnimeId": 235,
+    "indexReadyAfterClickMs": 2388,
+    "indexStatus": 200,
+    "contentReadyAfterClickMs": 2434,
+    "contentStatus": 200,
+    "firstDecodedPlaybackAfterClickMs": 4711,
+    "indexReadyAtFirstDecodedPlayback": true,
+    "video": {
+      "time": 1.014688,
+      "readyState": 4,
+      "decodedFrames": 27,
+      "decodedAudioBytes": 23982
+    },
+    "nextEpisodeLinkAfterIndex": 1,
+    "indexFinished": true
+  },
+  "indexWaitAssessment": "A deferred-index unit test proves playback can return before the index resolves. In the separate live timing probe, the full index finished before the first decoded frame; that observation does not independently demonstrate playback overtaking a cold index."
+}

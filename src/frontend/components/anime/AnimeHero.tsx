@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
-import { ArrowRight, Bookmark, Check, ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { Bookmark, Check, ChevronLeft, ChevronRight, Play, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { CatalogAnime } from '../../../shared/providers';
 import { libraryService, useLibrary } from '../../services/library';
 import { genreLabel } from '../filters/genreLabels';
+import { AnimeWatchLink } from './AnimeWatchLink';
 import './animeHero.css';
 
 const formatLabels: Record<string, string> = {
@@ -63,7 +64,7 @@ export function AnimeHero({ anime, index = 0, total = 1, onSelect }: { anime: Ca
         </div>
         {anime.genres.length > 0 && <div className="discover-hero__genres" aria-label="Gêneros">{anime.genres.slice(0, 3).map((genre) => <Link key={genre} to={`/explore?genre=${encodeURIComponent(genre)}`}>{genreLabel(genre)}</Link>)}</div>}
         <div className="discover-hero__actions">
-          <Link className="button-primary discover-hero__primary" to={`/anime/${encodeURIComponent(anime.id)}`}>Explorar anime <ArrowRight size={19} aria-hidden="true" /></Link>
+          <AnimeWatchLink anime={anime} className="button-primary discover-hero__primary">Assistir agora <Play size={19} fill="currentColor" aria-hidden="true" /></AnimeWatchLink>
           <button
             className={`discover-hero__save${saved ? ' is-saved' : ''}`}
             onClick={() => libraryService.toggle(anime)}

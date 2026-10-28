@@ -549,3 +549,160 @@ do Fire OS 6 continua exigindo medição e teste no aparelho.
 Foi feita somente revisão de código e documentação das possibilidades. Não houve
 alteração funcional, exposição de serviço na LAN, novo teste de dispositivo,
 mudança de energia do PC, instalação, commit, push ou deploy.
+
+## Interface Miruro, player direto e agenda — 28/10/2026
+
+O usuário ampliou a referência inicial: cards devem abrir diretamente o player;
+os detalhes ficam em “Ver anime”/nome abaixo do vídeo. Pediu também navegação
+lateral transparente com expansão, fundo com arte do anime, detalhes completos,
+agenda semanal no estilo Miruro e legendas maiores. A gravação local foi
+inspecionada em frames e a SPA oficial foi navegada no Chromium. O HTTP 403
+obtido por clientes textuais não impediu a inspeção real no navegador.
+
+### Fluxo e aparência implementados
+
+- Cards, destaque, editorial, busca e recomendações baseadas em AnimeCard usam
+  entrada direta `/watch/anime/:id`; o backend emite o ID real do episódio e a
+  rota é substituída sem etapa de detalhes. Progresso em andamento é retomado.
+  Os detalhes continuam em `/anime/:id` e podem ser abertos abaixo do vídeo.
+- Transição nativa com fade quando disponível e preferência de movimento reduzido
+  respeitada. Estrutura do player permanece montada em mudanças de episódio,
+  erro e retry; imagem ocupa a área durante a preparação. Fullscreen e progresso
+  continuam preservados. Cliques modificados/nova aba mantêm links reais.
+- Barra superior removida; busca flutuante e atalho `/`. Lateral transparente
+  com ícones, seta para expandir os nomes, destinos existentes e configurações.
+  A arte do destaque alcança o topo e passa atrás da lateral.
+- Lista lateral com busca, intervalos de 50, seleção atual, rolagem própria e
+  miniaturas reais. `episode-index.cjs` descartava `image` do upstream; o campo
+  agora é validado e propagado pelo cliente HTTP e provider. Falha de imagem usa
+  arte do anime como fallback. Bundle privado e arquivo vendor não foram editados.
+- Detalhes refeitos com arte ambiente, capa, sinopse, nota, estúdios, datas,
+  popularidade, título nativo, trailer, episódios, personagens e relacionados.
+  Metadados opcionais vêm do AniList e ausências são explícitas. Trailer só é
+  incorporado após clique; reprodução real do embed não foi auditada.
+- Preferências locais: fundo ambiente, avanço automático após término nativo e
+  abertura automática quando existem tempos válidos. Cenas pós-encerramento não
+  são puladas apenas por um marcador de ending. Navegação manual continua disponível.
+- Escala de legenda: pequena = antiga média; média = antiga grande; grande maior.
+  Celular: 20/24/30 px; desktop: 30/36/44 px; fullscreen proporcional ao player.
+  Diálogos excepcionalmente longos se ajustam ao espaço para evitar corte em telas
+  estreitas. Preferência de fundo, idioma e sincronização continua preservada.
+- O formulário manual de fontes mantém seu link de retorno mesmo quando o
+  catálogo consegue carregar os detalhes do anime.
+
+### Carregamento e continuidade
+
+`watchEntry.ts` prepara módulo, mídia e índice por intenção de hover/foco/clique,
+com caches curtos e limitados em memória. Nenhum ticket de mídia é salvo em
+storage. Entrada usa `/api/content/anime/:id/episodes/:number`, sem fabricar IDs
+Tatakai/Toko no cliente. Se a entrada padrão não resolver, consulta o índice real;
+um episódio explicitamente selecionado na agenda nunca é substituído por E1.
+
+O provider Toko já não aguarda todas as páginas do índice para devolver fontes
+verificadas; metadados de índice são aproveitados se estiverem prontos. A lateral
+continua carregando a lista em paralelo. Há preparação do próximo episódio perto
+do término e ao focar/passar pelo botão. Retry renova fontes em vez de reutilizar
+obrigatoriamente um ticket expirado. Histórico diferencia intenção de navegação de
+reload/Back. Uma regressão de Back antes do commit React foi reproduzida no trace
+e corrigida deduplicando o destino já pendente na URL.
+
+### Agenda implementada
+
+`/schedule`, acessível pelo calendário lateral, consulta
+`/api/catalog/schedule?start=<unix>&end=<unix>`. O backend AniList usa intervalo
+`[start,end)`, valida até oito dias, pagina com limite de dez páginas e indica
+truncamento. Cache de cinco minutos; resultados ordenados e deduplicados.
+
+A interface mostra segunda–domingo, contagens diárias, manhã/tarde/noite, semana
+anterior/próxima, busca, filtros e São Paulo/Tóquio/UTC. Fronteiras de dias usam
+IANA/Intl, incluindo mudanças de horário de verão; não dependem do fuso do host.
+Aviso de lista parcial também aparece em dias vazios. Cards preservam o número
+do episódio solicitado, e fontes indisponíveis continuam exibindo erro honesto.
+A grade é da exibição original; não confirma estreia PT-BR, dublagem ou vídeo
+reproduzível. A fonte busca garantir sobretudo horários futuros.
+
+### Evidências reais e limites
+
+- Conan E01/E02 foram reproduzidos sem fixtures: áudio e vídeo decodificados,
+  autoplay na troca, progresso preservado, legendas PT-BR com 350/410 cues, frame
+  a 150 s e layout desktop/celular. A amostra visual é coerente com Conan; isso
+  não equivale a auditar integralmente episódios ou idioma falado.
+- Após reinício coordenado dos serviços, o índice real trouxe 1217/1217
+  miniaturas, com as duas primeiras distintas e carregadas. E01 começou antes
+  do índice completo: vídeo em 12,279 s e índice em 18,617 s nessa conexão.
+  Outra rodada mediu 4,560 s para E01; caches externos não foram controlados e
+  a latência do provider varia. Não prometer início instantâneo.
+- Agenda real: 119 eventos na semana de 26/10 a 02/11 em São Paulo. Contagens e
+  horários conferidos em 1440×1000, 375×812 e 812×375. O mesmo evento apareceu
+  28/10 às 12h em São Paulo, 15h UTC e 29/10 à 0h em Tóquio, corretamente.
+- Pesquisa Miruro/SugoiAPI está em [PROVIDER-REVIEW-2026-10-28.md](PROVIDER-REVIEW-2026-10-28.md).
+  Nenhuma dessas duas novas fontes foi anunciada como integrada/funcional.
+  SugoiAPI ainda exige instância corrigida e mapeamento confiável de obras.
+
+Evidências normalizadas, sem URLs privadas/tickets, em:
+
+- [Referência Miruro](validation/2026-10-28-miruro-reference.json)
+- [Fluxo real com dois episódios](validation/2026-10-28-watch-flow-real.json)
+- [Miniaturas e início antes do índice](validation/2026-10-28-watch-thumbnails-real.json)
+- [Agenda real e fusos](validation/2026-10-28-schedule-real.json)
+
+Capturas temporárias em `/tmp/hpmovies-miruro-final-home.png`,
+`/tmp/hpmovies-details-qa/`, `/tmp/hpmovies-watch-thumbnails-real-*.png` e
+`/tmp/hpmovies-schedule-qa/`. Serviços locais reiniciados para carregar o resolver
+CJS de miniaturas; site atual em `http://127.0.0.1:5173`, API `:4000`, fontes
+`:8099` e tradução `:5000`, em loopback. Não houve alteração de `.env`, exposição
+na LAN, instalação de dependências, commit, push ou deploy. `deploy/` e o vídeo
+em `exemplos/` já eram arquivos locais não rastreados e foram preservados.
+
+### Verificação final desta etapa
+
+- `npm test`: 48 arquivos, 514 testes aprovados.
+- `npm run lint` e `npm run build`: aprovados. Permanece o aviso de chunk do
+  player/HLS acima de 500 kB (aproximadamente 564 kB); não impede a compilação.
+- Regressão completa Playwright: 122 cenários aprovados e dois skips previstos
+  por modalidade desktop/toque, em 124 cenários descobertos. Nenhuma falha na
+  rodada final; inclui navegação, cards, detalhes, agenda, leitores, recuperação
+  de fontes, legendas, fullscreen, retry, Back/Forward e autoplay.
+- Playwright em produção compilada: dez cenários aprovados em desktop/celular,
+  com fontes privadas desligadas. Contratos sintéticos e mídia pública de teste
+  estão separados das verificações reais de Conan e agenda registradas acima.
+- `git diff --check` aprovado. Nenhuma dependência, licença ou bundle privado
+  alterado. Resultados temporários em `/tmp/hpmovies-miruro-final-e2e` e
+  `/tmp/hpmovies-miruro-production-final`.
+
+Retomada: as mudanças estão no workspace, sem commit. Para continuar o uso local,
+abrir `http://127.0.0.1:5173`; agenda em `http://127.0.0.1:5173/schedule`.
+Hospedagem, acesso LAN e APK permanecem fora desta etapa.
+
+## Refinamento pontual: legendas e busca — 28/10/2026
+
+O usuário considerou a escala anterior de legendas grande demais. A preferência
+atual substitui os tamanhos registrados na etapa anterior:
+
+- Pequena: 16px no celular e 24px no desktop, menor que a antiga pequena.
+- Média: 20px/30px, equivalentes à antiga pequena.
+- Grande: 24px/36px, equivalentes à antiga média.
+- Fullscreen: clamps proporcionais de 2,4/3/3,6cqw. Fundo, idioma, sincronização
+  e ajuste de falas longas permanecem preservados.
+
+A busca agora tem campo visual de 36px e largura máxima de 440px. Botões e área
+extra do formulário mantêm 44px de interação. No topo, a faixa externa permanece
+transparente e a arte aparece atrás da busca. Depois de 16px de rolagem, surge
+uma faixa de 50px com fundo e desfoque; ao voltar ao topo, desaparece. O listener
+é passivo, agrupa atualizações por frame e limpa seus eventos ao desmontar.
+Movimento reduzido continua respeitado. A busca não remonta ao mudar esse estado,
+e o texto digitado é preservado durante a rolagem.
+
+Verificação proporcional à mudança: quatro cenários Playwright de presets e
+legendas longas aprovados; 14 cenários existentes de busca/navegação aprovados
+com dois skips previstos; dois novos cenários de rolagem/foco aprovados em
+desktop e celular de 375px. Lint, build com TypeScript e `git diff --check`
+aprovados. Permanece somente o aviso conhecido do chunk grande do player/HLS.
+Os testes de legenda usam mídia pública de demonstração e não representam uma
+nova auditoria de anime, episódio ou idioma. Capturas visuais reais da busca em
+`/tmp/hpmovies-search-top-real.png` e `/tmp/hpmovies-search-scrolled-real.png`;
+cenários em `/tmp/hpmovies-compact-search-verified` e
+`/tmp/hpmovies-captions-smaller-qa`.
+
+Ajuste restrito às legendas e à busca solicitadas, além dos testes e desta
+retomada. Site local continua em `http://127.0.0.1:5173`; sem commit, push ou deploy.

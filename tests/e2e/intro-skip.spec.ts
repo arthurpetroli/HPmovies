@@ -4,6 +4,8 @@ import type { Page } from '@playwright/test';
 // Isolated opening intervals over a public test video; these are not anime timings.
 const episode = '/api/streaming/episodes/tatakai%3A235%3A1';
 async function playback(page: Page, intro?: { start: number; end: number }) {
+  await page.route('**/api/catalog/anime/235', route => route.fulfill({ json: { data: { id: '235', title: 'Anime fixture', poster: '', genres: [] } } }));
+  await page.route('**/api/streaming/anime/235/episodes**', route => route.fulfill({ json: { data: { available: false, episodes: [] } } }));
   await page.route(`**${episode}`, route => route.fulfill({ json: { data: {
     episode: { id: 'tatakai:235:1', number: 1, title: 'Fixture de abertura' }, isDemo: true, audioLanguages: [], subtitles: [],
     sources: [{ url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8', type: 'hls' }], ...(intro ? { intro } : {}),
@@ -77,4 +79,16 @@ test('uses a valid source opening without a separate lookup', async ({ page }) =
   await start(page);
   await expect(page.getByRole('button', { name: 'Pular abertura', exact: true })).toBeVisible();
   expect(lookups).toBe(0);
+});
+
+
+test('automatic opening skip honors the saved preference and validated interval', async ({ page }) => {
+  await playback(page, { start: 20, end: 35 });
+  await page.addInitScript(() => localStorage.setItem('hpmovies.watch-preferences.v1', JSON.stringify({ autoSkipIntro: true })));
+  await start(page);
+  await page.locator('video').evaluate(video => { video.currentTime = 21; });
+  await expect.poll(() => page.locator('video').evaluate(video => video.currentTime)).toBeGreaterThanOrEqual(35);
+  expect(await page.locator('video').evaluate(video => video.paused)).toBe(false);
+  await page.locator('video').evaluate(video => { video.pause(); video.currentTime = 5; });
+  await expect.poll(() => page.locator('video').evaluate(video => video.currentTime)).toBeLessThan(10);
 });
