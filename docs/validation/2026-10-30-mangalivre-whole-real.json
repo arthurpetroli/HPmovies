@@ -1,0 +1,32 @@
+{
+  "kind": "live-provider-whole-work",
+  "fixture": false,
+  "provider": "mangalivre.to",
+  "mangaId": "mangalivre:kimi-ni-okuru-eien",
+  "title": "Kimi ni Okuru Eien",
+  "planSummary": [
+    "1 capítulos disponíveis em 1 pasta de volume. O ZIP guarda as imagens em ordem e os créditos de cada capítulo.",
+    "Capítulos sem volume informado ficam na pasta “Volume não informado”.",
+    "Os volumes seguem os dados do provedor. Quando faltam, os capítulos ficam em “Volume não informado”.",
+    "Limite por ZIP: 20 GiB e 50 mil páginas. Mantenha o servidor local ligado até terminar a preparação."
+  ],
+  "progress": "ZIP completo preparado. Baixe o arquivo para salvar os volumes e capítulos.\n\n1 de 1 capítulos · 22 páginas · 3.9 MB\n\nSalvar ZIP com volumes\nDescartar arquivo preparado",
+  "nativeDownloadAttribute": "",
+  "downloadFailure": null,
+  "filename": "Kimi ni Okuru Eien - pt-br.zip",
+  "mobileOverflow": false,
+  "status": "passed",
+  "archive": {
+    "sizeBytes": 4109729,
+    "entries": 24,
+    "pages": 22,
+    "crcValid": true,
+    "firstEntry": "Kimi ni Okuru Eien/Volume não informado/Capítulo extra - Oneshot/001.webp",
+    "lastEntry": "Kimi ni Okuru Eien/Volume não informado/Capítulo extra - Oneshot/022.webp",
+    "volumeUnknownFolder": true
+  },
+  "verifiedLocalDate": "2026-10-30",
+  "timezone": "America/Sao_Paulo",
+  "scope": "Obra inteira segundo índice público da fonte, um capítulo oneshot de 22 páginas; download nativo via link com atributo download, sem fixtures.",
+  "knownLimits": "Fonte .to não comprova vínculo com o antigo .net. Nem todas as obras informam volumes ou têm índice completo."
+}

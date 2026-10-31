@@ -1,0 +1,72 @@
+{
+  "kind": "live-novel-english-provider",
+  "fixture": false,
+  "verifiedLocalDate": "2026-10-31",
+  "timezone": "America/Sao_Paulo",
+  "provider": "wuxiaworldsite",
+  "providerName": "WuxiaWorld.site",
+  "language": "en",
+  "title": "Complete Martial Arts Attributes",
+  "id": "wuxiaworldsite:complete-martial-arts-attributes-spp",
+  "detailsSource": "https://wuxiaworld.site/novel/complete-martial-arts-attributes-spp/",
+  "catalogContainsSelectedWork": true,
+  "chapterCount": 3866,
+  "allChapterIdentitiesUniqueAndSameWork": true,
+  "firstIndexedChapter": {
+    "id": "wuxiaworldsite:complete-martial-arts-attributes-spp/chapter-1",
+    "title": "Chapter 1",
+    "displayLabel": "Chapter 1",
+    "language": "en",
+    "number": 1
+  },
+  "lastIndexedChapter": {
+    "id": "wuxiaworldsite:complete-martial-arts-attributes-spp/3865",
+    "title": "Chapter 3865",
+    "displayLabel": "Chapter 3865",
+    "language": "en",
+    "number": 3865
+  },
+  "first": {
+    "id": "wuxiaworldsite:complete-martial-arts-attributes-spp/chapter-1",
+    "title": "Chapter 1",
+    "language": "en",
+    "sourceUrl": "https://wuxiaworld.site/novel/complete-martial-arts-attributes-spp/chapter-1/",
+    "paragraphs": 81,
+    "characters": 8257,
+    "textSha256": "c21eedc6c3ffd02bebf042b641cf0f509f61f734b2c9a99e33ac91061992a92d",
+    "browserTextMatchesApi": true,
+    "nextChapterId": "wuxiaworldsite:complete-martial-arts-attributes-spp/chapter-2"
+  },
+  "second": {
+    "id": "wuxiaworldsite:complete-martial-arts-attributes-spp/chapter-2",
+    "title": "Chapter 2",
+    "language": "en",
+    "sourceUrl": "https://wuxiaworld.site/novel/complete-martial-arts-attributes-spp/chapter-2/",
+    "paragraphs": 87,
+    "characters": 9833,
+    "textSha256": "b6a65d09502bbc23a46aee66b650e881bb9391c7cb22ef7108c46cb5676b3321",
+    "browserTextMatchesApi": true,
+    "previousChapterId": "wuxiaworldsite:complete-martial-arts-attributes-spp/chapter-1",
+    "nextChapterId": "wuxiaworldsite:complete-martial-arts-attributes-spp/chapter-3"
+  },
+  "chaptersDiffer": true,
+  "nextChapterIdentityAndSourceAwaited": true,
+  "newChaptersStartAtBeginning": true,
+  "restoredPosition": 3,
+  "mobileOverflow": false,
+  "nativeDetailsReturn": "/novel/wuxiaworldsite%3Acomplete-martial-arts-attributes-spp",
+  "catalogLanguageReturn": "en",
+  "incompatiblePortugueseEditionUnavailable": true,
+  "portugueseRegressionChapterCount": 181,
+  "pageErrors": [],
+  "temporaryScreenshots": [
+    "/tmp/hpmovies-novels-english-real-catalog-desktop.png",
+    "/tmp/hpmovies-novels-english-real-details-desktop.png",
+    "/tmp/hpmovies-novels-english-real-chapter1-desktop.png",
+    "/tmp/hpmovies-novels-english-real-chapter2-mobile.png",
+    "/tmp/hpmovies-novels-english-real-catalog-mobile.png"
+  ],
+  "status": "passed",
+  "validationScope": "Live public catalog, details, full index and English chapter 1/2. DOM paragraphs/order compared to normalized API; chapter origin/identity awaited after navigation, nonzero progress restored after reload, mobile layout and English samples inspected separately. Does not audit every indexed chapter, translated edition or work.",
+  "transport": "Existing local Hono API and Vite frontend; public source HTML only; no credentials, challenge handling or TLS bypass. WuxiaWorld.site is a separate source from Wuxiaworld.com."
+}

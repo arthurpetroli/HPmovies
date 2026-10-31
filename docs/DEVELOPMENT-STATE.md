@@ -726,3 +726,286 @@ utilizar uma dessas formas por vez para evitar portas ocupadas.
 Foram feitos somente encerramento, conferência de processos/portas e registro
 de retomada. Código, configuração privada, dependências e dados foram preservados.
 Não houve nova execução de testes da aplicação, commit, push ou deploy.
+
+## Mangás: provedor e download por capítulo — 30/10/2026
+
+Mantidos o leitor existente, os modos vertical/paginado, preferências, biblioteca,
+idiomas e retomada. A página de mangás agora apresenta as opções de leitura e
+acesso ao MangaDex ou às fontes conectadas. Os detalhes oferecem links para a
+obra e para cada capítulo no provedor. O leitor também apresenta um link visível
+para a origem; endereços executáveis ou com credenciais não geram esse link.
+
+Adicionado **Baixar CBZ** à lista de capítulos do MangaDex, à lista de mangás das
+fontes conectadas e ao leitor. O arquivo contém as imagens originais numeradas
+na ordem recebida e `ComicInfo.xml` com obra, edição, idioma, créditos e origem.
+Query e fragmento são removidos da URL persistida nos metadados. O download é de
+um capítulo por vez; não há exportação de toda a série ou conversão para PDF.
+Edições externas continuam abrindo no provedor, sem download local fictício.
+
+O serviço usa código próprio, ZIP sem compressão e CRC32, sem novas dependências.
+Busca sequencialmente as páginas resolvidas pelos provedores atuais, com limite
+de 500 páginas, 20 MiB por imagem e 200 MiB por capítulo. Aceita JPEG, PNG, WebP,
+GIF e AVIF com MIME e assinatura compatíveis. Há progresso, cancelamento imediato
+inclusive durante a busca de metadados, timeout de 30 segundos por imagem e retry
+manual. Falhas não iniciam um arquivo parcial. Sair da página cancela o download.
+As validações conferem obra, capítulo, provedor e idioma antes de usar a edição.
+
+### Referências pesquisadas
+
+Consultados pelo GitHub, sem instalação ou cópia de código:
+
+- [Y-Matos/MangaLivre-Downloader](https://github.com/Y-Matos/MangaLivre-Downloader):
+  último push em 02/11/2021, não arquivado na consulta; Selenium/ChromeDriver para
+  capturar páginas e download de imagens. O README trata uma API como plano.
+- [glomatico/manga-livre-dl](https://github.com/glomatico/manga-livre-dl): arquivado,
+  último push em 15/09/2023; CLI com seleção de capítulos e PDF via Pillow.
+- [nezzzumi/mangalivre-api](https://github.com/nezzzumi/mangalivre-api): arquivado,
+  último push em 20/12/2020; Express/Got com extração de catálogo e URLs de páginas.
+
+Os três dependem do domínio histórico `mangalivre.net` e de endpoints internos.
+Não constituem API pública oficial nem comprovam compatibilidade atual. O GitHub
+não identificou licença nos repositórios consultados; o package.json do nezzzumi
+declara ISC. Nenhum desses projetos foi incorporado. **Não foi adicionada uma
+integração com Mangá Livre**; os downloads usam MangaDex e fontes já conectadas.
+
+### Verificação e retomada
+
+- 75 testes em oito arquivos afetados aprovados, incluindo os 22 novos casos do
+  serviço CBZ: integridade ZIP/CRC, bytes e ordem, metadados, limites, endereços,
+  HTTP, imagens inválidas, timeout e cancelamento.
+- 26 cenários Playwright aprovados: oito de download MangaDex, dez de download
+  das fontes conectadas e oito de regressão de leitura, progresso, capítulos,
+  idioma e novels. Fixtures de navegador são sintéticas e isoladas da aplicação.
+- Layout conferido em desktop e celular de 375px, sem overflow horizontal. Links,
+  navegação e painel da homepage também verificados com a API real.
+- Verificação real separada: One Piece, capítulo 4, grupo Mega-Scan, informado
+  como PT-BR pelo MangaDex. Leitor carregou imagem de 756×1200 e gerou CBZ de
+  1.889.339 bytes com 14 JPEGs, de `001.jpg` a `014.jpg`, e metadados. Python
+  `zipfile.testzip` confirmou CRC de todas as entradas. A primeira página foi
+  inspecionada: identifica capítulo 04/Morgan e contém texto em português. Isso
+  não equivale a auditar visualmente todas as páginas ou outras edições.
+- Evidência normalizada, sem tickets de imagens ou credenciais:
+  [2026-10-30-manga-download-real.json](validation/2026-10-30-manga-download-real.json).
+- `npm run lint`, `npm run build` e `git diff --check` aprovados. Permanece o aviso
+  conhecido do chunk do player/HLS acima de 500 kB, sem impedir o build.
+
+Artefatos de QA e o CBZ real ficam apenas em `/tmp/hpmovies-manga-*`, fora do
+repositório. A API e o Vite foram iniciados temporariamente em loopback para a
+verificação e encerrados ao final. Host de fontes e tradutor não foram iniciados.
+Para usar localmente, executar `npm run dev` e abrir `http://127.0.0.1:5173/manga`.
+Nenhuma alteração de `.env`, dependências, licenças ou bundle privado. Mudanças
+mantidas no workspace, sem commit, push ou deploy.
+
+## Mangá Livre (.to), volumes e obra inteira — 30/10/2026
+
+Esta etapa substitui a limitação anterior: agora existe integração própria com
+`https://mangalivre.to`, identificada na interface como **Mangá Livre (.to)**.
+Pesquisa e testes com GET público confirmaram catálogo, busca, detalhes, índice
+de capítulos e imagens WebP legíveis. Não foi comprovado vínculo dessa fonte com
+a equipe do antigo `mangalivre.net`; `.to` não é apresentado como API oficial.
+Os projetos antigos e referências recentes serviram apenas para pesquisa, sem
+cópia de código. O provedor consulta HTML público Madara, sem executar scripts
+ou contornar desafios, e limita tamanho, tempo e frequência das respostas.
+
+Seleção disponível em `/manga?provider=mangalivre&language=pt-br`. IDs de obras e
+capítulos são qualificados, separados dos UUIDs MangaDex; navegação, biblioteca,
+favoritos e retomada preservam essa identidade, inclusive slugs com underscore.
+Gateway aceita somente imagens emitidas pela fonte, com host HTTPS fixo e DNS
+verificado. Ausência de contagem de páginas não é apresentada como capítulo vazio.
+
+Adicionados **Baixar volume** e **Baixar mangá inteiro**, além do CBZ individual.
+O botão “Ver volumes e baixar mangá inteiro” consulta todas as páginas do índice.
+ZIP usa estrutura `Obra/Volume 001/Capítulo 001 - título/001.ext`, com créditos por
+capítulo e imagens em ordem. Volume ausente fica em **Volume não informado**;
+nenhum número é inferido arbitrariamente. O arquivo inteiro reúne o conteúdo
+disponível naquele idioma, não uma garantia de sequência editorial completa.
+Alternativas do mesmo capítulo são deduplicadas com aviso e créditos; edições
+externas e capítulos MangaDex comprovadamente vazios são excluídos com aviso.
+
+Jobs locais escrevem ZIP/ZIP64 em diretório temporário do sistema, sem manter
+toda a obra em RAM. Limites: dois arquivos preparados/em andamento, 20 GiB por
+ZIP, 50 mil páginas, 10 mil capítulos e 20 MiB por imagem. Há progresso, cancel,
+limpeza de parciais e descarte do arquivo pronto. Expiração considera uma hora de
+inatividade, renovada durante o trabalho. A preparação continua ao abrir o leitor
+e pode ser retomada pela interface após reload. Encerramento normal da API limpa
+os downloads pertencentes a ela. Rotas não aceitam URLs arbitrárias ou caminhos
+de disco enviados pelo cliente; requisições de mutação verificam origem e JSON.
+
+### Evidências desta etapa
+
+- One Piece (.to): 1.181 capítulos distintos no índice, com lacunas e edições
+  alternativas; capítulo 1192 com 14 páginas. A segunda imagem foi inspecionada
+  e identifica obra, capítulo e português; a primeira preserva créditos.
+- Download nativo real do ZIP inteiro de **Kimi ni Okuru Eien**: um capítulo
+  oneshot, 22 WebP, 4.109.729 bytes e 24 entradas. Pastas `Volume não informado`
+  e `Capítulo extra - Oneshot`, sem atribuir volume inexistente. Python
+  `zipfile.testzip` confirmou CRC de todas as entradas. Link nativo com atributo
+  `download` funcionou; arquivo temporário preparado na API foi descartado pelo
+  botão após salvar. Evidência sem tickets:
+  [2026-10-30-mangalivre-whole-real.json](validation/2026-10-30-mangalivre-whole-real.json).
+- 602 testes unitários/contratuais aprovados em 54 arquivos na rodada completa
+  desta etapa. 36 cenários Playwright aprovados: 28 de downloads e oito de
+  regressão dos leitores/fontes, em desktop e celular. Fixtures são sintéticas;
+  o teste de ZIP com fixture valida o link e usa navegação para interceptar o
+  attachment no Chromium. A verificação nativa real acima cobre esse limite.
+- Lint, build e `git diff --check` aprovados. Permanece o aviso conhecido do chunk
+  player/HLS acima de 500 kB. Referências primárias da fonte:
+  [catálogo](https://mangalivre.to/manga/),
+  [One Piece](https://mangalivre.to/manga/one-piece-ptbr/) e
+  [capítulo 1192](https://mangalivre.to/manga/one-piece-ptbr/capitulo-1192/).
+
+Os serviços nas portas 5173 e 4000 já estavam ligados quando esta etapa começou
+e foram preservados. Não houve push, deploy, commit, alteração de `.env`, novas
+dependências ou mudança do bundle privado. Retomada: o usuário acrescentou a
+integração de light novels; pesquisa e implementação prosseguem nessa parte.
+
+## Light novels: API pública e leitura PT-BR da Novel Mania — 30/10/2026
+
+Adicionada **Novel Mania** como fonte nativa de catálogo e texto, sem depender do
+AniList para identificar essas obras. `/novels` agora abre esse catálogo em PT-BR;
+o seletor mantém o AniList e suas fontes conectadas disponíveis. O leitor existente
+preserva temas, fontes, espaçamento, favoritos, teclado, histórico e retomada.
+IDs `novelmania:<obra>` e `novelmania:<obra>/<capítulo>` são codificados nas rotas
+e separados dos IDs AniList/demo. Voltar aos capítulos de uma obra nativa abre
+seus detalhes, sem encaminhar ao formulário manual de fontes AniList.
+
+O adaptador usa GETs públicos da própria fonte: `/api/novels`, `/api/categories`,
+`/api/novels/:slug` e `/api/novels/:slug/chapters`. O índice é paginado até o fim,
+conferindo contagens e duplicações; não considera os primeiros 50 capítulos do
+HTML inicial como índice completo. O endpoint de texto da API respondeu 403 e
+não é usado. A leitura consulta somente a página HTML pública normal do capítulo,
+cujo conteúdo editorial está em `.rich-text-content`. Não há chaves, credenciais,
+contorno de proteção, servidor extra Python/Java ou dependências novas.
+
+Busca, categorias e popularidade/adição recente estão na interface. A API local
+também normaliza status da fonte. Filtros sem suporte, como ano e nota, não são
+oferecidos nessa seleção e retornam erro claro se enviados diretamente. Todos os
+capítulos nativos são identificados como PT-BR; solicitar outro idioma não retorna
+uma tradução fictícia. Extras e prólogos preservam o rótulo real, sem apresentar
+sua posição no índice como número editorial do capítulo.
+
+Provedor, obra, capítulo, idioma, canonical, título e navegação são conferidos
+antes de exibir texto. Menus, scripts e comentários não entram nos parágrafos.
+Links de origem e créditos aparecem nos detalhes/leitor. Erro ou indisponibilidade
+não substituem o texto por demonstração. O fluxo AniList/Tatakai/Toko e o texto
+original de demonstração permanecem preservados. Capas ausentes de obras reais
+não são rotuladas como “Histórias originais”.
+
+### Pesquisa das opções fornecidas
+
+- [lightnovelapi](https://pypi.org/project/lightnovelapi/): versão 0.2 publicada em
+  janeiro de 2020, MIT; cliente Python voltado ao Wuxiaworld, sem PT-BR comprovado.
+- [Kevin-Umali/novel-api](https://github.com/Kevin-Umali/novel-api): último push em
+  março de 2024; Fastify/Puppeteer para BoxNovel e Wuxiaworld.site. package.json
+  declara ISC. Não comprova fonte PT-BR atual.
+- [ap-atul/novel-api](https://github.com/ap-atul/novel-api): Java/ReadLightNovel,
+  último push em setembro de 2021, Unlicense; não resolve por si a leitura PT-BR.
+- [Upcoming Light Novels](https://rapidapi.com/vircedev-hVwFHuR7v_-/api/upcoming-light-novels):
+  página pública não comprovou capítulos textuais em português; planos e chaves
+  não foram contratados ou configurados.
+- [lightnovel-crawler](https://github.com/lncrawl/lightnovel-crawler), GPL-3.0,
+  consultado como referência atual de fontes. Nenhum código foi copiado ou
+  executado. CentralNovel também forneceu texto PT-BR por GET público na pesquisa,
+  mas não foi incorporada nesta etapa.
+
+Escolhida a [Novel Mania](https://novelmania.com.br/novels) porque API de catálogo,
+índice e páginas públicas de texto foram verificados de forma independente.
+
+### Verificação final conjunta
+
+- `npm test`: **629 testes aprovados em 57 arquivos**, incluindo 27 novos casos
+  de Novel Mania, registry/rotas e validação do frontend. Fixtures são sintéticas.
+- Playwright: 28 cenários de downloads de mangá, 18 da fonte nativa de novels e
+  dez regressões distintas dos leitores/fontes, totalizando **56 cenários únicos**
+  aprovados em desktop/celular. A última rodada de novels executou 24 cenários,
+  incluindo novamente parte dessas regressões.
+- Lint, build com TypeScript e `git diff --check` aprovados. Permanece apenas o
+  aviso já conhecido do chunk player/HLS acima de 500 kB.
+- Verificação real sem fixtures: busca por A Classe de Elite, índice de 181
+  capítulos em quatro páginas, primeiro capítulo com 12 parágrafos/2.977 caracteres
+  e segundo com 406 parágrafos/58.293 caracteres. Depois da troca, identidade,
+  origem e texto do segundo capítulo foram aguardados e comparados à resposta
+  normalizada; hashes distintos confirmam que o leitor não reteve o primeiro texto.
+  A prosa em português e a identificação dos dois capítulos foram inspecionadas.
+  Progresso não nulo após reload e retorno nativo aos detalhes foram conferidos.
+  Isso não representa auditoria integral das 181 edições ou de outras obras.
+- Evidência normalizada, sem texto integral ou credenciais:
+  [2026-10-30-novelmania-real.json](validation/2026-10-30-novelmania-real.json).
+  Capturas temporárias em `/tmp/hpmovies-novel-real-*` e
+  `/tmp/hpmovies-novel-provider-*`. Página primária da amostra:
+  [A Classe de Elite, volume 1, capítulo 1](https://novelmania.com.br/novels/a-classe-da-elite/capitulos/volume-1-capitulo-1).
+
+Na verificação final de novels as portas 5173/4000 estavam livres. Foram iniciados
+somente frontend e API em loopback, com fontes privadas e tradução desligadas por
+variáveis restritas ao processo; esses dois grupos de QA foram encerrados ao final.
+Para uso local: `npm run dev`, mangás em `/manga` e novels em `/novels`.
+Mudanças preservadas no workspace. Sem commit, push, deploy, alteração de `.env`,
+licenças, dependências ou bundle privado.
+
+## Light novels em inglês e seleção de idioma — 31/10/2026
+
+Adicionada **WuxiaWorld.site** como fonte nativa em inglês, mantendo **Novel Mania**
+em português brasileiro e o catálogo AniList com suas fontes conectadas. Em
+`/novels`, os seletores **Provedor** e **Idioma** trocam entre PT-BR e inglês.
+A escolha fica na URL e nas preferências locais; links explícitos prevalecem.
+A troca conserva a busca e limpa filtros/paginação específicos da fonte anterior.
+No celular, o campo Provedor ocupa uma linha para exibir seu nome completo.
+
+O adaptador TypeScript consulta páginas públicas da própria fonte e normaliza
+busca, gêneros, detalhes, índice completo e texto. O índice usa o POST público
+sem corpo `/novel/:slug/ajax/chapters/?t=1`, conforme o protocolo do JavaScript da
+fonte. Há cache, intervalo entre requisições, timeout e limites de resposta/índice.
+Não depende de chaves, Python, Java ou Puppeteer em produção. WuxiaWorld.site é
+uma fonte distinta de Wuxiaworld.com; a integração não é uma API oficial.
+
+IDs `wuxiaworldsite:<obra>` e `wuxiaworldsite:<obra>/<capítulo>` preservam a
+identidade da edição. O registry e o frontend conferem provedor, obra, capítulo,
+idioma e navegação. Favoritos e progresso PT-BR continuam separados dos ingleses.
+Créditos e links de origem aparecem no leitor; filtros sem suporte não são
+oferecidos. Solicitar PT-BR explicitamente para uma obra dessa fonte retorna
+indisponibilidade, com o motivo visível, sem trocar o texto por uma demonstração.
+Idioma explícito também segue nos próximos capítulos e links de retorno;
+provedor explícito é encaminhado à API, que rejeita contradições com o ID da obra.
+Capítulos sem histórico começam no topo; capítulos já iniciados restauram o
+parágrafo salvo. Detalhes, gêneros e retorno ao catálogo mantêm provedor/idioma.
+
+Pesquisa primária consultada:
+
+- [WuxiaWorld.site](https://wuxiaworld.site/) e seu
+  [JavaScript de capítulos](https://wuxiaworld.site/wp-content/plugins/madara-core/assets/js/script.js).
+- [Kevin-Umali/novel-api](https://github.com/Kevin-Umali/novel-api/blob/master/src/controller/wuxiaworld.controller.ts),
+  referência fornecida pelo usuário, e
+  [lightnovel-crawler](https://github.com/lncrawl/lightnovel-crawler/blob/dev/sources/en/w/wuxiaworldsite.py),
+  consultado para confirmar a fonte. Nenhum código desses projetos foi copiado
+  ou instalado. Licenças existentes preservadas.
+- BoxNovel apresentou falha de cadeia TLS e NovelBin respondeu 503 na pesquisa;
+  não foram adicionados nem tiveram suas proteções contornadas.
+
+Verificação desta etapa:
+
+- `npm test`: **678 testes aprovados em 60 arquivos**, incluindo 26 do adaptador
+  inglês e 23 contratos de idioma/identidade/preferências. Fixtures sintéticas.
+- Playwright: **44 cenários distintos aprovados**, 20 de idiomas e 24 de regressão
+  das novels/fontes em desktop e celular. Cobrem filtros, URLs, preferências,
+  histórico PT-BR/EN, identidade, indisponibilidade, navegação, início e retomada.
+- Lint, build com TypeScript e `git diff --check` aprovados. Permanece o aviso
+  conhecido do chunk player/HLS acima de 500 kB.
+- Verificação real, sem fixtures: **Complete Martial Arts Attributes**, índice
+  de **3.866 capítulos** únicos da mesma obra, com extras preservados. Capítulos
+  1 e 2 em inglês, respectivamente 81 parágrafos/8.257 caracteres e 87/9.833.
+  Parágrafos e ordem no navegador conferidos contra a API normalizada, com hashes
+  distintos; identidade e origem do segundo capítulo aguardadas após navegar.
+  Prosa inglesa, layout desktop/375 px, início no topo, retomada não nula após
+  reload e retorno nativo aos detalhes/catálogo conferidos. O índice PT-BR de
+  A Classe de Elite continuou retornando 181 capítulos. Essa amostra não audita
+  integralmente todas as obras, traduções ou capítulos da fonte.
+- Evidência sem texto integral, chaves ou credenciais:
+  [2026-10-31-novels-english-real.json](validation/2026-10-31-novels-english-real.json).
+  Capturas temporárias em `/tmp/hpmovies-novels-english-real-*` e
+  `/tmp/hpmovies-novel-languages-*`. Origem da amostra:
+  [Complete Martial Arts Attributes, capítulo 1](https://wuxiaworld.site/novel/complete-martial-arts-attributes-spp/chapter-1/).
+
+Os serviços nas portas 5173 e 4000 já estavam ligados ao retomar esta etapa e
+foram preservados. Não houve commit, push, deploy, mudança de `.env`, dependências
+ou bundle privado; as alterações previamente preparadas no índice Git foram
+mantidas. Para usar: abrir `/novels` e selecionar Português brasileiro ou Inglês.

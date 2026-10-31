@@ -4,10 +4,13 @@ import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, RefreshCw, Settings2, X
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { ContentChapter } from '../../shared/content';
 import type { MangaChapter, MangaChapterPage, MangaChapterPages, MangaTitle } from '../../shared/manga';
+import { mangaDetailsPath, mangaProviderForId, mangaProviderLabel, mangaReaderPath } from '../../shared/mangaIdentity';
 import { useCatalogRequest } from '../hooks/useCatalogRequest';
 import { mangaLanguageLabel, mangaService } from '../services/manga';
 import { mangaLibrary, useMangaLibrary } from '../services/mangaLibrary';
 import { MangaError } from '../components/manga/MangaState';
+import { MangaDownloadButton } from '../components/manga/MangaDownloadButton';
+import { MangaSourceLink } from '../components/manga/MangaSourceLink';
 import { ReaderImage } from '../components/manga/ReaderImage';
 import { readReaderPreferences, readerPageStep, saveReaderPreferences } from '../components/manga/readerPreferences';
 import type { ReaderPreferences } from '../components/manga/readerPreferences';
@@ -32,11 +35,17 @@ function MangaReader({ mangaId, chapterId, sourceHints }: { mangaId: string; cha
     if (sourceHints !== undefined) {
       const query = sourceQuery(new URLSearchParams(sourceHints));
       const content = await contentService.pages(mangaId, chapterId, query);
-      if (content.chapter.workId.replace(/^anilist:/, '') !== mangaId.replace(/^anilist:/, '')) throw new Error('Este capítulo pertence a outra obra. Abra novamente a lista de capítulos.');
+      const requestedLanguage = query.language?.toLowerCase();
+      const actualLanguage = content.chapter.language.toLowerCase();
+      const wrongLanguage = requestedLanguage && (requestedLanguage === 'pt' ? !/^pt(?:-|$)/.test(actualLanguage) : requestedLanguage !== actualLanguage);
+      if (content.chapter.workId.replace(/^anilist:/, '') !== mangaId.replace(/^anilist:/, '')
+        || content.chapter.id !== chapterId || query.provider && content.chapter.providerId !== query.provider || wrongLanguage) {
+        throw new Error('Este capítulo não corresponde à edição escolhida. Abra novamente a lista de capítulos.');
+      }
       return { title: query.titles?.[0] || `AniList ${mangaId}`, availableLanguages: [content.chapter.language], chapter: readerChapter(content.chapter, content.pages.length), pages: content.pages, sourceUrl: content.sourceUrl, attribution: content.attribution || content.chapter.providerName, navigation: { previousId: content.previousChapterId, nextId: content.nextChapterId } };
     }
     const [manga, content] = await Promise.all([mangaService.details(mangaId), mangaService.pages(chapterId)]);
-    if (content.chapter.mangaId !== mangaId) throw new Error('Este capítulo pertence a outra obra. Volte ao catálogo para abrir a edição correta.');
+    if (content.chapter.mangaId !== mangaId || content.chapter.id !== chapterId) throw new Error('Este capítulo não corresponde à edição escolhida. Volte ao catálogo para abrir a edição correta.');
     return { manga, title: manga.title, availableLanguages: manga.availableLanguages, ...content };
   }, [mangaId, chapterId, sourceHints]);
   const request = useCatalogRequest(`reader:${mangaId}:${chapterId}:${sourceHints}:${retry}`, dataLoader);
@@ -67,8 +76,8 @@ function MangaReader({ mangaId, chapterId, sourceHints }: { mangaId: string; cha
     if (effectiveMode === 'vertical') pagesRef.current?.querySelector(`[data-page="${index}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }, [count, effectiveMode]);
   const step = useCallback((direction: 1 | -1) => goPage(readerPageStep(page, direction, count, effectiveMode)), [page, goPage, count, effectiveMode]);
-  const detailsPath = sourceHints === undefined ? `/manga/${mangaId}` : (() => { const params = sourceParams(sourceQuery(new URLSearchParams(sourceHints))); params.set('kind', 'manga'); params.set('id', mangaId); params.set('open', '1'); return `/sources?${params}`; })();
-  const openChapter = useCallback((id: string) => navigate(sourceHints === undefined ? `/manga/${mangaId}/read/${id}` : `/sources/manga/${encodeURIComponent(mangaId)}/read/${encodeURIComponent(id)}${sourceHints}`), [navigate, mangaId, sourceHints]);
+  const detailsPath = sourceHints === undefined ? mangaDetailsPath(mangaId) : (() => { const params = sourceParams(sourceQuery(new URLSearchParams(sourceHints))); params.set('kind', 'manga'); params.set('id', mangaId); params.set('open', '1'); return `/sources?${params}`; })();
+  const openChapter = useCallback((id: string) => navigate(sourceHints === undefined ? mangaReaderPath(mangaId, id) : `/sources/manga/${encodeURIComponent(mangaId)}/read/${encodeURIComponent(id)}${sourceHints}`), [navigate, mangaId, sourceHints]);
   const fullscreen = useCallback(() => {
     if (!document.fullscreenEnabled) { setFullscreenError('Tela cheia não está disponível neste navegador.'); return; }
     const operation = document.fullscreenElement ? document.exitFullscreen() : readerRef.current?.requestFullscreen();
@@ -138,8 +147,13 @@ function MangaReader({ mangaId, chapterId, sourceHints }: { mangaId: string; cha
       <label>Zoom · {Math.round(preferences.zoom * 100)}%<input type="range" min="0.5" max="2.5" step="0.1" value={preferences.zoom} onChange={(event) => setPreference('zoom', Number(event.target.value))} /></label>
     </div><p>← → / Page Up / Page Down: páginas · Home / End: início e fim · F: tela cheia · [ / ]: capítulos. Em telas pequenas, a página dupla se adapta para página única.</p></section>}
     {(storageError || preferenceError || fullscreenError) && <p className="reader-notice" role="status">{storageError || preferenceError || fullscreenError}</p>}
-    {request.loading ? <div className="reader-loading" aria-busy="true"><div className="skeleton" /><p>Preparando seu capítulo…</p></div> : request.error ? <MangaError message={request.error} retry={() => setRetry((value) => value + 1)} /> : data && !count ? <div className="catalog-state"><h1>{data.chapter.externalUrl ? 'Leia esta edição na fonte oficial' : 'Este capítulo ainda não tem páginas disponíveis'}</h1><p>{data.chapter.externalUrl ? 'Esta edição é distribuída pelo site indicado no MangaDex.' : 'Tente atualizar ou escolha outra edição na lista de capítulos.'}</p>{data.sourceUrl && <a href={data.sourceUrl} target="_blank" rel="noopener noreferrer" className="button-primary">Abrir fonte ↗</a>}<Link to={detailsPath} className="button-secondary">Escolher outra edição</Link></div> : data && <>
+    {request.loading ? <div className="reader-loading" aria-busy="true"><div className="skeleton" /><p>Preparando seu capítulo…</p></div> : request.error ? <MangaError message={request.error} retry={() => setRetry((value) => value + 1)} /> : data && !count ? <div className="catalog-state"><h1>{data.chapter.externalUrl ? 'Leia esta edição no provedor' : 'Este capítulo ainda não tem páginas disponíveis'}</h1><p>{data.chapter.externalUrl ? 'Esta edição é distribuída pelo site indicado no MangaDex.' : 'Tente atualizar ou escolha outra edição na lista de capítulos.'}</p><MangaSourceLink href={data.chapter.externalUrl || data.sourceUrl} className="button-primary" /><Link to={detailsPath} className="button-secondary">Escolher outra edição</Link></div> : data && <>
       <div className="reader-chapter-heading"><span className="eyebrow">{mangaLanguageLabel(data.chapter.language)}</span><h1>{data.chapter.title}</h1><p>{data.chapter.groups.join(' · ') || 'Grupo não informado'}</p></div>
+      <div className="reader-source-actions">
+        <MangaSourceLink href={data.sourceUrl} />
+        <MangaDownloadButton key={`${chapterId}:${retry}`} load={() => Promise.resolve({ title: data.title, chapterTitle: data.chapter.title, language: data.chapter.language, pages: data.pages, sourceUrl: data.sourceUrl, credits: data.chapter.groups })} />
+        <p>CBZ: um capítulo em imagens para ler offline.</p>
+      </div>
       <div className="reader-stage" onTouchStart={(event) => { if (event.touches.length === 1) touchRef.current = { x: event.touches[0].clientX, y: event.touches[0].clientY }; else touchRef.current = null; }} onTouchEnd={onTouchEnd}>
         <div ref={pagesRef} className={`reader-pages ${preferences.direction === 'rtl' ? 'reader-rtl' : ''}`}>
           {effectiveMode === 'vertical' ? data.pages.map((src, index) => <ReaderImage key={`${src}:${retry}`} src={src} number={index + 1} eager={index < 2 || Math.abs(index - current) <= 1} onLoaded={() => imageLoaded(index)} />) : displayed.map((index) => <ReaderImage key={`${data.pages[index]}:${retry}`} src={data.pages[index]} number={index + 1} eager onLoaded={() => imageLoaded(index)} />)}
@@ -149,10 +163,10 @@ function MangaReader({ mangaId, chapterId, sourceHints }: { mangaId: string; cha
       <nav className="reader-chapter-navigation" aria-label="Navegação de capítulos"><button className="button-secondary" disabled={!previousChapter} onClick={() => previousChapter && openChapter(previousChapter)}>← Capítulo anterior</button><Link className="button-secondary" to={detailsPath}>Todas as edições</Link><button className="button-primary" disabled={!nextChapter} onClick={() => nextChapter && openChapter(nextChapter)}>Próximo capítulo →</button></nav>
       {!data.navigation && <p className="reader-notice">A navegação entre capítulos não pôde ser carregada. Escolha uma edição na lista abaixo.</p>}
       <section className="reader-editions"><div><h2>Outras edições</h2><label>Idioma<select value={language} onChange={(event) => {
-        if (sourceHints === undefined) navigate(`/manga/${mangaId}?language=${encodeURIComponent(event.target.value)}`);
+        if (sourceHints === undefined) navigate(`${mangaDetailsPath(mangaId)}?language=${encodeURIComponent(event.target.value)}`);
         else { const params = new URLSearchParams(detailsPath.split('?')[1]); params.set('language', event.target.value); navigate(`/sources?${params}`); }
       }}>{[...new Set(['pt-br', language, ...data.availableLanguages])].map((lang) => <option key={lang} value={lang}>{mangaLanguageLabel(lang)}</option>)}</select></label></div>{feed.error ? <p role="status">{feed.error} <Link to={detailsPath}>Abrir lista de capítulos</Link></p> : <><label>Capítulos<select value={feed.data?.items.some((chapter) => chapter.id === chapterId) ? chapterId : ''} onChange={(event) => event.target.value && openChapter(event.target.value)}><option value="" disabled>{feed.loading ? 'Carregando capítulos…' : 'Escolha uma edição'}</option>{feed.data?.items.filter((chapter) => !chapter.externalUrl).map((chapter) => <option key={chapter.id} value={chapter.id}>{chapter.chapter ? `${chapter.chapter} · ` : ''}{chapter.title} · {chapter.groups.join(', ') || 'Sem grupo'}</option>)}</select></label><div className="manga-pagination"><button className="button-secondary" disabled={feedPage <= 1} onClick={() => setFeedPage((value) => value - 1)}>Anterior</button><span>Lista {feedPage}</span><button className="button-secondary" disabled={!feed.data?.hasNextPage} onClick={() => setFeedPage((value) => value + 1)}>Próxima</button></div></>}
-      <p className="manga-credit">{sourceHints === undefined ? <>Capítulo fornecido pelo <a href={data.sourceUrl} target="_blank" rel="noopener noreferrer">MangaDex ↗</a>.</> : <>Fonte: {data.attribution}. {data.sourceUrl && <a href={data.sourceUrl} target="_blank" rel="noopener noreferrer">Abrir origem ↗</a>}</>} Seu progresso fica salvo neste dispositivo quando o armazenamento está disponível.</p></section>
+      <p className="manga-credit">{sourceHints === undefined ? <>Capítulo fornecido por <MangaSourceLink href={data.sourceUrl} label={mangaProviderLabel(mangaProviderForId(mangaId))} />.</> : <>Fonte: {data.attribution}. <MangaSourceLink href={data.sourceUrl} label="Abrir origem" /></>} Seu progresso fica salvo neste dispositivo quando o armazenamento está disponível.</p></section>
     </>}
   </main>;
 }

@@ -4,7 +4,7 @@ import { open, realpath, stat } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { Hono } from 'hono';
 import { secureHeaders } from 'hono/secure-headers';
-import apiApp from './app.js';
+import apiApp, { createApp } from './app.js';
 import { runtimeConfig } from './config/runtime.js';
 
 interface ProductionApi {
@@ -135,7 +135,8 @@ export async function startProductionServer({
   } catch {
     throw new Error('Frontend compilado indisponível. Execute npm run build antes de npm start.');
   }
-  const app = createProductionApp({ frontendRoot: directory });
+  const api = createApp();
+  const app = createProductionApp({ frontendRoot: directory, api });
   const server = createAdaptorServer({ fetch: app.fetch }) as Server;
   await new Promise<void>((resolveReady, reject) => {
     const onError = (error: Error) => { server.off('listening', onListening); reject(error); };
@@ -161,7 +162,7 @@ export async function startProductionServer({
           else resolveStopped();
         });
         server.closeIdleConnections();
-      });
+      }).finally(() => api.dispose());
     },
   };
 }

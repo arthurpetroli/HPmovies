@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, BookOpen, List, Settings2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, ExternalLink, List, Settings2 } from 'lucide-react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { NovelChapter, NovelReadingResult, NovelTitle } from '../../shared/novel';
 import { CatalogError } from '../components/ui/CatalogState';
@@ -7,6 +7,7 @@ import { useCatalogRequest } from '../hooks/useCatalogRequest';
 import { novelService } from '../services/novels';
 import { novelLibrary, useNovelLibrary } from '../services/novelLibrary';
 import { sourceParams, sourceQuery, sourceSuffix, sourceTitles } from '../services/content';
+import { isNativeNovelId, novelCatalogPath, novelDetailsPath, novelLanguageLabel, novelProviderForId, novelReaderPath } from '../../shared/novelIdentity';
 import './novel.css';
 
 type ReadableContent = NovelReadingResult & { novel: NovelTitle; chapter: NovelChapter };
@@ -15,10 +16,12 @@ export function NovelReaderPage() {
   const { novelId = '', chapterId = '' } = useParams();
   const [params] = useSearchParams();
   const query = sourceQuery(params);
-  const hints = sourceSuffix({ ...query, titles: query.titles?.length ? query.titles : sourceTitles.get('novel', novelId) });
+  const native = isNativeNovelId(novelId);
+  const hints = native ? sourceSuffix({ provider: query.provider, language: query.language }) : sourceSuffix({ ...query, titles: query.titles?.length ? query.titles : sourceTitles.get('novel', novelId) });
   const returnParams = sourceParams(sourceQuery(new URLSearchParams(hints)));
   returnParams.set('kind', 'novel'); returnParams.set('id', novelId.replace(/^anilist:/, '')); returnParams.set('open', '1');
-  const detailsPath = hints ? `/sources?${returnParams}` : `/novel/${novelId}`;
+  const manualSource = !!(query.source || query.provider || query.titles?.length || sourceTitles.get('novel', novelId).length);
+  const detailsPath = !native && manualSource ? `/sources?${returnParams}` : `${novelDetailsPath(novelId)}${query.language ? `?${new URLSearchParams({ language: query.language })}` : ''}`;
   const [retry, setRetry] = useState(0);
   const load = useCallback(() => novelService.content(novelId, chapterId, sourceQuery(new URLSearchParams(hints))), [novelId, chapterId, hints]);
   const { data, loading, error } = useCatalogRequest(`novel-read:${novelId}:${chapterId}:${hints}:${retry}`, load);
@@ -54,6 +57,7 @@ function ReadingSession({ content, hints, detailsPath }: { content: ReadableCont
 
   useLayoutEffect(() => {
     if (initialPosition > 0) articleRef.current?.querySelector(`[data-paragraph="${initialPosition}"]`)?.scrollIntoView({ block: 'start' });
+    else window.scrollTo({ top: 0, behavior: 'instant' });
   }, [initialPosition]);
 
   useEffect(() => {
@@ -89,7 +93,8 @@ function ReadingSession({ content, hints, detailsPath }: { content: ReadableCont
     };
   }, [save, updatePosition, paragraphs.length]);
 
-  const chapterPath = (id: string) => `/novel/${novel.id}/read/${encodeURIComponent(id)}${hints}`;
+  const chapterPath = (id: string) => `${novelReaderPath(novel.id, id)}${hints}`;
+  const catalogPath = isNativeNovelId(novel.id) ? novelCatalogPath(novelProviderForId(novel.id), chapter.language) : '/novels';
   const percent = paragraphs.length === 1 ? 100 : Math.round(position / (paragraphs.length - 1) * 100);
   return <main id="main-content" className={`novel-reader novel-theme-${preferences.theme}`} lang={chapter.language} onKeyDown={(event) => {
     if ((event.target as HTMLElement).closest('button,input,select,textarea,a') || event.altKey || event.metaKey || event.ctrlKey) return;
@@ -102,10 +107,10 @@ function ReadingSession({ content, hints, detailsPath }: { content: ReadableCont
     {storageError && <p className="novel-reader-storage" role="status">{storageError}</p>}
     <div className="novel-reading-body">
       {content.isDemo && <aside className="novel-original-note"><BookOpen size={17} /><p>Texto original de demonstração do HPmovies, em português. Este conteúdo permite experimentar o leitor e a retomada de leitura.</p></aside>}
-      <header className="novel-reading-heading"><span>CAPÍTULO {chapter.number}</span><h1>{chapter.title}</h1><p>{novel.title}</p></header>
+      <header className="novel-reading-heading"><span>{chapter.displayLabel || `CAPÍTULO ${chapter.number}`}</span><h1>{chapter.title}</h1><p>{novel.title}</p><p>{novelLanguageLabel(chapter.language)}</p></header>
       <article ref={articleRef} tabIndex={0} aria-label={`Texto de ${chapter.title}`} className={`novel-prose novel-font-${preferences.font}`} style={{ fontSize: preferences.fontSize, lineHeight: preferences.lineHeight }}>{paragraphs.map((paragraph, index) => <p key={`${chapter.id}:${index}`} data-paragraph={index}>{paragraph}</p>)}</article>
-      {content.attribution && <p className="novel-reader-attribution">{content.attribution}</p>}
-      <nav className="novel-reader-chapters" aria-label="Navegação entre capítulos">{content.previousChapterId ? <Link className="novel-reader-button" to={chapterPath(content.previousChapterId)}><ArrowLeft size={17} />Anterior</Link> : <span />}<Link className="novel-reader-button" to={detailsPath}><List size={17} /><span>Capítulos</span></Link>{content.nextChapterId ? <Link className="novel-reader-button novel-reader-next" to={chapterPath(content.nextChapterId)}>Próximo<ArrowRight size={17} /></Link> : <Link className="novel-reader-button novel-reader-next" to="/novels">Explorar novels<ArrowRight size={17} /></Link>}</nav>
+      {content.attribution && <p className="novel-reader-attribution">{content.attribution}</p>}{content.sourceUrl && <a className="novel-reader-source" href={content.sourceUrl} target="_blank" rel="noopener noreferrer">Abrir capítulo na fonte<ExternalLink size={15} aria-hidden="true" /></a>}
+      <nav className="novel-reader-chapters" aria-label="Navegação entre capítulos">{content.previousChapterId ? <Link className="novel-reader-button" to={chapterPath(content.previousChapterId)}><ArrowLeft size={17} />Anterior</Link> : <span />}<Link className="novel-reader-button" to={detailsPath}><List size={17} /><span>Capítulos</span></Link>{content.nextChapterId ? <Link className="novel-reader-button novel-reader-next" to={chapterPath(content.nextChapterId)}>Próximo<ArrowRight size={17} /></Link> : <Link className="novel-reader-button novel-reader-next" to={catalogPath}>Explorar novels<ArrowRight size={17} /></Link>}</nav>
       <p className="novel-reader-help">Use ← e → com o foco no texto para trocar de capítulo.</p>
     </div>
   </main>;

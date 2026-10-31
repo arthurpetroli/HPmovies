@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { MangaTitle } from '../../shared/manga';
 import { isManga } from './manga';
+import { isMangaChapterId, mangaChapterBelongsTo } from '../../shared/mangaIdentity';
 
 export interface SavedManga { manga: MangaTitle; favorite: boolean; completed: boolean; addedAt: number }
 export interface MangaProgress { manga: MangaTitle; chapterId: string; chapterTitle: string; language: string; page: number; pageCount: number; updatedAt: number; completed: boolean }
@@ -12,10 +13,9 @@ let serialized: string | null | undefined;
 let volatile = false;
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object';
 const uint = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const compact = (manga: MangaTitle): MangaTitle => ({ ...manga, description: undefined });
 export function isMangaProgress(value: unknown): value is MangaProgress {
-  return object(value) && isManga(value.manga) && uuid(value.chapterId) && typeof value.chapterTitle === 'string'
+  return object(value) && isManga(value.manga) && isMangaChapterId(value.chapterId) && mangaChapterBelongsTo(value.chapterId, value.manga.id) && typeof value.chapterTitle === 'string'
     && typeof value.language === 'string' && /^[a-z]{2,3}(?:-[a-z]{2,4})?$/.test(value.language)
     && uint(value.page) && uint(value.pageCount) && value.pageCount > 0 && value.pageCount <= 1000 && value.page < value.pageCount
     && uint(value.updatedAt) && typeof value.completed === 'boolean';

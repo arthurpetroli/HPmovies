@@ -1,4 +1,5 @@
-/** Normalized MangaDex contracts. React never consumes provider-specific payloads. */
+/** Normalized reading contracts. React never consumes provider-specific payloads. */
+export type MangaProviderId = 'mangadex' | 'mangalivre';
 export interface MangaTag { id: string; name: string }
 export interface MangaTitle {
   id: string;
@@ -14,8 +15,11 @@ export interface MangaTitle {
   authors: string[];
   contentRating: 'safe' | 'suggestive';
   sourceUrl: string;
+  providerId?: MangaProviderId;
+  providerName?: string;
 }
 export interface MangaQuery {
+  provider?: MangaProviderId;
   language?: string;
   search?: string;
   tag?: string;

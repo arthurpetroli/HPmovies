@@ -4,3 +4,58 @@
 
 /* Zoom expands the reading surface; the stage provides horizontal scrolling. */
 .reader-pages{width:calc(var(--reader-width) * var(--reader-zoom));max-width:none}.reader-mode-single .reader-pages,.reader-mode-double .reader-pages{width:calc(var(--reader-width) * var(--reader-zoom));min-width:0;max-width:none}.reader-fit-height .reader-image{max-height:calc((100vh - 145px) * var(--reader-zoom))}
+
+/* Reading and provider actions share the existing manga palette and type scale. */
+.manga-provider-options{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:22px 0 26px;margin-bottom:26px;border-bottom:1px solid #ffffff17}
+.manga-provider-options h2{font-size:1.1rem;font-weight:700;color:#eaf4f1}
+.manga-provider-options p,.manga-download-help{font-size:.82rem;line-height:1.7;color:#a6b7b6;max-width:680px;margin-top:8px}
+.manga-provider-actions{display:flex;flex-wrap:wrap;gap:10px;flex-shrink:0;justify-content:flex-end}
+.manga-chapter-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(210px,290px);gap:12px;border-bottom:1px solid #ffffff0e}
+.manga-chapter-row .manga-chapter-item{min-width:0;border-bottom:0}
+.manga-chapter-row .manga-chapter-item strong{overflow-wrap:anywhere}
+.manga-chapter-actions{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding:10px 15px;min-width:0}
+.manga-chapter-actions>.manga-source{min-height:44px;font-size:.73rem;line-height:1.5;overflow-wrap:anywhere}
+.manga-source svg{flex-shrink:0}
+.manga-detail-actions>.manga-source{min-height:44px}
+.manga-download{min-width:0;max-width:100%}
+.manga-download-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.manga-download-controls .manga-download-button{min-height:44px;padding:10px 14px;font-size:.78rem;white-space:normal}
+.manga-download-button:disabled{opacity:.65;cursor:wait}
+.manga-download-cancel{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:44px;padding:8px;font-size:.75rem;color:inherit}
+.manga-download-status{max-width:32ch;font-size:.75rem;line-height:1.6;color:#a6b7b6;overflow-wrap:anywhere}
+.manga-download-status:not(:empty){margin-top:8px}
+.manga-download-error{color:#f0c38b}
+.reader-source-actions{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:center;gap:12px 24px;max-width:1000px;margin:0 auto;padding:0 20px 28px}
+.reader-source-actions>.manga-source{display:inline-flex;align-items:center;min-height:44px;color:var(--reader-fg)}
+.reader-source-actions .manga-download-button{color:var(--reader-fg);background:var(--reader-panel);border-color:var(--reader-line)}
+.reader-source-actions .manga-download-status{color:var(--reader-muted)}
+.reader-source-actions .manga-source:focus-visible,.reader-source-actions .manga-download-button:focus-visible,.reader-source-actions .manga-download-cancel:focus-visible{outline-color:var(--reader-fg)}
+.reader-source-actions>p{flex-basis:100%;text-align:center;font-size:.75rem;line-height:1.6;color:var(--reader-muted)}
+.manga-download-button:focus-visible,.manga-download-cancel:focus-visible,.manga-source:focus-visible{outline:2px solid #88dec3;outline-offset:4px}
+@media(max-width:1100px){.manga-provider-options{align-items:flex-start;flex-direction:column}.manga-provider-actions{justify-content:flex-start;flex-shrink:1}}
+@media(max-width:700px){.manga-chapter-row{grid-template-columns:minmax(0,1fr);gap:0}.manga-chapter-actions{padding:0 5px 16px;gap:4px}.manga-chapter-actions>.manga-source{max-width:100%}.manga-provider-actions{flex-direction:column;align-items:flex-start}.reader-source-actions{gap:12px 16px}}
+@media(prefers-reduced-motion:reduce){.manga-download .animate-spin{animation:none}}
+
+.manga-archive{margin:45px 0 20px;padding:26px 0;border-top:1px solid #ffffff20;border-bottom:1px solid #ffffff20}
+.manga-archive-heading{display:flex;gap:15px;align-items:flex-start;margin-bottom:20px}
+.manga-archive-heading>svg{flex-shrink:0;color:#88dec3;margin-top:4px}
+.manga-archive h2{font-size:1.2rem;font-weight:700;line-height:1.4}
+.manga-archive p{font-size:.83rem;line-height:1.75;color:#a6b7b6;max-width:80ch}
+.manga-archive-heading p{margin-top:6px}
+.manga-archive button,.manga-archive a{min-height:44px;max-width:100%;white-space:normal}
+.manga-archive button:disabled{opacity:.5;cursor:not-allowed}
+.manga-archive-body{display:grid;gap:15px;margin-top:24px;min-width:0}
+.manga-archive-body>p[role=status]{display:flex;align-items:center;gap:10px}
+.manga-archive-warning{padding-left:13px;border-left:2px solid #88dec350}
+.manga-archive-selection{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin-top:5px}
+.manga-archive-selection label{display:grid;gap:8px;font-size:.78rem;color:#a6b7b6;max-width:100%;min-width:0}
+.manga-archive-selection select{min-height:44px;max-width:100%;background:#172326;border:1px solid #ffffff20;color:#eaf4f1;border-radius:4px;padding:10px}
+.manga-archive-tree{overflow-x:auto;padding:20px;background:#121a1d;border-left:2px solid #88dec3;color:#c3d8d1;font-size:.8rem;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
+.manga-archive-progress{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:20px;border:1px solid #88dec330;background:#88dec305;min-width:0}
+.manga-archive-progress>p,.manga-archive-progress>progress{flex-basis:100%;max-width:100%}
+.manga-archive progress{height:8px;accent-color:#88dec3}
+.manga-archive-error{display:grid;gap:12px;padding:15px;border-left:2px solid #f0c38b}
+.manga-archive-error p{color:#f0c38b}
+.manga-archive :is(button,a,select):focus-visible{outline:2px solid #88dec3;outline-offset:4px}
+@media(max-width:700px){.manga-archive{margin-top:30px}.manga-archive-selection{align-items:stretch;flex-direction:column}.manga-archive h2{font-size:1.05rem}.manga-archive-heading{gap:11px}.manga-archive-progress{padding:15px}}
+@media(prefers-reduced-motion:reduce){.manga-archive .animate-spin{animation:none}}

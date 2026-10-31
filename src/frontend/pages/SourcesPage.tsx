@@ -5,6 +5,7 @@ import type { ContentChapterList, ContentKind } from '../../shared/content';
 import { contentService, sourceParams, sourceQuery, sourceSuffix } from '../services/content';
 import { useCatalogRequest } from '../hooks/useCatalogRequest';
 import { contentLanguageLabel, readingLanguages, readReadingLanguage, saveReadingLanguage, validReadingLanguage } from '../services/readingLanguages';
+import { MangaDownloadButton } from '../components/manga/MangaDownloadButton';
 
 const kinds: Record<ContentKind, string> = { anime: 'Anime', manga: 'Mangá', novel: 'Light novel' };
 
@@ -96,10 +97,33 @@ function SourceResults({ params }: { params: URLSearchParams }) {
     <p className="mb-4 text-sm text-slate-400">Idioma consultado: <strong className="text-slate-200">{contentLanguageLabel(selectedLanguage)}</strong>.{data.languages.length > 0 && <> Idiomas informados pelas fontes: {data.languages.map(contentLanguageLabel).join(', ')}.</>}</p>
     {!availableChapters.length && selectedLanguage !== 'all' && <div className="mb-5 rounded-xl border border-white/10 p-4 text-sm text-slate-300"><p>Nenhum capítulo em {contentLanguageLabel(selectedLanguage).toLowerCase()} foi retornado por estas fontes para a obra.</p><button className="button-secondary button-sm mt-3" onClick={showOtherLanguages}>{otherLanguages.length ? 'Ver capítulos em outros idiomas' : 'Consultar todos os idiomas'}<ArrowRight size={15} /></button></div>}
     {data.partial && <p role="status" className="mb-5 text-sm text-amber-200">Algumas fontes não responderam. Os capítulos recebidos estão listados abaixo.</p>}
+    {kind === 'manga' && availableChapters.length > 0 && <p className="mb-5 max-w-3xl text-sm leading-relaxed text-slate-400">Leia pelo site ou baixe um capítulo em CBZ para ler offline. O arquivo reúne as páginas na ordem da edição escolhida. O link para abrir no provedor fica disponível no leitor.</p>}
     <div className="grid gap-3 sm:grid-cols-2">{availableChapters.map(chapter => {
       const suffix = sourceSuffix({ ...query, provider: chapter.providerId, language: chapter.language });
       const path = kind === 'novel' ? `/novel/${encodeURIComponent(id)}/read/${encodeURIComponent(chapter.id)}` : `/sources/manga/${encodeURIComponent(id)}/read/${encodeURIComponent(chapter.id)}`;
-      return <Link key={chapter.id} className="flex min-w-0 items-center gap-4 rounded-xl border border-white/10 bg-white/[0.025] p-4 transition hover:border-teal-400/40" to={`${path}${suffix}`}><BookOpen className="shrink-0 text-teal-300" size={23} /><div className="min-w-0 flex-1"><strong className="block truncate text-sm text-white">{chapter.number ? `${chapter.number} · ` : ''}{chapter.title}</strong><span className="mt-1 block text-xs text-slate-400">{chapter.providerName} · {contentLanguageLabel(chapter.language)}</span>{chapter.credits.length > 0 && <span className="mt-1 block truncate text-xs text-slate-500">{chapter.credits.join(' · ')}</span>}</div><ArrowRight className="shrink-0 text-slate-400" size={17} /></Link>;
+      const readingLink = <Link key={chapter.id} className={`flex min-h-11 min-w-0 items-center gap-4 rounded-xl p-4 transition ${kind === 'manga' ? 'hover:bg-white/[0.025]' : 'border border-white/10 bg-white/[0.025] hover:border-teal-400/40'}`} to={`${path}${suffix}`}><BookOpen className="shrink-0 text-teal-300" size={23} /><div className="min-w-0 flex-1"><strong className="block truncate text-sm text-white">{chapter.number ? `${chapter.number} · ` : ''}{chapter.title}</strong><span className="mt-1 block text-xs text-slate-400">{chapter.providerName} · {contentLanguageLabel(chapter.language)}</span>{chapter.credits.length > 0 && <span className="mt-1 block truncate text-xs text-slate-500">{chapter.credits.join(' · ')}</span>}</div><ArrowRight className="shrink-0 text-slate-400" size={17} /></Link>;
+      if (kind !== 'manga') return readingLink;
+      return <div key={chapter.id} className="min-w-0 rounded-xl border border-white/10 bg-white/[0.025]">
+        {readingLink}
+        <div className="border-t border-white/10 p-4">
+          <MangaDownloadButton label={`Baixar ${chapter.title} em CBZ`} load={async () => {
+            const content = await contentService.pages(id, chapter.id, { ...query, provider: chapter.providerId, language: chapter.language });
+            if (content.chapter.workId.replace(/^anilist:/, '') !== id.replace(/^anilist:/, '')
+              || content.chapter.id !== chapter.id || content.chapter.providerId !== chapter.providerId
+              || content.chapter.language.toLowerCase() !== chapter.language.toLowerCase()) {
+              throw new Error('A fonte retornou outra edição. Atualize a lista e escolha novamente o capítulo.');
+            }
+            return {
+              title: params.get('title') || `AniList ${id.replace(/^anilist:/, '')}`,
+              chapterTitle: content.chapter.title,
+              language: content.chapter.language,
+              pages: content.pages,
+              sourceUrl: content.sourceUrl,
+              credits: content.chapter.credits,
+            };
+          }} />
+        </div>
+      </div>;
     })}</div>
     {data.diagnostics.length > 0 && <details className="mt-6 rounded-xl border border-white/10 p-4 text-sm text-slate-400"><summary className="cursor-pointer text-slate-300">Resposta das fontes</summary><ul className="mt-3 space-y-2">{data.diagnostics.map((diagnostic, index) => <li key={`${diagnostic.id}:${index}`}>{diagnostic.name || diagnostic.id}: {diagnostic.message}</li>)}</ul></details>}
   </section>;

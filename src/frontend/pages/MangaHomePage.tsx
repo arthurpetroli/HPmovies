@@ -2,12 +2,14 @@ import { useCallback, useState } from 'react';
 import { BookOpen, Search, ArrowRight } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { MangaQuery } from '../../shared/manga';
+import { mangaProviderLabel, mangaProviderSite, mangaReaderPath } from '../../shared/mangaIdentity';
 import { useCatalogRequest } from '../hooks/useCatalogRequest';
 import { mangaLanguageLabel, mangaService } from '../services/manga';
 import { readReadingLanguage, saveReadingLanguage, validReadingLanguage } from '../services/readingLanguages';
 import { useMangaLibrary } from '../services/mangaLibrary';
 import { MangaCard, MangaRow } from '../components/manga/MangaCard';
 import { MangaError, MangaLoading } from '../components/manga/MangaState';
+import { MangaSourceLink } from '../components/manga/MangaSourceLink';
 import '../manga.css';
 
 export function MangaHomePage() {
@@ -16,36 +18,43 @@ export function MangaHomePage() {
   const [draft, setDraft] = useState(search);
   const language = (validReadingLanguage(params.get('language')) ?? readReadingLanguage()).toLowerCase();
   const tag = params.get('tag') || ''; const sort = params.get('sort') || ''; const status = params.get('status') || '';
+  const provider = params.get('provider') === 'mangalivre' ? 'mangalivre' : 'mangadex';
+  const providerLabel = mangaProviderLabel(provider);
   const browsing = !!(search || tag || sort || status || page > 1);
-  const homeLoader = useCallback(() => browsing ? Promise.resolve(null) : mangaService.home(language), [browsing, language]);
-  const queryLoader = useCallback(() => browsing ? mangaService.search({ search, tag, sort: (sort || 'popular') as MangaQuery['sort'], status: status as MangaQuery['status'], page, language }) : Promise.resolve(null), [browsing, search, tag, sort, status, page, language]);
-  const tagsLoader = useCallback(() => mangaService.tags(), []);
-  const home = useCatalogRequest(`manga-home:${browsing}:${language}:${retry}`, homeLoader);
+  const homeLoader = useCallback(() => browsing ? Promise.resolve(null) : mangaService.home(language, provider), [browsing, language, provider]);
+  const queryLoader = useCallback(() => browsing ? mangaService.search({ search, tag, sort: (sort || 'popular') as MangaQuery['sort'], status: status as MangaQuery['status'], page, language, provider }) : Promise.resolve(null), [browsing, search, tag, sort, status, page, language, provider]);
+  const tagsLoader = useCallback(() => mangaService.tags(provider), [provider]);
+  const home = useCatalogRequest(`manga-home:${provider}:${browsing}:${language}:${retry}`, homeLoader);
   const catalog = useCatalogRequest(`manga-search:${params}:${retry}`, queryLoader);
-  const tags = useCatalogRequest('manga-tags', tagsLoader);
+  const tags = useCatalogRequest(`manga-tags:${provider}`, tagsLoader);
   const { history, storageError } = useMangaLibrary();
-  const update = (key: string, value: string) => { const next = new URLSearchParams(params); if (value) next.set(key, value); else next.delete(key); next.delete('page'); if (!next.has('language')) next.set('language', language); if (key === 'language') saveReadingLanguage(value); setParams(next); };
+  const update = (key: string, value: string) => { const next = new URLSearchParams(params); if (value) next.set(key, value); else next.delete(key); next.delete('page'); if (!next.has('language')) next.set('language', language); if (key === 'language') saveReadingLanguage(value); if (key === 'provider') { next.delete('tag'); if (value === 'mangalivre') next.set('language', 'pt-br'); } setParams(next); };
   const languageSuffix = `language=${encodeURIComponent(language)}`;
+  const catalogSuffix = `${languageSuffix}&provider=${provider}`;
   const error = browsing ? catalog.error : home.error; const loading = browsing ? catalog.loading : home.loading;
   return <main id="main-content" className="manga-page content-width page-shell">
     <div className="manga-heading"><div><span className="eyebrow">HPMOVIES · MANGÁS</span><h1>Uma página. Outro universo.</h1><p>Descubra novas histórias e acompanhe as suas favoritas, com prioridade para português brasileiro.</p></div><span className="manga-heading-icon"><BookOpen size={40} /></span></div>
-    <Link className="button-secondary mb-6" to={`/sources?kind=manga&${languageSuffix}`}>Consultar mangá pelas fontes<ArrowRight size={16} /></Link>
+    <section className="manga-provider-options" aria-label="Provedores de mangá">
+      <div><h2>Escolha onde ler</h2><p>Leia aqui com seus ajustes, visite o provedor ou baixe capítulos, volumes e a obra em ZIP. Idioma e disponibilidade variam por edição.</p></div>
+      <div className="manga-provider-actions"><Link className="button-primary" to="/manga?provider=mangalivre&language=pt-br">Explorar Mangá Livre (PT-BR)</Link><MangaSourceLink href={mangaProviderSite(provider)} label={`Visitar ${providerLabel}`} className="button-secondary" /><Link className="button-secondary" to={`/sources?kind=manga&${languageSuffix}`}>Consultar mangá pelas fontes<ArrowRight size={16} aria-hidden="true" /></Link></div>
+    </section>
     <form className="manga-filters" onSubmit={(event) => { event.preventDefault(); update('search', draft.trim()); }}>
       <label className="manga-search"><Search size={18} /><input aria-label="Buscar mangá por título" placeholder="Busque sua próxima leitura" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={120} /><button type="submit" className="button-primary">Buscar</button></label>
+      <label>Provedor<select value={provider} onChange={event => update('provider', event.target.value)}><option value="mangadex">MangaDex</option><option value="mangalivre">Mangá Livre (.to) · PT-BR</option></select></label>
       <label>Gênero<select value={tag} onChange={(event) => update('tag', event.target.value)}><option value="">Todos os gêneros</option>{tags.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label>Ordenação<select value={sort} onChange={(event) => update('sort', event.target.value)}><option value="">Destaques</option><option value="popular">Mais populares</option><option value="rating">Mais bem avaliados</option><option value="latest">Últimas atualizações</option><option value="newest">Adicionados recentemente</option></select></label>
       <label>Publicação<select value={status} onChange={(event) => update('status', event.target.value)}><option value="">Todos</option><option value="ongoing">Em publicação</option><option value="completed">Concluídos</option><option value="hiatus">Em pausa</option></select></label>
       <label>Idioma dos capítulos<select value={language} onChange={event => update('language', event.target.value)}>{!['pt-br', 'pt', 'en', 'all'].includes(language) && <option value={language}>{mangaLanguageLabel(language)}</option>}<option value="pt-br">Português brasileiro</option><option value="pt">Português · todas as variantes</option><option value="en">Inglês</option><option value="all">Todos os idiomas</option></select></label>
     </form>
     {storageError && <p className="manga-notice" role="status">{storageError}</p>}
-    {!browsing && history.length > 0 && <section className="manga-resume-row"><div className="section-heading"><div><h2>Continue sua leitura</h2><p>Suas histórias esperam por você.</p></div></div><div className="manga-resume-list">{history.slice(0, 4).map((item) => <Link key={item.manga.id} to={`/manga/${item.manga.id}/read/${item.chapterId}`} className="manga-resume-card"><BookOpen size={22} /><div><strong>{item.manga.title}</strong><span>{item.chapterTitle} · página {item.page + 1} de {item.pageCount}</span></div><ArrowRight size={18} /></Link>)}</div></section>}
-    {loading ? <MangaLoading /> : error ? <MangaError message={error} retry={() => setRetry((value) => value + 1)} /> : browsing ? <section><div className="section-heading"><div><h2>{search ? `Resultados para “${search}”` : 'Explore o catálogo'}</h2><p>{catalog.data?.total ?? 0} títulos encontrados no MangaDex · {mangaLanguageLabel(language)}</p></div><Link to={`/manga?${languageSuffix}`}>Limpar filtros</Link></div>{catalog.data?.items.length ? <div className="manga-grid">{catalog.data.items.map((manga) => <MangaCard key={manga.id} manga={manga} language={language} />)}</div> : <div className="catalog-state"><BookOpen size={32} /><h2>Nenhuma história encontrada</h2><p>Tente outro título ou ajuste os filtros.</p>{language !== 'all' && <button className="button-secondary mt-4" onClick={() => update('language', 'all')}>Consultar outros idiomas</button>}</div>}<nav className="manga-pagination" aria-label="Paginação dos mangás"><button className="button-secondary" disabled={page <= 1} onClick={() => { const next = new URLSearchParams(params); next.set('page', String(page - 1)); setParams(next); }}>Anterior</button><span>Página {page}</span><button className="button-secondary" disabled={!catalog.data?.hasNextPage} onClick={() => { const next = new URLSearchParams(params); next.set('page', String(page + 1)); setParams(next); }}>Próxima</button></nav></section> : home.data && <>
+    {!browsing && history.length > 0 && <section className="manga-resume-row"><div className="section-heading"><div><h2>Continue sua leitura</h2><p>Suas histórias esperam por você.</p></div></div><div className="manga-resume-list">{history.slice(0, 4).map((item) => <Link key={item.manga.id} to={mangaReaderPath(item.manga.id, item.chapterId)} className="manga-resume-card"><BookOpen size={22} /><div><strong>{item.manga.title}</strong><span>{item.chapterTitle} · página {item.page + 1} de {item.pageCount}</span></div><ArrowRight size={18} /></Link>)}</div></section>}
+    {loading ? <MangaLoading /> : error ? <MangaError message={error} retry={() => setRetry((value) => value + 1)} /> : browsing ? <section><div className="section-heading"><div><h2>{search ? `Resultados para “${search}”` : 'Explore o catálogo'}</h2><p>{catalog.data?.total ?? 0} títulos encontrados em {providerLabel} · {mangaLanguageLabel(language)}</p></div><Link to={`/manga?${catalogSuffix}`}>Limpar filtros</Link></div>{catalog.data?.items.length ? <div className="manga-grid">{catalog.data.items.map((manga) => <MangaCard key={manga.id} manga={manga} language={language} />)}</div> : <div className="catalog-state"><BookOpen size={32} /><h2>Nenhuma história encontrada</h2><p>Tente outro título ou ajuste os filtros.</p>{language !== 'all' && <button className="button-secondary mt-4" onClick={() => update('language', 'all')}>Consultar outros idiomas</button>}</div>}<nav className="manga-pagination" aria-label="Paginação dos mangás"><button className="button-secondary" disabled={page <= 1} onClick={() => { const next = new URLSearchParams(params); next.set('page', String(page - 1)); setParams(next); }}>Anterior</button><span>Página {page}</span><button className="button-secondary" disabled={!catalog.data?.hasNextPage} onClick={() => { const next = new URLSearchParams(params); next.set('page', String(page + 1)); setParams(next); }}>Próxima</button></nav></section> : home.data && <>
       {home.data.warnings.map((warning) => <p className="manga-notice" key={warning}>{warning}</p>)}
-      <MangaRow title="Histórias que todo mundo está lendo" subtitle={`Os mangás mais seguidos com capítulos em ${mangaLanguageLabel(language).toLowerCase()}.`} items={home.data.popular} href={`/manga?sort=popular&${languageSuffix}`} language={language} />
-      <MangaRow title="Um capítulo atrás do outro" subtitle="Histórias em publicação para acompanhar." items={home.data.ongoing} href={`/manga?status=ongoing&sort=popular&${languageSuffix}`} language={language} />
-      <MangaRow title="Leituras inesquecíveis" subtitle="Os títulos mais bem avaliados pela comunidade." items={home.data.topRated} href={`/manga?sort=rating&${languageSuffix}`} language={language} />
-      <MangaRow title="Acabaram de ganhar um capítulo" subtitle="Atualizações mais recentes no catálogo." items={home.data.latest} href={`/manga?sort=latest&${languageSuffix}`} language={language} />
+      <MangaRow title="Histórias que todo mundo está lendo" subtitle={`Os mangás mais seguidos com capítulos em ${mangaLanguageLabel(language).toLowerCase()}.`} items={home.data.popular} href={`/manga?sort=popular&${catalogSuffix}`} language={language} />
+      <MangaRow title="Um capítulo atrás do outro" subtitle="Histórias em publicação para acompanhar." items={home.data.ongoing} href={`/manga?status=ongoing&sort=popular&${catalogSuffix}`} language={language} />
+      <MangaRow title="Leituras inesquecíveis" subtitle="Os títulos mais bem avaliados pela comunidade." items={home.data.topRated} href={`/manga?sort=rating&${catalogSuffix}`} language={language} />
+      <MangaRow title="Acabaram de ganhar um capítulo" subtitle="Atualizações mais recentes no catálogo." items={home.data.latest} href={`/manga?sort=latest&${catalogSuffix}`} language={language} />
     </>}
-    <p className="manga-credit">Catálogo e capítulos via <a href="https://mangadex.org" target="_blank" rel="noopener noreferrer">MangaDex ↗</a>. Idiomas e disponibilidade variam por edição.</p>
+    <p className="manga-credit">Catálogo e capítulos via <a href={mangaProviderSite(provider)} target="_blank" rel="noopener noreferrer">{providerLabel} ↗</a>. Idiomas e disponibilidade variam por edição.</p>
   </main>;
 }

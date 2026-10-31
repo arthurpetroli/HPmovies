@@ -17,8 +17,9 @@ let shuttingDown = false;
 function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
+  const downloadsClosed = app.dispose();
   server.close(() => {
-    void cache.closeConnection().finally(() => process.exit(0));
+    void downloadsClosed.finally(() => cache.closeConnection()).finally(() => process.exit(0));
   });
   setTimeout(() => process.exit(1), 5000).unref();
 }

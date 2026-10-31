@@ -1,0 +1,39 @@
+{
+  "kind": "live-provider",
+  "fixture": false,
+  "provider": "MangaDex",
+  "mangaId": "a1c7c817-4e59-43b7-9365-09675a149a6f",
+  "chapterId": "383cb9dc-cf5c-43e5-b35b-b21d012b6ba2",
+  "chapterTitle": "O Capitão da Marinha \"MORGAN MÃO DE MACHADO\"",
+  "firstImage": {
+    "width": 756,
+    "height": 1200
+  },
+  "languageLabel": "Português brasileiro",
+  "providerLink": "https://mangadex.org/chapter/383cb9dc-cf5c-43e5-b35b-b21d012b6ba2",
+  "downloadFailure": null,
+  "filename": "One Piece - O Capitão da Marinha -MORGAN MÃO DE MACHADO- - pt-br.cbz",
+  "status": "passed",
+  "archive": {
+    "sizeBytes": 1889339,
+    "pageCount": 14,
+    "firstEntry": "001.jpg",
+    "lastEntry": "014.jpg",
+    "crcValid": true,
+    "metadataPresent": true,
+    "metadataLanguage": "pt-br",
+    "validation": "Python zipfile.testzip: todas as entradas com CRC válido."
+  },
+  "verifiedLocalDate": "2026-10-30",
+  "timezone": "America/Sao_Paulo",
+  "visualInspection": {
+    "scope": "Primeira página do leitor e primeira imagem do CBZ, inspecionadas visualmente.",
+    "finding": "Página identifica Capítulo 04, Morgan Mão de Machado, personagens de One Piece e texto em português.",
+    "limitation": "Não representa auditoria visual de todas as 14 páginas ou de outras edições."
+  },
+  "temporaryArtifacts": [
+    "/tmp/hpmovies-manga-live.cbz",
+    "/tmp/hpmovies-manga-live-reader.png",
+    "/tmp/hpmovies-manga-live-first.jpg"
+  ]
+}

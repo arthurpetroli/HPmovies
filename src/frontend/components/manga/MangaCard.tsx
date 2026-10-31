@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import type { MangaTitle } from '../../../shared/manga';
 import { mangaLibrary, useMangaLibrary } from '../../services/mangaLibrary';
 import { mangaService, mangaStatusLabel } from '../../services/manga';
+import { mangaDetailsPath } from '../../../shared/mangaIdentity';
 
 export function MangaCard({ manga, language }: { manga: MangaTitle; language?: string }) {
   const [failed, setFailed] = useState(false);
@@ -19,7 +20,7 @@ export function MangaCard({ manga, language }: { manga: MangaTitle; language?: s
   };
   const { saved } = useMangaLibrary();
   const favorite = saved.some((entry) => entry.manga.id === manga.id && entry.favorite);
-  const path = `/manga/${manga.id}${language && language !== 'all' ? `?${new URLSearchParams({ language })}` : ''}`;
+  const path = `${mangaDetailsPath(manga.id)}${language && language !== 'all' ? `?${new URLSearchParams({ language })}` : ''}`;
   return <article className="manga-card"><Link to={path} className="manga-card-art">
     {cover.src && !failed ? <img key={cover.revision} src={cover.src} alt={manga.title} loading="lazy" decoding="async" onError={imageError} /> : <div className="manga-cover-fallback"><BookOpen size={32} /><span>Capa indisponível</span></div>}
     <span className="manga-card-badge">{manga.availableLanguages.includes('pt-br') ? 'PT-BR' : 'MANGÁ'}</span>
