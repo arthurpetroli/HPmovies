@@ -2,6 +2,7 @@ import { createDecipheriv, createHash, randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import type { LookupAddress } from 'node:dns';
+import { MAX_SUBTITLE_BYTES, subtitleToVtt } from '../../../shared/subtitles.js';
 import { ApiError } from '../config/apiError.js';
 import type { TokoConfig } from '../config/integrations.js';
 import { permittedContentHeaders, permittedContentUrl, pinnedRequest, publicImageAddress } from './content-image.js';
@@ -293,12 +294,12 @@ export class StreamMediaGateway {
       const mime = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? '';
       const length = Number(response.headers.get('content-length') ?? 0);
       const explicitRange = range && /^bytes=(\d+)-(\d+)$/.exec(range);
-      const maxBytes = ticket.kind === 'key' ? 16 : ticket.kind === 'hls' ? 1_000_000 : ticket.kind === 'subtitle' ? 4_000_000
+      const maxBytes = ticket.kind === 'key' ? 16 : ticket.kind === 'hls' ? 1_000_000 : ticket.kind === 'subtitle' ? MAX_SUBTITLE_BYTES
         : ticket.kind === 'mp4' ? Math.min(RANGE_BYTES, explicitRange ? Number(explicitRange[2]) - Number(explicitRange[1]) + 1 : RANGE_BYTES) : 12_000_000;
       const goodMime = ticket.kind === 'hls' ? ['application/vnd.apple.mpegurl', 'application/x-mpegurl', 'audio/mpegurl', 'audio/x-mpegurl', 'text/plain', 'application/octet-stream'].includes(mime)
         : ticket.kind === 'key' ? ['application/octet-stream', 'binary/octet-stream', 'application/binary'].includes(mime)
         : ticket.kind === 'encrypted-segment' ? ['application/octet-stream', 'video/mp2t'].includes(mime)
-        : ticket.kind === 'subtitle' ? ['text/vtt', 'application/x-subrip', 'text/plain', 'application/octet-stream', 'text/srt'].includes(mime)
+        : ticket.kind === 'subtitle' ? ['text/vtt', 'application/x-subrip', 'text/plain', 'application/octet-stream', 'text/srt', 'text/x-ssa', 'text/x-ass', 'application/x-ass', 'application/x-substation-alpha'].includes(mime)
           : BINARY_MEDIA_MIME.has(mime) || ticket.kind === 'segment';
       if ((response.status !== 200 && !(range && response.status === 206)) || !goodMime || !Number.isFinite(length) || length < 0 || length > maxBytes) throw unavailable();
       const headers: Record<string, string> = { 'Content-Type': mime, 'Cache-Control': 'private, max-age=30', 'X-Content-Type-Options': 'nosniff' };
@@ -338,8 +339,11 @@ export class StreamMediaGateway {
         headers['Content-Type'] = 'application/vnd.apple.mpegurl';
       } else if (ticket.kind === 'subtitle') {
         const text = new TextDecoder('utf-8', { fatal: true }).decode(result);
-        if (!/^\uFEFF?WEBVTT(?:\s|$)/.test(text) && !/^\s*\d+\s*\r?\n\d\d:\d\d:\d\d[,.]\d{3}\s*-->/.test(text)) throw unavailable();
-        headers['Content-Type'] = /^\uFEFF?WEBVTT/.test(text) ? 'text/vtt; charset=utf-8' : 'application/x-subrip; charset=utf-8';
+        const format = /^WEBVTT(?:[ \t]|\r?\n|$)/.test(text) ? 'vtt' : /^\[Events\][ \t]*\r?$/im.test(text) ? 'ass' : 'srt';
+        // Use the same bounded parser as the player. SRT numbering is optional,
+        // and protected ASS dialogue is usable after the existing text conversion.
+        subtitleToVtt(text, format);
+        headers['Content-Type'] = format === 'vtt' ? 'text/vtt; charset=utf-8' : format === 'ass' ? 'text/x-ssa; charset=utf-8' : 'application/x-subrip; charset=utf-8';
       }
       headers['Content-Length'] = String(result.byteLength);
       return { bytes: result, status: response.status as 200 | 206, headers };

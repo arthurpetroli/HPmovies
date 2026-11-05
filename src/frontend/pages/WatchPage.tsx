@@ -97,6 +97,7 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
   const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
   const failedSourcesRef = useRef(new Set<string>());
+  const subtitleRefreshRef = useRef<{ episodeId: string; position: number; playRequested: boolean } | null>(null);
   const { autoNext, autoSkipIntro } = useWatchPreferences();
   const sourceEpisode = /^(tatakai|toko):([1-9]\d*):(\d+(?:\.\d+)?)$/.exec(episodeId);
   const titleKey = JSON.stringify(sourceQuery(new URLSearchParams(hints)).titles);
@@ -147,9 +148,11 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
       if (!value.sources.length) throw new Error('A reprodução ainda não está disponível para este episódio.');
       sourceTitles.save('anime', episodeId, titles);
       const previous = libraryService.getProgress(episodeId);
-      const startAutomatically = intent.autoPlay;
+      const refreshed = subtitleRefreshRef.current?.episodeId === episodeId ? subtitleRefreshRef.current : null;
+      const startAutomatically = refreshed?.playRequested ?? intent.autoPlay;
       intent.autoPlay = false;
-      setSession({ key: requestKey, playback: value, anime: intent.anime, resumeTime: (!startAutomatically || intent.resume) && previous && !previous.completed ? previous.currentTime : 0 });
+      subtitleRefreshRef.current = null;
+      setSession({ key: requestKey, playback: value, anime: intent.anime, resumeTime: refreshed?.position ?? ((!startAutomatically || intent.resume) && previous && !previous.completed ? previous.currentTime : 0) });
       setSource(orderedPlaybackSources(value)[0]);
       setSourceAttempt(value => value + 1);
       failedSourcesRef.current.clear();
@@ -236,6 +239,11 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
     setSource(chosen);
     setSourceAttempt(value => value + 1);
   };
+  const refreshSubtitles = () => {
+    subtitleRefreshRef.current = { episodeId, position: playerRef.current?.getPosition() ?? session?.resumeTime ?? 0,
+      playRequested: playerRef.current?.getPlayRequested() ?? false };
+    setAttempt(value => value + 1);
+  };
   const addAutomaticSubtitle = (track: StreamSubtitle) => {
     if (!session || !source) return;
     const tracks = [track, ...subtitlesForSource(session.playback, source).filter(item => item.id !== track.id)];
@@ -249,6 +257,10 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
   };
   const activeSubtitles = playback && source ? subtitlesForSource(playback, source) : [];
   const portugueseRank = Math.min(4, ...activeSubtitles.map(track => portugueseCaptionRank(track.language)));
+  const portugueseAlternative = playback ? orderedPlaybackSources(playback).find(item => item.url !== source?.url
+    && subtitlesForSource(playback, item).some(track => portugueseCaptionRank(track.language) < 4)) : undefined;
+  const activeAudio = source?.audioLanguage && source.audioLanguage !== 'und' ? source.audioLanguage : undefined;
+  const audioLabel = activeAudio ? ({ ja: 'Japonês', en: 'Inglês', 'pt-BR': 'Português brasileiro', pt: 'Português' } as Record<string, string>)[activeAudio] || activeAudio : '';
 
   return <main id="main-content" className="watch-page">
     {anime && <div className="watch-backdrop" aria-hidden="true"><WatchArtwork image={anime.banner} fallback={anime.poster} /></div>}
@@ -281,6 +293,16 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
           </nav>
         </div>
         {ready && recoveryNotice && <div role="status" className={`mt-3 rounded-lg border px-4 py-3 text-sm ${exhausted ? 'border-amber-400/20 bg-amber-400/5 text-amber-200' : 'border-teal-400/20 bg-teal-400/5 text-slate-300'}`}><p>{recoveryNotice}</p>{exhausted && <button type="button" className="button-primary mt-3" onClick={() => setAttempt(value => value + 1)}>Tentar fontes novamente</button>}</div>}
+        {ready && portugueseRank === 4 && <div role="region" aria-label="Disponibilidade de legendas" className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm leading-relaxed text-slate-300">
+          <p role="status">{activeSubtitles.length ? 'Esta fonte não tem legenda em português. Outros idiomas podem ser escolhidos nas configurações do player.' : 'Esta fonte não forneceu legendas para este episódio.'}</p>
+          {portugueseAlternative ? <>
+            <p className="mt-2 text-xs text-slate-400">Há legenda em português em outra fonte. A troca também pode mudar o idioma do áudio.</p>
+            <button type="button" className="button-secondary mt-3 min-h-11" onClick={() => chooseSource(portugueseAlternative)}>Usar fonte com legenda em português</button>
+          </> : <>
+            <p className="mt-2 text-xs text-slate-400">{activeSubtitles.some(track => track.translationToken) ? 'Você pode gerar uma tradução em português na seção Sua experiência.' : !activeSubtitles.length ? 'A tradução automática precisa de uma legenda de origem. Você pode consultar as fontes novamente.' : 'Você pode consultar as fontes novamente para procurar legendas em português.'}</p>
+            <button type="button" className="button-secondary mt-3 min-h-11" onClick={refreshSubtitles}>Buscar fontes e legendas novamente</button>
+          </>}
+        </div>}
       </div>
       <aside className="watch-sidebar"><WatchEpisodeList episodes={episodes} currentEpisodeId={episodeId} anime={anime} hints={hints}
         loading={episodeList.loading} error={episodeList.error || (episodeList.data?.state === 'connection_error' ? episodeList.data.message || 'Não foi possível carregar a lista.' : '')}
@@ -301,7 +323,7 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-400">
             <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-teal-400" />Fonte autorizada</span>
             <span className="flex items-center gap-1.5"><Subtitles size={14} />{portugueseRank === 0 ? 'Faixa PT-BR disponível' : portugueseRank < 4 ? 'Legenda em português disponível' : activeSubtitles.length ? 'Outros idiomas de legenda disponíveis' : 'Sem legendas disponíveis'}</span>
-            {playback.audioLanguages.length > 0 && <span>Áudio: {playback.audioLanguages.join(', ')}</span>}
+            {audioLabel ? <span>Áudio desta fonte: {audioLabel}</span> : playback.audioLanguages.length > 0 && <span>Áudios informados pelas fontes: {playback.audioLanguages.join(', ')}</span>}
           </div>
           {activeSubtitles.some(track => track.id.startsWith('opensubtitles-')) && <p className="mt-4 text-xs leading-relaxed text-slate-400">Legendas externas do OpenSubtitles para este episódio. Se a versão tiver tempos diferentes, escolha outra faixa ou ajuste a sincronização nas configurações do player.</p>}
           {playback.isDemo && <div className="mt-6 flex gap-3 rounded-xl border border-teal-400/15 bg-teal-400/5 p-4 text-sm leading-relaxed text-slate-300"><Info className="mt-0.5 h-5 w-5 shrink-0 text-teal-300" /><p>Este vídeo autorizado permite testar a reprodução, a qualidade e os controles. A faixa PT-BR contém orientações originais sobre o player. O catálogo de animes é separado da disponibilidade de episódios licenciados.</p></div>}

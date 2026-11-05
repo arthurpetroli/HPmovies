@@ -10,7 +10,7 @@ const titles = new Map([[20, 'Naruto'], [1535, 'Death Note'], [1, 'Cowboy Bebop'
   [151807, 'Solo Leveling'], [11061, 'Hunter x Hunter (2011)'], [21519, 'Kimi no Na wa.'], [199, 'Sen to Chihiro no Kamikakushi'],
   [11577, 'Steins;Gate: Fuka Ryouiki no Déjà vu'], [212888, 'Overgeared'],
   [207329, 'The Laid-Off Cheat-Granting Mage Enjoys a Second Lease on Life'],
-  [235, 'Detective Conan'], [198946, 'Clevatess II: Majuu no Ou to Itsuwari no Yuusha Denshou']]);
+  [235, 'Detective Conan'], [198946, 'Clevatess II: Majuu no Ou to Itsuwari no Yuusha Denshou'], [207141, 'Chainsmoker Cat']]);
 const automaticTranslation = process.argv.includes('--translate');
 const argumentsWithoutFlags = process.argv.slice(2).filter(value => value !== '--translate');
 const selections = argumentsWithoutFlags.length ? argumentsWithoutFlags : ['20', '1535', '1', '16498', '21'];
@@ -24,7 +24,7 @@ const requests = selections.map(value => {
 const durationWindows = new Map([[101922, { minimum: 18 * 60, maximum: 35 * 60 }],
   [11577, { minimum: 80 * 60, maximum: 100 * 60 }], [212888, { minimum: 18 * 60, maximum: 30 * 60 }],
   [207329, { minimum: 18 * 60, maximum: 35 * 60 }], [235, { minimum: 18 * 60, maximum: 35 * 60 }],
-  [198946, { minimum: 18 * 60, maximum: 35 * 60 }]]);
+  [198946, { minimum: 18 * 60, maximum: 35 * 60 }], [207141, { minimum: 18 * 60, maximum: 30 * 60 }]]);
 const origin = new URL(process.env.STREAM_CHECK_ORIGIN || 'http://127.0.0.1:5173');
 if (!['http:', 'https:'].includes(origin.protocol) || origin.username || origin.password || origin.search || origin.hash) throw new Error('Informe uma origem HTTP válida.');
 const directory = join(tmpdir(), `hpmovies-playback-${Date.now()}`);
@@ -60,6 +60,7 @@ try {
         result.generatedTranslation = true;
       }
       await page.waitForFunction(() => (document.querySelector('video')?.readyState ?? 0) >= 2, null, { timeout: 60000 });
+      result.selectedSource = await page.getByRole('combobox', { name: 'Fonte de vídeo' }).locator('option:checked').textContent();
       if (await page.locator('video').evaluate(video => video.paused)) await page.getByRole('button', { name: 'Reproduzir', exact: true }).click();
       await page.waitForFunction(() => {
         const video = document.querySelector('video');
@@ -69,7 +70,7 @@ try {
         time: video.currentTime, duration: video.duration, width: video.videoWidth, height: video.videoHeight,
         decodedFrames: video.getVideoPlaybackQuality().totalVideoFrames, droppedFrames: video.getVideoPlaybackQuality().droppedVideoFrames,
         decodedAudioBytes: video.webkitAudioDecodedByteCount ?? null,
-        captionCues: [...video.textTracks].filter(track => track.mode === 'hidden').map(track => ({ language: track.language, count: track.cues?.length ?? 0 })),
+        captionCues: [...video.textTracks].filter(track => track.mode === 'hidden').map(track => ({ label: track.label, language: track.language, count: track.cues?.length ?? 0 })),
       }));
       const durationWindow = durationWindows.get(id);
       result.durationMatchesExpectedEpisode = !durationWindow || result.beforeSeek.duration >= durationWindow.minimum && result.beforeSeek.duration <= durationWindow.maximum;

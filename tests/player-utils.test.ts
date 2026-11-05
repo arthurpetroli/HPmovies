@@ -53,6 +53,28 @@ describe('subtitle language verification', () => {
     const tracks = [{ ...subtitle('automatic', 'pt-BR'), machineTranslated: true }, subtitle('human', 'pt-BR')];
     expect(preferredSubtitleId(tracks, 'pt-BR')).toBe('human');
   });
+  it('prefers complete Portuguese dialogue over forced, signs and dubtitle variants', () => {
+    const tracks = [subtitle('forced', 'pt-BR', 'Portuguese - Brazilian (Forced)'),
+      subtitle('dubtitle', 'pt-BR', 'Portuguese - Brazilian (Dubtitle)'),
+      subtitle('signs', 'pt-BR', 'PT-BR [Signs & Songs]'), subtitle('complete', 'pt', 'Português completo')];
+    expect(preferredSubtitleId(tracks, 'pt-BR')).toBe('complete');
+    expect(orderedSubtitles(tracks)[0].id).toBe('complete');
+    expect(preferredSubtitleId(tracks, 'off')).toBe('off');
+    expect(preferredSubtitleId([tracks[0]])).toBe('forced');
+    expect(preferredSubtitleId([subtitle('unknown', 'und', 'Português completo'), tracks[0]])).toBe('forced');
+    expect(preferredSubtitleId([subtitle('release', 'pt-BR', 'OpenSubtitles · Songs of the Stars - S01E01.srt'), subtitle('other', 'pt')])).toBe('release');
+    const automatic = { ...subtitle('automatic', 'pt-BR'), machineTranslated: true };
+    expect(preferredSubtitleId([tracks[0], automatic], 'pt-BR')).toBe('automatic');
+  });
+  it('breaks equal caption coverage ties with Japanese audio and keeps source scopes intact', () => {
+    const playback = { episode: { id: 'qa', title: 'QA' }, isDemo: false, audioLanguages: ['ja', 'en'], subtitles: [], sources: [
+      { url: '/english.m3u8', type: 'hls', audioLanguage: 'en', subtitles: [subtitle('full-en', 'pt-BR')] },
+      { url: '/japanese-forced.m3u8', type: 'hls', audioLanguage: 'ja', subtitles: [subtitle('forced', 'pt-BR', 'Português (Forced)')] },
+      { url: '/japanese-full.m3u8', type: 'hls', audioLanguage: 'ja', subtitles: [subtitle('full-ja', 'pt-BR')] },
+    ] } satisfies Playback;
+    expect(orderedPlaybackSources(playback).map(source => source.url)).toEqual(['/japanese-full.m3u8', '/english.m3u8', '/japanese-forced.m3u8']);
+    expect(subtitlesForSource(playback, playback.sources[2]).map(track => track.id)).toEqual(['full-ja']);
+  });
   it('ranks mirrors with human Portuguese before automatic Portuguese and English', () => {
     const playback = { episode: { id: 'qa', title: 'QA', available: true }, isDemo: false, audioLanguages: [], subtitles: [], sources: [
       { url: 'https://english.example/video.mp4', type: 'mp4', subtitles: [subtitle('english', 'en')] },

@@ -4,6 +4,7 @@ import { normalizeTokoSource } from '../src/aniwatch-apis/src/providers/toko.js'
 import type { ImageRequest, ImageResponse } from '../src/aniwatch-apis/src/providers/content-image.js';
 import type { TokoConfig } from '../src/aniwatch-apis/src/config/integrations.js';
 import type { TokoStream } from '../src/aniwatch-apis/src/providers/toko-http.js';
+import { MAX_SUBTITLE_BYTES, subtitleToVtt } from '../src/shared/subtitles';
 
 const config = (): TokoConfig => ({ enabled: true, contentAuthorized: true, baseUrl: 'http://127.0.0.1:8099', timeoutMs: 8000, retries: 0,
   allowedProviders: ['source'], allowedMediaHosts: ['cdn.example.org'], allowedRequestOrigins: ['https://player.example.org'] });
@@ -164,6 +165,35 @@ describe('scoped streaming transport', () => {
     expect(normalizeTokoSource({ ...source, requiresHeaders: false, headers: undefined }, config())?.url).toMatch(/^\/api\/streaming\/media\/[0-9a-f-]{36}$/);
     expect(normalized?.subtitles[0].url).toMatch(/^\/api\/streaming\/media\/[0-9a-f-]{36}$/);
     expect(normalizeTokoSource({ ...source, headers: { Cookie: 'secret' } }, config())).toBeUndefined();
+  });
+
+  it.each([
+    ['srt', '0:00:01,000 --> 0:00:03,000\nOlá sem índice', 'application/x-subrip', 'Olá sem índice'],
+    ['srt', '\uFEFF1\r\n00:00:01,000 --> 00:00:03,000\r\nOlá com BOM', 'text/plain', 'Olá com BOM'],
+    ['ass', '[Script Info]\nTitle: Fixture\n[Events]\nDialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\\an8}Olá\\NMundo', 'text/x-ssa', 'Olá\nMundo'],
+  ] as const)('preserves protected %s text accepted by the player converter', async (format, text, mime, dialogue) => {
+    const transport = vi.fn(async (input: ImageRequest) => {
+      expect(input.headers.referer).toBe('https://player.example.org/');
+      return response(text, mime);
+    });
+    const gateway = new StreamMediaGateway({ resolver, transport });
+    const path = gateway.issue(config(), 'source', `https://cdn.example.org/subtitle.${format}`, 'subtitle', headers);
+    const media = await gateway.media(token(path));
+    expect(media.headers['Content-Type']).toBe(format === 'ass' ? 'text/x-ssa; charset=utf-8' : 'application/x-subrip; charset=utf-8');
+    expect(media.headers['Content-Length']).toBe(String(media.bytes.length));
+    expect(subtitleToVtt(decode(media.bytes), format)).toContain(dialogue);
+    expect(transport).toHaveBeenCalledOnce();
+  });
+
+  it('rejects empty, malformed, oversized and non-UTF-8 protected subtitles', async () => {
+    for (const upstream of [response('WEBVTT\n\nNOTE no dialogue', 'text/vtt'), response('<html>challenge</html>', 'text/plain'),
+      response('[Events]\nDialogue: 0,0:00:03.00,0:00:01.00,Default,,0,0,0,,Fala inválida', 'text/x-ssa'),
+      response('x'.repeat(MAX_SUBTITLE_BYTES + 1), 'text/plain'), response(new Uint8Array([0xff, 0xff]), 'application/x-subrip')]) {
+      const gateway = new StreamMediaGateway({ resolver, transport: async () => upstream });
+      const path = gateway.issue(config(), 'source', 'https://cdn.example.org/subtitle', 'subtitle', headers);
+      await expect(gateway.media(token(path))).rejects.toHaveProperty('code', 'STREAM_MEDIA_UNAVAILABLE');
+      expect(upstream.cancel).toHaveBeenCalled();
+    }
   });
 
   it('expires tickets, applies revoked source permissions and enforces deadlines and response sizes', async () => {

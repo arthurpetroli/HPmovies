@@ -1,0 +1,1145 @@
+{
+  "reviewDate": "2026-11-04",
+  "timezone": "America/Sao_Paulo",
+  "subtitleInventory": {
+    "anime": 207141,
+    "kind": "real-subtitle-inventory-not-playback-proof",
+    "episodes": [
+      {
+        "episode": 1,
+        "status": 200,
+        "sources": [
+          {
+            "provider": "nebula",
+            "audio": "ja",
+            "subtitleCount": 1,
+            "portugueseCount": 0,
+            "completePortuguese": false
+          },
+          {
+            "provider": "nebula",
+            "audio": "en",
+            "subtitleCount": 19,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 14412,
+              "cues": 261
+            }
+          },
+          {
+            "provider": "anizone",
+            "audio": "ja",
+            "subtitleCount": 33,
+            "portugueseCount": 3,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "srt",
+              "bytes": 17059,
+              "cues": 261
+            }
+          }
+        ]
+      },
+      {
+        "episode": 2,
+        "status": 200,
+        "sources": [
+          {
+            "provider": "nebula",
+            "audio": "ja",
+            "subtitleCount": 18,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 18435,
+              "cues": 344
+            }
+          },
+          {
+            "provider": "nebula",
+            "audio": "en",
+            "subtitleCount": 1,
+            "portugueseCount": 0,
+            "completePortuguese": false
+          },
+          {
+            "provider": "anizone",
+            "audio": "ja",
+            "subtitleCount": 33,
+            "portugueseCount": 3,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "srt",
+              "bytes": 22085,
+              "cues": 344
+            }
+          }
+        ]
+      },
+      {
+        "episode": 3,
+        "status": 200,
+        "sources": [
+          {
+            "provider": "nebula",
+            "audio": "ja",
+            "subtitleCount": 17,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 15314,
+              "cues": 281
+            }
+          },
+          {
+            "provider": "nebula",
+            "audio": "en",
+            "subtitleCount": 18,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 15314,
+              "cues": 281
+            }
+          },
+          {
+            "provider": "anizone",
+            "audio": "ja",
+            "subtitleCount": 31,
+            "portugueseCount": 3,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "srt",
+              "bytes": 18199,
+              "cues": 281
+            }
+          }
+        ]
+      },
+      {
+        "episode": 4,
+        "status": 200,
+        "sources": [
+          {
+            "provider": "nebula",
+            "audio": "ja",
+            "subtitleCount": 1,
+            "portugueseCount": 0,
+            "completePortuguese": false
+          },
+          {
+            "provider": "nebula",
+            "audio": "en",
+            "subtitleCount": 20,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 17844,
+              "cues": 314
+            }
+          },
+          {
+            "provider": "anizone",
+            "audio": "ja",
+            "subtitleCount": 36,
+            "portugueseCount": 3,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "srt",
+              "bytes": 21224,
+              "cues": 314
+            }
+          }
+        ]
+      },
+      {
+        "episode": 5,
+        "status": 200,
+        "sources": [
+          {
+            "provider": "nebula",
+            "audio": "ja",
+            "subtitleCount": 17,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 19269,
+              "cues": 361
+            }
+          },
+          {
+            "provider": "nebula",
+            "audio": "en",
+            "subtitleCount": 19,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 19269,
+              "cues": 361
+            }
+          },
+          {
+            "provider": "anizone",
+            "audio": "ja",
+            "subtitleCount": 34,
+            "portugueseCount": 3,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "srt",
+              "bytes": 22911,
+              "cues": 361
+            }
+          }
+        ]
+      },
+      {
+        "episode": 6,
+        "status": 200,
+        "sources": [
+          {
+            "provider": "nebula",
+            "audio": "ja",
+            "subtitleCount": 18,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 16661,
+              "cues": 300
+            }
+          },
+          {
+            "provider": "nebula",
+            "audio": "en",
+            "subtitleCount": 19,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 16661,
+              "cues": 300
+            }
+          },
+          {
+            "provider": "anizone",
+            "audio": "ja",
+            "subtitleCount": 34,
+            "portugueseCount": 3,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "srt",
+              "bytes": 19747,
+              "cues": 300
+            }
+          }
+        ]
+      },
+      {
+        "episode": 7,
+        "status": 200,
+        "sources": [
+          {
+            "provider": "nebula",
+            "audio": "ja",
+            "subtitleCount": 0,
+            "portugueseCount": 0,
+            "completePortuguese": false
+          },
+          {
+            "provider": "nebula",
+            "audio": "en",
+            "subtitleCount": 0,
+            "portugueseCount": 0,
+            "completePortuguese": false
+          },
+          {
+            "provider": "anizone",
+            "audio": "ja",
+            "subtitleCount": 35,
+            "portugueseCount": 3,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "srt",
+              "bytes": 20779,
+              "cues": 325
+            }
+          }
+        ]
+      },
+      {
+        "episode": 8,
+        "status": 200,
+        "sources": [
+          {
+            "provider": "nebula",
+            "audio": "ja",
+            "subtitleCount": 0,
+            "portugueseCount": 0,
+            "completePortuguese": false
+          },
+          {
+            "provider": "nebula",
+            "audio": "en",
+            "subtitleCount": 0,
+            "portugueseCount": 0,
+            "completePortuguese": false
+          },
+          {
+            "provider": "anizone",
+            "audio": "ja",
+            "subtitleCount": 35,
+            "portugueseCount": 3,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "srt",
+              "bytes": 22575,
+              "cues": 358
+            }
+          }
+        ]
+      },
+      {
+        "episode": 9,
+        "status": 200,
+        "sources": [
+          {
+            "provider": "nebula",
+            "audio": "ja",
+            "subtitleCount": 0,
+            "portugueseCount": 0,
+            "completePortuguese": false
+          },
+          {
+            "provider": "nebula",
+            "audio": "en",
+            "subtitleCount": 0,
+            "portugueseCount": 0,
+            "completePortuguese": false
+          },
+          {
+            "provider": "anizone",
+            "audio": "ja",
+            "subtitleCount": 35,
+            "portugueseCount": 3,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "srt",
+              "bytes": 20184,
+              "cues": 314
+            }
+          }
+        ]
+      },
+      {
+        "episode": 10,
+        "status": 200,
+        "sources": [
+          {
+            "provider": "nebula",
+            "audio": "ja",
+            "subtitleCount": 17,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 16147,
+              "cues": 304
+            }
+          },
+          {
+            "provider": "nebula",
+            "audio": "en",
+            "subtitleCount": 19,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 16147,
+              "cues": 304
+            }
+          },
+          {
+            "provider": "anizone",
+            "audio": "ja",
+            "subtitleCount": 26,
+            "portugueseCount": 3,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "srt",
+              "bytes": 19272,
+              "cues": 304
+            }
+          }
+        ]
+      },
+      {
+        "episode": 11,
+        "status": 200,
+        "sources": [
+          {
+            "provider": "nebula",
+            "audio": "ja",
+            "subtitleCount": 0,
+            "portugueseCount": 0,
+            "completePortuguese": false
+          },
+          {
+            "provider": "nebula",
+            "audio": "en",
+            "subtitleCount": 20,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 21908,
+              "cues": 385
+            }
+          },
+          {
+            "provider": "anizone",
+            "audio": "ja",
+            "subtitleCount": 20,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "srt",
+              "bytes": 25833,
+              "cues": 385
+            }
+          }
+        ]
+      },
+      {
+        "episode": 12,
+        "status": 200,
+        "sources": [
+          {
+            "provider": "anizone",
+            "audio": "ja",
+            "subtitleCount": 20,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "srt",
+              "bytes": 22398,
+              "cues": 344
+            }
+          },
+          {
+            "provider": "nebula",
+            "audio": "ja",
+            "subtitleCount": 0,
+            "portugueseCount": 0,
+            "completePortuguese": false
+          },
+          {
+            "provider": "nebula",
+            "audio": "en",
+            "subtitleCount": 20,
+            "portugueseCount": 1,
+            "completePortuguese": true,
+            "validation": {
+              "status": 200,
+              "format": "vtt",
+              "bytes": 18937,
+              "cues": 344
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "livePlayback": {
+    "checkedAt": "2026-11-05T01:50:56.017Z",
+    "results": [
+      {
+        "id": 207141,
+        "title": "Chainsmoker Cat",
+        "episode": 1,
+        "passed": false,
+        "pageErrors": [],
+        "failedRequests": [
+          {
+            "path": "/api/streaming/anime/207141/episodes",
+            "reason": "net::ERR_CONNECTION_REFUSED"
+          },
+          {
+            "path": "/t/p/w300/iXAJZZOuY92eRsm1macyt1ruZ0P.jpg",
+            "reason": "net::ERR_FAILED"
+          }
+        ],
+        "mediaStatuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "subtitleStatuses": [],
+        "entryPath": "/anime/207141",
+        "selectedSource": "anizone · ja · 720p · legendas PT-BR",
+        "beforeSeek": {
+          "time": 10.008896,
+          "duration": 1434.0161890000024,
+          "width": 1920,
+          "height": 1080,
+          "decodedFrames": 245,
+          "droppedFrames": 0,
+          "decodedAudioBytes": 161139,
+          "captionCues": [
+            {
+              "label": "Portuguese - Brazilian",
+              "language": "pt-BR",
+              "count": 261
+            }
+          ]
+        },
+        "durationMatchesExpectedEpisode": true,
+        "afterSeek": {
+          "time": 21.026681,
+          "readyState": 4,
+          "paused": false,
+          "error": null
+        },
+        "portugueseCaptionVisible": true,
+        "machineTranslationWarningVisible": false,
+        "mobileOverflow": false,
+        "alerts": []
+      },
+      {
+        "id": 207141,
+        "title": "Chainsmoker Cat",
+        "episode": 2,
+        "passed": false,
+        "pageErrors": [],
+        "failedRequests": [
+          {
+            "path": "/t/p/w300/wlOsOfggPKLJsh5uvXotSaVO0ny.jpg",
+            "reason": "net::ERR_FAILED"
+          }
+        ],
+        "mediaStatuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "subtitleStatuses": [],
+        "entryPath": "/anime/207141",
+        "selectedSource": "Nebula · ja · auto · legendas PT-BR",
+        "beforeSeek": {
+          "time": 10.011471,
+          "duration": 1422.0457689999953,
+          "width": 1920,
+          "height": 1080,
+          "decodedFrames": 245,
+          "droppedFrames": 0,
+          "decodedAudioBytes": 167590,
+          "captionCues": [
+            {
+              "label": "Portuguese (Brazilian)",
+              "language": "pt-BR",
+              "count": 344
+            }
+          ]
+        },
+        "durationMatchesExpectedEpisode": true,
+        "afterSeek": {
+          "time": 21.032713,
+          "readyState": 4,
+          "paused": false,
+          "error": null
+        },
+        "portugueseCaptionVisible": true,
+        "machineTranslationWarningVisible": false,
+        "mobileOverflow": false,
+        "alerts": []
+      },
+      {
+        "id": 207141,
+        "title": "Chainsmoker Cat",
+        "episode": 3,
+        "passed": false,
+        "pageErrors": [],
+        "failedRequests": [
+          {
+            "path": "/t/p/w300/qZIElrCqwp3l847xhMIS5IDrw3r.jpg",
+            "reason": "net::ERR_FAILED"
+          }
+        ],
+        "mediaStatuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "subtitleStatuses": [],
+        "entryPath": "/anime/207141",
+        "selectedSource": "Nebula · ja · auto · legendas PT-BR",
+        "beforeSeek": {
+          "time": 10.013894,
+          "duration": 1422.0040579999952,
+          "width": 1920,
+          "height": 1080,
+          "decodedFrames": 244,
+          "droppedFrames": 0,
+          "decodedAudioBytes": 211653,
+          "captionCues": [
+            {
+              "label": "Portuguese (Brazil)",
+              "language": "pt-BR",
+              "count": 281
+            }
+          ]
+        },
+        "durationMatchesExpectedEpisode": true,
+        "afterSeek": {
+          "time": 21.02195,
+          "readyState": 4,
+          "paused": false,
+          "error": null
+        },
+        "portugueseCaptionVisible": true,
+        "machineTranslationWarningVisible": false,
+        "mobileOverflow": false,
+        "alerts": []
+      },
+      {
+        "id": 207141,
+        "title": "Chainsmoker Cat",
+        "episode": 4,
+        "passed": false,
+        "pageErrors": [],
+        "failedRequests": [
+          {
+            "path": "/t/p/w300/77xW9AEuwwUsfzsJlipjtsaaWxC.jpg",
+            "reason": "net::ERR_FAILED"
+          }
+        ],
+        "mediaStatuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "subtitleStatuses": [],
+        "entryPath": "/anime/207141",
+        "selectedSource": "anizone · ja · 720p · legendas PT-BR",
+        "beforeSeek": {
+          "time": 10.011736,
+          "duration": 1444.067892000001,
+          "width": 1920,
+          "height": 1080,
+          "decodedFrames": 244,
+          "droppedFrames": 0,
+          "decodedAudioBytes": 159482,
+          "captionCues": [
+            {
+              "label": "Portuguese - Brazilian",
+              "language": "pt-BR",
+              "count": 314
+            }
+          ]
+        },
+        "durationMatchesExpectedEpisode": true,
+        "afterSeek": {
+          "time": 21.026762,
+          "readyState": 4,
+          "paused": false,
+          "error": null
+        },
+        "portugueseCaptionVisible": true,
+        "machineTranslationWarningVisible": false,
+        "mobileOverflow": false,
+        "alerts": []
+      },
+      {
+        "id": 101922,
+        "title": "Kimetsu no Yaiba",
+        "episode": 1,
+        "passed": false,
+        "pageErrors": [],
+        "failedRequests": [
+          {
+            "path": "/t/p/w300/l2C38X6RsbD5gom4iGvFe6yuPEy.jpg",
+            "reason": "net::ERR_FAILED"
+          }
+        ],
+        "mediaStatuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "subtitleStatuses": [
+          200
+        ],
+        "entryPath": "/anime/101922",
+        "selectedSource": "anizone · ja · 720p · legendas PT-BR",
+        "beforeSeek": {
+          "time": 10.011847,
+          "duration": 1419.960605,
+          "width": 1920,
+          "height": 1080,
+          "decodedFrames": 245,
+          "droppedFrames": 0,
+          "decodedAudioBytes": 211660,
+          "captionCues": [
+            {
+              "label": "OpenSubtitles v3 · pt-BR · S01E01 .Aenianos . Kirinashi. Kimetsu no Yaiba - 01 .1870A5E8.srt",
+              "language": "pt-BR",
+              "count": 301
+            }
+          ]
+        },
+        "durationMatchesExpectedEpisode": true,
+        "afterSeek": {
+          "time": 21.028916,
+          "readyState": 4,
+          "paused": false,
+          "error": null
+        },
+        "portugueseCaptionVisible": true,
+        "machineTranslationWarningVisible": false,
+        "mobileOverflow": false,
+        "alerts": []
+      },
+      {
+        "id": 11061,
+        "title": "Hunter x Hunter (2011)",
+        "episode": 1,
+        "passed": false,
+        "pageErrors": [],
+        "failedRequests": [
+          {
+            "path": "/t/p/w300/7ppEotl1YMs1adTscDdMoLhQaQ3.jpg",
+            "reason": "net::ERR_FAILED"
+          }
+        ],
+        "mediaStatuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "subtitleStatuses": [
+          200
+        ],
+        "entryPath": "/anime/11061",
+        "selectedSource": "anizone · ja · 720p · legendas PT-BR",
+        "beforeSeek": {
+          "time": 10.017981,
+          "duration": 1411.4519229999996,
+          "width": 640,
+          "height": 360,
+          "decodedFrames": 245,
+          "droppedFrames": 0,
+          "decodedAudioBytes": 165566,
+          "captionCues": [
+            {
+              "label": "OpenSubtitles · pt-BR · Hunter x Hunter.S01E01.HDTV.ass",
+              "language": "pt-BR",
+              "count": 293
+            }
+          ]
+        },
+        "durationMatchesExpectedEpisode": true,
+        "afterSeek": {
+          "time": 21.035812,
+          "readyState": 4,
+          "paused": false,
+          "error": null
+        },
+        "portugueseCaptionVisible": true,
+        "machineTranslationWarningVisible": false,
+        "mobileOverflow": false,
+        "alerts": []
+      }
+    ]
+  },
+  "scopeNotes": [
+    "O inventário verifica arquivos de legenda, sem provar identidade ou reprodução integral do vídeo.",
+    "As seis amostras reais decodificaram áudio/vídeo, avançaram após seek e exibiram PT-BR.",
+    "O checker estrito sinalizou requisições de miniaturas TMDB que falharam em todas as amostras. Houve também falha transitória no índice do E1 durante recarga da API. Os resultados passed originais foram preservados.",
+    "Testes com fixtures do navegador são separados das amostras reais.",
+    "Após a recarga final, E1 e E4 reproduziram novamente com faixas completas PT-BR e áudio declarado japonês. Persistiram somente falhas em miniaturas externas nessas duas reproduções."
+  ],
+  "liveRecheck": {
+    "checkedAt": "2026-11-05T01:55:09.190Z",
+    "results": [
+      {
+        "id": 207141,
+        "title": "Chainsmoker Cat",
+        "episode": 1,
+        "passed": false,
+        "pageErrors": [],
+        "failedRequests": [
+          {
+            "path": "/t/p/w300/iXAJZZOuY92eRsm1macyt1ruZ0P.jpg",
+            "reason": "net::ERR_FAILED"
+          }
+        ],
+        "mediaStatuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "subtitleStatuses": [],
+        "entryPath": "/anime/207141",
+        "selectedSource": "anizone · ja · 720p · legendas PT-BR",
+        "beforeSeek": {
+          "time": 10.00741,
+          "duration": 1434.0161890000024,
+          "width": 1920,
+          "height": 1080,
+          "decodedFrames": 245,
+          "droppedFrames": 0,
+          "decodedAudioBytes": 161139,
+          "captionCues": [
+            {
+              "label": "Portuguese - Brazilian",
+              "language": "pt-BR",
+              "count": 261
+            }
+          ]
+        },
+        "durationMatchesExpectedEpisode": true,
+        "afterSeek": {
+          "time": 21.025964,
+          "readyState": 4,
+          "paused": false,
+          "error": null
+        },
+        "portugueseCaptionVisible": true,
+        "machineTranslationWarningVisible": false,
+        "mobileOverflow": false,
+        "alerts": []
+      },
+      {
+        "id": 207141,
+        "title": "Chainsmoker Cat",
+        "episode": 4,
+        "passed": false,
+        "pageErrors": [],
+        "failedRequests": [
+          {
+            "path": "/t/p/w300/77xW9AEuwwUsfzsJlipjtsaaWxC.jpg",
+            "reason": "net::ERR_FAILED"
+          }
+        ],
+        "mediaStatuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "subtitleStatuses": [],
+        "entryPath": "/anime/207141",
+        "selectedSource": "anizone · ja · 720p · legendas PT-BR",
+        "beforeSeek": {
+          "time": 10.006635,
+          "duration": 1444.067892000001,
+          "width": 1920,
+          "height": 1080,
+          "decodedFrames": 245,
+          "droppedFrames": 0,
+          "decodedAudioBytes": 159482,
+          "captionCues": [
+            {
+              "label": "Portuguese - Brazilian",
+              "language": "pt-BR",
+              "count": 314
+            }
+          ]
+        },
+        "durationMatchesExpectedEpisode": true,
+        "afterSeek": {
+          "time": 21.032915,
+          "readyState": 4,
+          "paused": false,
+          "error": null
+        },
+        "portugueseCaptionVisible": true,
+        "machineTranslationWarningVisible": false,
+        "mobileOverflow": false,
+        "alerts": []
+      }
+    ]
+  },
+  "catalogTransientFailure": {
+    "checkedAt": "2026-11-05T01:52:33.779Z",
+    "results": [
+      {
+        "id": 207141,
+        "title": "Chainsmoker Cat",
+        "episode": 1,
+        "passed": false,
+        "pageErrors": [],
+        "failedRequests": [],
+        "mediaStatuses": [],
+        "subtitleStatuses": [],
+        "entryPath": "/anime/207141",
+        "error": "locator.waitFor: Timeout 75000ms exceeded.",
+        "alerts": [
+          "O catálogo está fora de alcanceNão foi possível carregar o conteúdo (500). Tente novamente.Tentar novamente"
+        ],
+        "playerState": []
+      }
+    ]
+  },
+  "checks": {
+    "affectedUnitTests": 269,
+    "affectedUnitFiles": 12,
+    "browserScenarios": 34,
+    "browserProjects": [
+      "desktop",
+      "mobile"
+    ],
+    "lint": "passed",
+    "typecheck": "passed",
+    "build": "passed-with-existing-player-chunk-size-warning",
+    "diffCheck": "passed",
+    "strictLiveChecker": "failed-external-thumbnails-and-initial-transient-api-errors-preserved",
+    "finalCatalogStatus": 200
+  }
+}

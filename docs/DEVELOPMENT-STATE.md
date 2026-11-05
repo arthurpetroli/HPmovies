@@ -1,9 +1,53 @@
-# Estado de desenvolvimento — 28/10/2026
+# Estado de desenvolvimento — 04/11/2026
 
-Retomada atual: produção compilada em `http://127.0.0.1:4000`, com site/API,
-fontes em `:8099` e tradutor opcional em `:5000`, iniciados por `npm start`.
-O desenvolvimento com `npm run dev` continua em `:5173`; não execute ambos nas
-mesmas portas auxiliares. Branch integrada: `main`.
+Retomada atual: desenvolvimento com `npm run dev`, frontend em
+`http://127.0.0.1:5173`, API em `:4000`, fontes em `:8099` e tradutor opcional
+em `:5000`. A produção também foi compilada; `npm start` usa `:4000` para
+site/API. Não execute os dois modos nas mesmas portas auxiliares.
+Branch integrada: `main`.
+
+## Revisão geral de legendas — 04/11/2026
+
+Chainsmoker Cat / Yani Neko (`207141`) voltou a oferecer PT-BR completo nos 12
+episódios da amostra. O E1 tinha legendas em hosts não configurados; E2/E4 também
+expuseram o nome de idioma `Portuguese (Brazilian)`, antes não reconhecido. Foram
+validados e habilitados seis hosts exatos na configuração privada local, sem
+alterar bundle, licenças ou versionar ambiente/URLs de mídia.
+
+O fluxo geral agora reconhece mais nomes explícitos de idiomas, mantém ASS/SSA
+com cabeçalhos permitidos e valida SRT/VTT/ASS pelo parser compartilhado. A seleção
+prefere faixas completas antes de Forced/Signs/Songs/Dubtitle e, com a mesma
+cobertura de português, prefere áudio japonês. Escolhas manuais e legendas
+desativadas continuam preservadas. O resumo mostra o áudio da fonte ativa.
+
+O player mostra carregamento, detecta VTT sem falas e oferece outra faixa
+portuguesa sem ciclos. Ausência de português tem orientação e ação de nova
+consulta. Essa consulta preserva posição e intenção de reprodução; reativar uma
+faixa invalida o erro e o carregamento anteriores. Alertas foram conferidos a
+320 px e os botões têm alvo mínimo de 44 px.
+
+Verificação: 269 testes afetados em 12 arquivos; 34 cenários distintos de navegador
+em desktop/celular; lint, TypeScript, build e diff sem erros. Permanece o aviso
+conhecido de tamanho do chunk player/HLS. As fixtures de interface são separadas
+do inventário real de legendas e das seis reproduções reais: Chainsmoker Cat
+E1–E4, Demon Slayer E1 e Hunter x Hunter E1, com áudio/vídeo decodificados,
+avanço após seek e texto PT-BR visível. E1/E4 selecionaram a faixa completa com
+fonte japonesa. Não houve inspeção integral de todos os episódios ou do catálogo.
+
+O checker estrito real sinalizou falhas de miniaturas externas; na primeira
+rodada também houve uma falha transitória do índice durante recarga da API.
+Uma tentativa posterior do catálogo retornou 500 antes de se recuperar. Esses
+resultados foram mantidos no JSON. A nova execução do E1/E4 depois da recarga
+final confirmou vídeo e legenda, restando as falhas de miniaturas. Não se afirma
+sucesso integral de rede só porque a reprodução funcionou.
+
+Detalhes, comandos e limites em
+[SUBTITLE-REVIEW-2026-11-04.md](SUBTITLE-REVIEW-2026-11-04.md), com evidência
+[2026-11-04-subtitle-review.json](validation/2026-11-04-subtitle-review.json).
+Para retomar, mantenha `npm run dev` e recarregue a página do anime. Se o usuário
+salvou legendas desativadas, deve ativá-las nas configurações do player.
+Serviços existentes preservados; API recarregada para aplicar os hosts privados.
+Sem commit, push, deploy ou dependências novas.
 
 ## Skills instaladas
 

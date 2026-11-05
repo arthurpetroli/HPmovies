@@ -47,12 +47,14 @@ test('switching from English to delayed Portuguese mounts no empty track and per
   await page.getByRole('combobox', { name: 'Idioma das legendas' }).selectOption('pt-srt');
   await expect.poll(() => portugueseRequests).toBe(1);
   await expect(page.locator('video track')).toHaveCount(0);
+  await expect(page.getByRole('status', { name: 'Carregando legenda', exact: true })).toBeVisible();
   await expect(page.getByText(en, { exact: true })).toHaveCount(0);
   // A late error belonging to the removed English element cannot hide PT-BR.
   await oldTrack!.evaluate(element => element.dispatchEvent(new Event('error')));
   await expect(page.getByRole('alert')).toHaveCount(0);
   release();
   await expect(page.getByText(pt, { exact: true })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Carregando legenda', exact: true })).toHaveCount(0);
   await expect(page.locator('video track')).toHaveCount(1);
   await expect(page.locator('video track')).toHaveAttribute('src', /^blob:/);
   expect(unusedRequests).toBe(0);
@@ -66,6 +68,93 @@ test('switching from English to delayed Portuguese mounts no empty track and per
   expect(englishRequests).toBe(loadedEnglishRequests);
   expect(portugueseRequests).toBeLessThanOrEqual(loadedPortugueseRequests + 2);
   expect(unusedRequests).toBe(0);
+});
+
+test('empty native captions offer bounded Portuguese recovery without selecting English', async ({ page, isMobile }) => {
+  let englishRequests = 0;
+  if (isMobile) await page.setViewportSize({ width: 320, height: 851 });
+  await playback(page, [
+    { id: 'pt-empty', url: '/qa-loading-empty.vtt', language: 'pt-BR', label: 'Português vazio QA', format: 'vtt' },
+    { id: 'pt-broken', url: '/qa-loading-broken.vtt', language: 'pt-BR', label: 'Português inválido QA', format: 'vtt' },
+    { id: 'pt-valid', url: '/qa-loading-valid.vtt', language: 'pt', label: 'Português válido QA', format: 'vtt' },
+    { id: 'en-unused', url: '/qa-loading-unused-en.vtt', language: 'en', label: 'English QA', format: 'vtt' },
+  ]);
+  await page.route('**/qa-loading-empty.vtt', route => route.fulfill({ contentType: 'text/vtt', body: 'WEBVTT\n\nNOTE Nenhuma fala\n' }));
+  await page.route('**/qa-loading-broken.vtt', route => route.fulfill({ status: 503, body: 'QA unavailable' }));
+  await page.route('**/qa-loading-valid.vtt', route => route.fulfill({ contentType: 'text/vtt', body: vtt(pt) }));
+  await page.route('**/qa-loading-unused-en.vtt', route => { englishRequests++; return route.fulfill({ contentType: 'text/vtt', body: vtt(en) }); });
+  await page.goto('/watch/subtitle-loading');
+  await expect(page.getByRole('alert')).toContainText('não contém falas válidas');
+  expect(await page.getByRole('alert').evaluate(element => {
+    const alert = element.getBoundingClientRect();
+    const player = element.closest('.video-player')!.getBoundingClientRect();
+    return { inside: alert.top >= player.top && alert.bottom <= player.bottom, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+  })).toEqual({ inside: true, overflow: false });
+  await expect(page.getByRole('button', { name: 'Tentar legenda novamente' })).toBeVisible();
+  const recover = page.getByRole('button', { name: 'Usar outra legenda em português' });
+  await recover.click();
+  await expect(page.getByRole('alert')).toContainText('Não foi possível carregar a faixa Português inválido QA.');
+  await recover.click();
+  await expect(page.locator('video track')).toHaveAttribute('id', 'pt-valid');
+  await expect.poll(() => page.locator('video track').evaluate(element => (element as HTMLTrackElement).readyState)).toBe(2);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  // A later failure must not cycle through alternatives already attempted.
+  await page.locator('video track').evaluate(element => element.dispatchEvent(new Event('error')));
+  await expect(page.getByRole('alert')).toContainText('Não foi possível carregar a faixa Português válido QA.');
+  await expect(recover).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Tentar legenda novamente' })).toBeVisible();
+  expect(englishRequests).toBe(0);
+});
+
+test('disabling pending native captions clears loading feedback and persists the explicit off choice', async ({ page }) => {
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  let requests = 0;
+  await playback(page, [{ id: 'pt-pending', url: '/qa-loading-pending.vtt', language: 'pt-BR', label: 'Português pendente QA', format: 'vtt' }]);
+  await page.route('**/qa-loading-pending.vtt', async route => {
+    requests++;
+    await pending;
+    return route.fulfill({ contentType: 'text/vtt', body: vtt(pt) });
+  });
+  await page.goto('/watch/subtitle-loading');
+  await expect(page.getByRole('status', { name: 'Carregando legenda', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Abrir configurações' }).click();
+  await page.getByRole('combobox', { name: 'Idioma das legendas' }).selectOption('off');
+  await expect(page.getByRole('status', { name: 'Carregando legenda', exact: true })).toHaveCount(0);
+  await expect(page.locator('video track')).toHaveCount(0);
+  release();
+  const previousRequests = requests;
+  await page.reload();
+  await page.getByRole('button', { name: 'Abrir configurações' }).click();
+  await expect(page.getByRole('combobox', { name: 'Idioma das legendas' })).toHaveValue('off');
+  await expect(page.locator('video track')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(requests).toBe(previousRequests);
+});
+
+test('reenabling the same caption starts a new load without retaining its earlier failure', async ({ page }) => {
+  let requests = 0;
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  await playback(page, [{ id: 'pt-reactivate', url: '/qa-loading-reactivate.vtt', language: 'pt-BR', label: 'Português reativado QA', format: 'vtt' }]);
+  await page.route('**/qa-loading-reactivate.vtt', async route => {
+    requests++;
+    if (requests === 1) return route.fulfill({ status: 503, headers: { 'cache-control': 'no-store' } });
+    await pending;
+    return route.fulfill({ contentType: 'text/vtt', body: vtt(pt) });
+  });
+  await page.goto('/watch/subtitle-loading');
+  await expect(page.getByRole('alert')).toContainText('Não foi possível carregar a faixa Português reativado QA.');
+  await page.getByRole('button', { name: 'Abrir configurações' }).click();
+  const languages = page.getByRole('combobox', { name: 'Idioma das legendas' });
+  await languages.selectOption('off');
+  await languages.selectOption('pt-reactivate');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByRole('status', { name: 'Carregando legenda', exact: true })).toBeVisible();
+  release();
+  await expect.poll(() => page.locator('video track').evaluate(element => (element as HTMLTrackElement).readyState)).toBe(2);
+  await expect(page.getByRole('status', { name: 'Carregando legenda', exact: true })).toHaveCount(0);
+  expect(requests).toBe(2);
 });
 
 test('Portuguese VTT failures stay visible with settings closed and manual retry loads the selected track', async ({ page }) => {

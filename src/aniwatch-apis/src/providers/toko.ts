@@ -24,7 +24,14 @@ export interface TokoStreamingOptions {
 export function normalizeTokoLanguage(value: string | undefined): string {
   const explicitNames: Record<string, string> = {
     english: 'en', 'english(cr english)': 'en', 'english(cc)': 'en', 'english(forced)': 'en', japanese: 'ja',
-    'portuguese(brazil)': 'pt-BR', 'português(brasil)': 'pt-BR',
+    'japanese(sdh)': 'ja', 'japanese(forced)': 'ja',
+    arabic: 'ar', german: 'de', french: 'fr', indonesian: 'id', italian: 'it', korean: 'ko',
+    malay: 'ms', polish: 'pl', thai: 'th', turkish: 'tr', vietnamese: 'vi',
+    spanish: 'es', 'spanish(latin american)': 'es-419', 'spanish(latin america)': 'es-419',
+    'spanish(european)': 'es-ES', 'spanish(spain)': 'es-ES',
+    'chinese(traditional)': 'zh-Hant', 'chinese(simplified)': 'zh-Hans',
+    'portuguese(brazil)': 'pt-BR', 'portuguese(brazilian)': 'pt-BR', 'português(brasil)': 'pt-BR',
+    'português brasileiro': 'pt-BR', 'portuguese(portugal)': 'pt-PT', 'português(portugal)': 'pt-PT',
     'portuguese(cr portuguese(brazil))': 'pt-BR',
     'portuguese(cr portuguese)': 'pt',
     'portuguese(-português(brasil))': 'pt-BR',
@@ -32,10 +39,10 @@ export function normalizeTokoLanguage(value: string | undefined): string {
     'portuguese(-brazilian)': 'pt-BR', 'brazilian portuguese': 'pt-BR',
     'portuguese(portuguese-brazilian[full])': 'pt-BR', 'portuguese(portuguese-brazilian)': 'pt-BR',
     'portuguese(portuguese-[full])': 'pt', 'portuguese(-european)': 'pt-PT',
-    portuguese: 'pt', 'portuguese 2': 'pt',
+    portuguese: 'pt', 'português': 'pt', 'portuguese 2': 'pt',
   };
   const supplied = (value ?? '').trim();
-  const candidate = explicitNames[supplied.toLowerCase().replace(/\s*([()[\]-])\s*/g, '$1')] ?? supplied;
+  const candidate = explicitNames[supplied.toLowerCase().replace(/\s*([()[\]-])\s*/g, '$1')] ?? supplied.replace(/_/g, '-');
   if (!/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i.test(candidate) || ['sub', 'dub'].includes(candidate.toLowerCase())) return 'und';
   try { return Intl.getCanonicalLocales(candidate)[0] ?? 'und'; } catch { return 'und'; }
 }
@@ -67,8 +74,9 @@ export function normalizeTokoSource(source: TokoStream, config: TokoConfig, inde
     let subtitleUrl = permittedMediaUrl(track.url, config.allowedMediaHosts, config.allowedStreamDomains);
     if (!subtitleUrl) return [];
     const inferred = /\.(srt|ass|ssa|vtt)$/i.exec(new URL(track.url).pathname)?.[1].toLowerCase();
-    const format = track.format !== undefined ? track.format.trim().toLowerCase() : inferred === 'ssa' ? 'ass' : inferred ?? 'vtt';
-    if (!['vtt', 'srt', 'ass'].includes(format) || format === 'ass' && (source.requiresHeaders || track.headers)) return [];
+    const suppliedFormat = track.format !== undefined ? track.format.trim().toLowerCase() : inferred ?? 'vtt';
+    const format = suppliedFormat === 'ssa' ? 'ass' : suppliedFormat;
+    if (!['vtt', 'srt', 'ass'].includes(format)) return [];
     if (source.requiresHeaders || track.headers) {
       try { subtitleUrl = streamMediaGateway.issue(config, providerId, subtitleUrl, 'subtitle', track.headers ?? source.headers); }
       catch { return []; }

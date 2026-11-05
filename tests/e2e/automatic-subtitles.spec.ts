@@ -22,7 +22,7 @@ test('generates Portuguese with progress, selects it and keeps the video positio
   const position = await page.locator('video').evaluate(video => video.currentTime);
   await page.getByRole('button', { name: 'Gerar legenda em português' }).click();
   await expect(page.getByRole('button', { name: 'Traduzindo legenda…' })).toBeDisabled();
-  await expect(page.getByRole('status')).toContainText('Você pode continuar assistindo');
+  await expect(page.getByRole('complementary', { name: 'Sua experiência' }).getByRole('status')).toContainText('Você pode continuar assistindo');
   await expect(page.getByText(text, { exact: true })).toBeVisible({ timeout: 15000 });
   await expect(page.getByRole('complementary', { name: 'Sua experiência' }).getByText('Tradução automática: pode conter erros.', { exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Player de vídeo' }).getByText('Tradução automática: pode conter erros.', { exact: true })).toHaveCount(0);

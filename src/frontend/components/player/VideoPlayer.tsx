@@ -4,7 +4,7 @@ import Hls from 'hls.js';
 import { Check, Loader2, Maximize, Minimize, Pause, Play, RotateCcw, Settings, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
 import type { StreamSource, StreamSubtitle } from '../../../shared/providers';
 import { loadConvertedSubtitle, readCaptionPreferences, saveCaptionPreferences } from './subtitles';
-import { hasValidIntro, orderedSubtitles, preferredSubtitleId } from './playbackUtils';
+import { hasValidIntro, orderedSubtitles, portugueseCaptionRank, preferredSubtitleId } from './playbackUtils';
 import './playerCaptions.css';
 import type { IntroTiming } from '../../services/intro';
 
@@ -101,13 +101,15 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
   const [activeHeight, setActiveHeight] = useState<number | undefined>();
   const [speed, setSpeed] = useState(1);
   const [captionPreferences] = useState(readCaptionPreferences);
-  const [subtitleId, setSubtitleId] = useState(() => preferredSubtitleId(subtitles, captionPreferences.language));
+  const [subtitleSelection, setSubtitleSelection] = useState(() => ({ id: preferredSubtitleId(subtitles, captionPreferences.language), revision: 0 }));
+  const subtitleId = subtitleSelection.id;
+  const setSubtitleId = useCallback((id: string) => setSubtitleSelection(previous => ({ id, revision: previous.revision + 1 })), []);
   const [captionLanguage, setCaptionLanguage] = useState(captionPreferences.language);
   const selectedSubtitle = subtitles.find(track => track.id === subtitleId);
   const captionSelectionKey = JSON.stringify([source.url, selectedSubtitle?.id, selectedSubtitle?.url, selectedSubtitle?.format]);
   const [captionRetry, setCaptionRetry] = useState({ selection: '', count: 0 });
   const captionAttempt = captionRetry.selection === captionSelectionKey ? captionRetry.count : 0;
-  const captionLoadKey = JSON.stringify([captionSelectionKey, captionAttempt]);
+  const captionLoadKey = JSON.stringify([captionSelectionKey, subtitleSelection.revision, captionAttempt]);
   const conversionSignature = JSON.stringify({ key: captionLoadKey, tracks: subtitles.filter(track => track.id === subtitleId && (track.format === 'srt' || track.format === 'ass')).map(({ id, url, label, format }) => ({ id, url, label, format })) });
   const [conversion, setConversion] = useState<{ signature: string; tracks: Record<string, string>; errors: Record<string, string> }>({ signature: '', tracks: {}, errors: {} });
   const convertedTracks = conversion.signature === conversionSignature ? conversion.tracks : EMPTY_CONVERTED_TRACKS;
@@ -121,6 +123,12 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
   const [captionBackground, setCaptionBackground] = useState(captionPreferences.background);
   const [captionFailure, setCaptionFailure] = useState<{ key: string; message: string } | null>(null);
   const captionError = captionFailure?.key === captionLoadKey ? captionFailure.message : null;
+  const [captionReadyKey, setCaptionReadyKey] = useState('');
+  const [captionPendingKey, setCaptionPendingKey] = useState('');
+  const captionLoading = Boolean(selectedSubtitle && !captionError && !conversionError && captionReadyKey !== captionLoadKey);
+  const [captionAlternatives, setCaptionAlternatives] = useState<{ sourceUrl: string; ids: string[] }>({ sourceUrl: '', ids: [] });
+  const alternativeSubtitle = orderedSubtitles(subtitles).find(track => track.id !== subtitleId && portugueseCaptionRank(track.language) < 4 &&
+    !(captionAlternatives.sourceUrl === source.url && captionAlternatives.ids.includes(track.id)));
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -133,6 +141,11 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
   useEffect(() => {
     saveCaptionPreferences({ language: captionLanguage, size: captionSize, background: captionBackground, offset: captionOffset });
   }, [captionLanguage, captionSize, captionBackground, captionOffset]);
+  useEffect(() => {
+    if (!captionLoading) return;
+    const timer = setTimeout(() => setCaptionPendingKey(captionLoadKey), 400);
+    return () => clearTimeout(timer);
+  }, [captionLoading, captionLoadKey]);
   useEffect(() => {
     const controller = new AbortController();
     const blobs: string[] = [];
@@ -158,7 +171,7 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
     },
     getPlayRequested: () => playRequestedRef.current,
     selectSubtitle: track => { setSubtitleId(track.id); setCaptionLanguage(track.language); },
-  }), []);
+  }), [setSubtitleId]);
 
   const saveProgress = useCallback((force = false, video = videoRef.current) => {
     if (video && Number.isFinite(video.duration) && video.duration > 0 && video.currentTime > 0) {
@@ -363,6 +376,11 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
     const loaded = () => {
       if (!isCurrent()) return;
       clearTimeout(timer);
+      if (!selected?.cues?.length) {
+        setCaptionFailure({ key: captionLoadKey, message: `A faixa ${element?.label || 'selecionada'} não contém falas válidas. Escolha outra faixa ou tente novamente.` });
+        return;
+      }
+      setCaptionReadyKey(captionLoadKey);
       setCaptionFailure(value => value?.key === captionLoadKey ? null : value);
       shiftCues();
       showCues();
@@ -455,7 +473,7 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
   }, [onPrepareNextEpisode, suspended, duration, playing, time, currentEnding]);
   const canSkipIntro = hasValidIntro(currentIntro, duration) && time >= currentIntro.start && time < currentIntro.end;
   const canGoNext = !!onNextEpisode && (hasEnded || hasValidIntro(currentEnding, duration) && time >= currentEnding.start && time < currentEnding.end);
-  const showEpisodeAction = !error && !notice && !captionError && !conversionError && !settingsOpen;
+  const showEpisodeAction = !error && !notice && !captionError && !conversionError && !captionLoading && !settingsOpen;
   const chosenQuality = qualities.find(level => level.index === quality);
   const qualityLabel = quality === -1 ? `Automática${activeHeight ? ` · ${activeHeight}p` : ''}` : chosenQuality?.height ? `${chosenQuality.height}p` : chosenQuality ? `${Math.round(chosenQuality.bitrate / 1000)} kbps` : 'Original';
 
@@ -504,11 +522,19 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
         <p className="max-w-lg text-sm text-white/90">{error}</p>
         <button type="button" className="rounded-lg bg-teal-400 px-5 py-2.5 font-semibold text-slate-950 hover:bg-teal-300" onClick={() => { startPositionRef.current = videoRef.current?.currentTime || startPositionRef.current; setError(null); setBuffering(true); setQualities([]); setQuality(-1); setAttempt(value => value + 1); }}>Tentar novamente</button>
       </div>}
-      <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex flex-col items-start gap-2">
+      <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex max-h-[calc(100%-1.5rem)] flex-col items-start gap-2">
       {notice && <div role="status" className="pointer-events-auto flex w-full items-center justify-between gap-3 rounded-lg bg-black/85 px-3 py-2 text-xs text-white/90"><p>{notice}</p><button type="button" aria-label="Fechar mensagem" className="shrink-0 p-1 hover:text-teal-300" onClick={() => setNotice(null)}><X size={16} /></button></div>}
-      {(captionError || conversionError) && <div role="alert" className="pointer-events-auto flex w-full flex-wrap items-center justify-between gap-2 rounded-lg bg-black/90 px-3 py-2 text-xs text-amber-200">
+      {captionLoading && captionPendingKey === captionLoadKey && <div role="status" aria-label="Carregando legenda" className="flex items-center gap-2 rounded-lg bg-black/85 px-3 py-2 text-xs text-white/90"><Loader2 size={14} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /><p>Carregando legenda… Você pode continuar assistindo.</p></div>}
+      {(captionError || conversionError) && <div role="alert" className="pointer-events-auto flex min-h-0 w-full flex-wrap items-center justify-between gap-2 overflow-y-auto rounded-lg bg-black/90 px-3 py-2 text-xs text-amber-200">
         <p>{captionError || conversionError}</p>
-        {captionAttempt < 3 ? <button type="button" className="rounded border border-amber-200/40 px-2 py-1 font-medium hover:bg-white/10" onClick={() => setCaptionRetry({ selection: captionSelectionKey, count: captionAttempt + 1 })}>Tentar legenda novamente</button> : <p>Escolha outra faixa nas configurações.</p>}
+        <div className="flex flex-wrap gap-2">
+          {captionAttempt < 3 ? <button type="button" className="min-h-11 rounded border border-amber-200/40 px-3 py-2 font-medium hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-400" onClick={() => setCaptionRetry({ selection: captionSelectionKey, count: captionAttempt + 1 })}>Tentar legenda novamente</button> : <p>Escolha outra faixa nas configurações.</p>}
+          {alternativeSubtitle && <button type="button" className="min-h-11 rounded border border-amber-200/40 px-3 py-2 font-medium hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-400" onClick={() => {
+            setCaptionAlternatives(previous => ({ sourceUrl: source.url, ids: [...new Set([...(previous.sourceUrl === source.url ? previous.ids : []), subtitleId, alternativeSubtitle.id])] }));
+            setSubtitleId(alternativeSubtitle.id);
+            setCaptionLanguage(alternativeSubtitle.language);
+          }}>Usar outra legenda em português</button>}
+        </div>
       </div>}
       </div>
 
