@@ -1,0 +1,195 @@
+{
+  "checkedAt": "2026-11-07T05:45:01.117Z",
+  "results": [
+    {
+      "imdb": "tt0903747",
+      "title": "Breaking Bad",
+      "type": "series",
+      "season": 1,
+      "episode": 1,
+      "passed": true,
+      "pageErrorCount": 0,
+      "failedRequestHosts": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "fixture": false,
+      "audiovisualIdentityManuallyVerified": false,
+      "selectedSource": "BingeBang 2160p · Yildun 4K ULTRA HD\nN/A",
+      "sourceCount": 14,
+      "beforeSeek": {
+        "time": 8.021533,
+        "duration": 3501.6229999999764,
+        "width": 3840,
+        "height": 2160,
+        "frames": 197,
+        "decodedAudioBytes": 144671,
+        "subtitleLanguages": []
+      },
+      "durationMatchesSample": true,
+      "afterSeek": {
+        "time": 94.007949,
+        "error": null
+      },
+      "mobileOverflow": false,
+      "alerts": []
+    },
+    {
+      "imdb": "tt2560140",
+      "title": "Attack on Titan",
+      "type": "series",
+      "season": 1,
+      "episode": 1,
+      "passed": true,
+      "pageErrorCount": 0,
+      "failedRequestHosts": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "fixture": false,
+      "audiovisualIdentityManuallyVerified": false,
+      "selectedSource": "BingeBang 2160p · Yildun 4K ULTRA HD\nN/A",
+      "sourceCount": 10,
+      "beforeSeek": {
+        "time": 8.014709,
+        "duration": 1541.9570000000037,
+        "width": 3840,
+        "height": 2160,
+        "frames": 197,
+        "decodedAudioBytes": 131829,
+        "subtitleLanguages": []
+      },
+      "durationMatchesSample": true,
+      "afterSeek": {
+        "time": 94.019203,
+        "error": null
+      },
+      "mobileOverflow": false,
+      "alerts": []
+    },
+    {
+      "imdb": "tt1375666",
+      "title": "Inception",
+      "type": "movie",
+      "passed": true,
+      "pageErrorCount": 0,
+      "failedRequestHosts": [],
+      "mediaStatuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "fixture": false,
+      "audiovisualIdentityManuallyVerified": false,
+      "selectedSource": "BingeBang 2160p · Nashira 4K ULTRA HD\nN/A",
+      "sourceCount": 11,
+      "beforeSeek": {
+        "time": 8.009183,
+        "duration": 8888.338251000034,
+        "width": 3840,
+        "height": 1598,
+        "frames": 196,
+        "decodedAudioBytes": 148633,
+        "subtitleLanguages": []
+      },
+      "durationMatchesSample": true,
+      "afterSeek": {
+        "time": 94.021294,
+        "error": null
+      },
+      "mobileOverflow": false,
+      "alerts": []
+    },
+    {
+      "imdb": "tt0903747",
+      "title": "Breaking Bad",
+      "type": "series",
+      "season": 1,
+      "episode": 1,
+      "passed": true,
+      "pageErrorCount": 0,
+      "failedRequestHosts": [],
+      "mediaStatuses": [
+        200,
+        206,
+        206,
+        206
+      ],
+      "fixture": false,
+      "audiovisualIdentityManuallyVerified": false,
+      "requestedTransport": "mp4",
+      "selectedSource": "BingeBang 1080p · Wezen FULL HD\nN/A",
+      "sourceCount": 13,
+      "beforeSeek": {
+        "time": 8.010929,
+        "duration": 3501.778141,
+        "width": 1920,
+        "height": 1080,
+        "frames": 204,
+        "decodedAudioBytes": 164028,
+        "subtitleLanguages": []
+      },
+      "durationMatchesSample": true,
+      "afterSeek": {
+        "time": 94.006433,
+        "error": null
+      },
+      "mobileOverflow": false,
+      "alerts": []
+    }
+  ],
+  "date": "2026-11-07",
+  "timezone": "America/Sao_Paulo",
+  "scope": "Live browser through HPmovies catalog and configured FMHY addon with all shipped sources enabled; no route interception or fixtures.",
+  "limits": [
+    "Eight seconds before seek and four seconds after seek per title; not full playback.",
+    "Audiovisual identity and spoken language were not exhaustively verified.",
+    "Only the selected source was decoded. Other returned sources and server labels do not imply playback.",
+    "No external subtitle tracks were offered by the selected sources. The Inception frame contained English text embedded in the video."
+  ],
+  "visualInspection": {
+    "screenshotsReviewed": true,
+    "scope": "Frames at approximately 94 seconds appeared consistent with the requested titles; complete episode identity and spoken language were not audited.",
+    "burnedInEnglishTextObservedOnMovie": true
+  }
+}

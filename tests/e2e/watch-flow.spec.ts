@@ -291,7 +291,8 @@ test('a direct episode link saves the anime identity when catalog metadata arriv
   await expect(card).toHaveCount(1);
   await expect(card.getByText(anime.title, { exact: true })).toBeVisible();
   await expect(card.locator('.history-art img')).toHaveAttribute('src', anime.banner);
-  await expect(card.locator('.history-demo-label')).toHaveCount(0);
+  // This fixture explicitly supplies demo media even when anime metadata is present.
+  await expect(card.locator('.history-demo-label')).toHaveCount(1);
   await expect(card).toHaveAttribute('href', `/watch/${encodeURIComponent(episode(5).id)}`);
   await noOverflow(page);
 });

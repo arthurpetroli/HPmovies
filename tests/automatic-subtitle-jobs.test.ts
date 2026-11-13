@@ -3,6 +3,7 @@ import type { Playback, StreamSubtitle } from '../src/shared/providers';
 import { AutomaticSubtitleJobs } from '../src/aniwatch-apis/src/providers/automatic-subtitle-jobs';
 import { AutomaticSubtitleProvider } from '../src/aniwatch-apis/src/providers/automatic-subtitles';
 import { createApp } from '../src/aniwatch-apis/src/app';
+import type { ExternalSubtitleSearch } from '../src/shared/externalSubtitles';
 
 const vtt = 'WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nOriginal test caption\n';
 const translated: StreamSubtitle = { id: 'automatic-test', language: 'pt', label: 'Português automático', url: '/api/subtitles/automatic/file/generated', machineTranslated: true, format: 'vtt' };
@@ -19,6 +20,33 @@ function setup() {
 }
 
 describe('automatic subtitle offers and jobs', () => {
+  it('offers the exact OpenSubtitles version selected by the user without suppressing an existing Portuguese option', async () => {
+    const { jobs, load, translator } = setup();
+    vi.mocked(translator.availability).mockResolvedValue({ available: true, sourceLanguages: ['en', '*'], message: 'Multilingual model available' });
+    const input: ExternalSubtitleSearch = { episodeId: 'stremio:all:movie:tt0133093', language: 'es', languages: [{ id: 'es', label: 'Espanhol' }], subtitles: [
+      { id: 'opensubtitles-123', url: '/api/subtitles/file/candidate-123', language: 'es', label: 'Movie QA Forced', release: 'Movie QA Forced', sourceFormat: 'srt', format: 'vtt', provider: 'opensubtitles', downloads: 42 },
+    ] };
+    const offered = await jobs.offerSearch(input);
+    expect(offered.subtitles[0]).toMatchObject({ downloads: 42, release: 'Movie QA Forced', translationToken: expect.any(String) });
+    expect(input.subtitles[0].translationToken).toBeUndefined();
+    expect(load).not.toHaveBeenCalled();
+    const job = jobs.start(offered.subtitles[0].translationToken!);
+    await vi.waitFor(() => expect(jobs.status(job.id).state).toBe('complete'));
+    expect(load).toHaveBeenCalledExactlyOnceWith('/api/subtitles/file/candidate-123');
+    expect(translator.translate).toHaveBeenCalledWith(vtt, 'es');
+  });
+
+  it('explains an unavailable model in search while leaving the original version selectable', async () => {
+    const { jobs, translator } = setup();
+    const input: ExternalSubtitleSearch = { episodeId: 'tatakai:16498:1', language: 'ja', languages: [{ id: 'ja', label: 'Japonês' }], subtitles: [
+      { id: 'opensubtitles-124', url: '/api/subtitles/file/candidate-124', language: 'ja', label: 'Japanese QA', release: 'Japanese QA', sourceFormat: 'srt', format: 'vtt', provider: 'opensubtitles' },
+    ] };
+    expect((await jobs.offerSearch(input)).subtitles[0]).toMatchObject({ translationMessage: expect.stringContaining('modelo local') });
+    expect((await jobs.offerSearch(input)).subtitles[0].translationToken).toBeUndefined();
+    vi.mocked(translator.availability).mockResolvedValue({ available: false, sourceLanguages: [], message: 'Tradutor offline.' });
+    const offline = await jobs.offerSearch(input);
+    expect(offline.subtitles[0]).toMatchObject({ release: 'Japanese QA', translationMessage: 'Tradutor offline.' });
+  });
   it('issues only supported local caption offers and preserves source ownership', async () => {
     const { jobs } = setup();
     const input = playback();

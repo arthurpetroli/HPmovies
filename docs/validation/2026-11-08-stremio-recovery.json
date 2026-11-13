@@ -1,0 +1,202 @@
+{
+  "date": "2026-11-08",
+  "scope": "Reprodução real após reiniciar o addon local Stremio; sem fixtures, interceptação HTTP ou fallback de demonstração.",
+  "directStremio": {
+    "checkedAt": "2026-11-08T05:04:56.538Z",
+    "results": [
+      {
+        "imdb": "tt2560140",
+        "title": "Attack on Titan",
+        "type": "series",
+        "season": 1,
+        "episode": 1,
+        "passed": true,
+        "pageErrorCount": 0,
+        "failedRequestHosts": [
+          "image.tmdb.org"
+        ],
+        "mediaStatuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "fixture": false,
+        "audiovisualIdentityManuallyVerified": false,
+        "requestedTransport": "default",
+        "selectedSource": "BingeBang 2160p · Yildun 4K ULTRA HD\nN/A",
+        "sourceCount": 13,
+        "beforeSeek": {
+          "time": 8.008615,
+          "duration": 1541.9570000000037,
+          "width": 3840,
+          "height": 2160,
+          "frames": 197,
+          "decodedAudioBytes": 131829,
+          "subtitleLanguages": []
+        },
+        "durationMatchesSample": true,
+        "afterSeek": {
+          "time": 94.018708,
+          "error": null
+        },
+        "mobileOverflow": false,
+        "alerts": []
+      },
+      {
+        "imdb": "tt1375666",
+        "title": "Inception",
+        "type": "movie",
+        "passed": true,
+        "pageErrorCount": 0,
+        "failedRequestHosts": [],
+        "mediaStatuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "fixture": false,
+        "audiovisualIdentityManuallyVerified": false,
+        "requestedTransport": "default",
+        "selectedSource": "BingeBang 2160p · Nashira 4K ULTRA HD\nN/A",
+        "sourceCount": 16,
+        "beforeSeek": {
+          "time": 8.01537,
+          "duration": 8888.338251000034,
+          "width": 3840,
+          "height": 1598,
+          "frames": 196,
+          "decodedAudioBytes": 148633,
+          "subtitleLanguages": []
+        },
+        "durationMatchesSample": true,
+        "afterSeek": {
+          "time": 94.00512,
+          "error": null
+        },
+        "mobileOverflow": false,
+        "alerts": []
+      }
+    ]
+  },
+  "nativeAnimeUsingStremio": {
+    "date": "2026-11-08",
+    "animeId": "16498",
+    "episode": 1,
+    "fixture": false,
+    "passed": true,
+    "pageErrorCount": 0,
+    "audiovisualIdentityManuallyVerified": false,
+    "totalSources": 18,
+    "stremioSourceLabels": [
+      "BingeBang 2160p · Yildun 4K ULTRA HD\nN/A · legendas PT-BR",
+      "BingeBang 1080p · Wezen FULL HD\nN/A · legendas PT-BR",
+      "BingeBang 1080p · Aldebaran FULL HD\nN/A · legendas PT-BR",
+      "BingeBang 1080p · Vega FULL HD\nN/A · legendas PT-BR",
+      "BingeBang 1080p · Markab FULL HD\nN/A · legendas PT-BR",
+      "cineruv 1080p · 1080p Pure Studio Master (5.0 Mbps AAC)\nEnglish · legendas PT-BR",
+      "cineruv 1080p · 360p Data Saver\nEnglish · legendas PT-BR",
+      "MovieNerds 1080p · 1080p FHD (Master HLS)\nEnglish · legendas PT-BR",
+      "MovieNerds 1080p · 1080p FHD (Master HLS)\nEnglish · legendas PT-BR",
+      "MovieNerds 1080p · 1080p FHD (Master)\nJapanese · legendas PT-BR",
+      "cineruv N/A · 1080p Studio Master (5.0 Mbps AAC)\nEnglish · legendas PT-BR",
+      "cineruv N/A · 1080p Ultra FHD (Master)\nJapanese · legendas PT-BR",
+      "cineruv N/A · 1080p Studio Master (6.0 Mbps AAC)\nEnglish · legendas PT-BR",
+      "cineruv N/A · 720p HD\nEnglish · legendas PT-BR"
+    ],
+    "selectedSource": "BingeBang 1080p · Wezen FULL HD\nN/A · legendas PT-BR",
+    "episodeIdPreserved": true,
+    "video": {
+      "time": 8.01897,
+      "duration": 1439.285944,
+      "width": 1920,
+      "height": 1080,
+      "frames": 204,
+      "audioBytes": 164600
+    },
+    "activeSourceAfterPlayback": "BingeBang 1080p · Wezen FULL HD\nN/A · legendas PT-BR",
+    "afterSeek": {
+      "time": 94.007591,
+      "error": null
+    },
+    "activeSourceAfterSeek": "BingeBang 1080p · Wezen FULL HD\nN/A · legendas PT-BR",
+    "mobileOverflow": false,
+    "alerts": []
+  },
+  "frameInspection": [
+    {
+      "sample": "tt2560140 T1/E1",
+      "inspected": true,
+      "observation": "Frame aos 94 s mostra personagem com equipamento de manobra em floresta, compatível com Attack on Titan."
+    },
+    {
+      "sample": "tt1375666",
+      "inspected": true,
+      "observation": "Frame aos 94 s mostra a sala japonesa e a abertura de Inception, compatível com o filme solicitado."
+    },
+    {
+      "sample": "tatakai:16498:1",
+      "inspected": true,
+      "observation": "Frame aos 94 s mostra animação de Attack on Titan; o seletor visível permanece em BingeBang Wezen. ID nativo e fonte ativa após seek também foram conferidos."
+    }
+  ],
+  "screenshots": [
+    "/tmp/hpmovies-stremio-live-1794114206397/",
+    "/tmp/hpmovies-native-stremio-recovery-1794114353880/"
+  ],
+  "limitations": [
+    "São três caminhos de amostra: não há garantia de todos os títulos, hosts, idiomas ou nove servidores em todas as consultas.",
+    "Frames amostrados foram inspecionados, mas não houve auditoria do episódio/filme integral nem verificação humana do áudio ou da sincronização de legendas.",
+    "Resolução medida é a saída decodificada e não comprova a resolução nativa da produção original.",
+    "A falha de image.tmdb.org na amostra Stremio de Attack on Titan afetou uma imagem de catálogo; a mídia, o seek e o layout passaram."
+  ],
+  "automaticLifecycle": {
+    "singleCommandDevStartup": true,
+    "addonOwnedByApp": true,
+    "controlledOwnedProcessExitRecovered": true,
+    "recoveryMs": 823,
+    "manifestId": "fmhy-webstream",
+    "manifestVersion": "1.24.1"
+  },
+  "postAutomaticStartupDiscovery": [
+    {
+      "episodeId": "stremio:all:movie:tt1375666",
+      "status": 200,
+      "sources": 17,
+      "stremioBingeBangSources": 8,
+      "isDemo": false
+    },
+    {
+      "episodeId": "tatakai:16498:1",
+      "status": 200,
+      "sources": 20,
+      "stremioBingeBangSources": 5,
+      "isDemo": false
+    }
+  ]
+}

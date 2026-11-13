@@ -87,6 +87,8 @@ export interface StreamSubtitle {
   machineTranslated?: boolean;
   /** Opaque server offer bound to this existing subtitle, never a remote URL. */
   translationToken?: string;
+  /** Explains why a manual subtitle cannot currently use the optional local translator. */
+  translationMessage?: string;
 }
 
 export interface AutomaticSubtitleJob {

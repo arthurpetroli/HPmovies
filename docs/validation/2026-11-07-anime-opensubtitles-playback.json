@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-07",
+  "animeId": "16498",
+  "episode": 1,
+  "fixture": false,
+  "passed": true,
+  "pageErrorCount": 0,
+  "episodeIdPreserved": true,
+  "totalSources": 13,
+  "newServerLabels": [
+    "BingeBang 2160p · Yildun 4K ULTRA HD\nN/A · legendas PT-BR",
+    "BingeBang 1080p · Aldebaran FULL HD\nN/A · legendas PT-BR",
+    "BingeBang 1080p · Vega FULL HD\nN/A · legendas PT-BR",
+    "BingeBang 1080p · Wezen FULL HD\nN/A · legendas PT-BR",
+    "BingeBang 1080p · Markab FULL HD\nN/A · legendas PT-BR",
+    "cineruv 1080p · 1080p Full HD (3.0 Mbps)\nHindi · legendas PT-BR",
+    "cineruv 1080p · 1080p Pure Studio Master (3.0 Mbps AAC)\nEnglish · legendas PT-BR",
+    "MovieNerds 1080p · 1080p FHD (Master)\nJapanese · legendas PT-BR",
+    "cineruv N/A · 1080p Ultra FHD (Master)\nJapanese · legendas PT-BR",
+    "cineruv N/A · 720p HD\nEnglish · legendas PT-BR"
+  ],
+  "selectedSource": "BingeBang 1080p · Wezen FULL HD\nN/A · legendas PT-BR",
+  "video": {
+    "time": 8.008226,
+    "duration": 1439.285944,
+    "width": 1920,
+    "height": 1080,
+    "frames": 204,
+    "audioBytes": 164142
+  },
+  "englishVersions": 14,
+  "videoElementPreserved": true,
+  "positionPreserved": true,
+  "selectedLanguage": "en",
+  "translation": [
+    {
+      "language": "pt",
+      "cues": 324
+    }
+  ],
+  "captionVisible": true,
+  "mobileOverflow": false,
+  "scope": "Live HPmovies anime navigation, FMHY mirror decoding, OpenSubtitles English selection and complete Argos translation of the selected file; no route interception or fixtures.",
+  "limits": [
+    "Only one anime, episode, video source and chosen English release were decoded and translated.",
+    "Eight seconds of playback were sampled; the full episode and spoken language were not audited.",
+    "A visible translated cue does not prove synchronization of every cue with this video release.",
+    "External source counts vary between requests."
+  ],
+  "initialCheckerAttempt": {
+    "passed": false,
+    "failure": "TimeoutError",
+    "reason": "The checker waited for a hidden HTML track element to become visible. The corrected check waits for DOM attachment. No application change was needed.",
+    "path": "/tmp/hpmovies-anime-subtitles-1794061067443/"
+  }
+}

@@ -5,6 +5,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { startSourceHost } = require('../src/aniwatch-apis/src/providers/tatakai-runtime/local-server.cjs');
 const { startOptionalSubtitleTranslator } = require('./start-subtitle-translator.cjs');
+const { startOptionalStremioAddon } = require('./start-optional-stremio.cjs');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const PRODUCTION_ENTRY = 'dist/backend/aniwatch-apis/src/production.js';
@@ -39,6 +40,7 @@ function createProductionRuntime(options = {}) {
   const signals = options.signals || process;
   const exit = options.exit || (code => process.exit(code));
   const resources = [];
+  const controller = new AbortController();
   let stopping = false;
   let exitCode = 0;
   let stopPromise;
@@ -83,6 +85,7 @@ function createProductionRuntime(options = {}) {
   function stop(code = 0) {
     exitCode = Math.max(exitCode, code);
     stopping = true;
+    controller.abort();
     if (stopPromise) return stopPromise;
     const forced = setTimeout(() => {
       logger.error('[produção] Prazo de encerramento excedido. Finalizando esta execução.');
@@ -113,6 +116,9 @@ function createProductionRuntime(options = {}) {
       stage = 'tradutor';
       own(await (options.startTranslator || startOptionalSubtitleTranslator)());
       if (stopping) return;
+      stage = 'addon Stremio local';
+      own(await (options.startStremio || startOptionalStremioAddon)({ env, logger, signal: controller.signal }));
+      if (stopping) return;
       stage = 'fontes';
       const sourcePort = Number(env.HPMOVIES_SOURCE_HOST_PORT || 8099);
       if (!Number.isInteger(sourcePort) || sourcePort < 1 || sourcePort > 65535) throw new Error('INVALID_SOURCE_PORT');
@@ -131,6 +137,7 @@ function createProductionRuntime(options = {}) {
       logger.info(`[produção] HPmovies disponível em ${server.origin}`);
       return { origin: server.origin };
     } catch (error) {
+      if (stopping) return;
       logger.error(failureMessage(stage, error));
       exitCode = 1;
       throw error;

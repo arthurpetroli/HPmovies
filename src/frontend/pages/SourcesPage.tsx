@@ -6,11 +6,13 @@ import { contentService, sourceParams, sourceQuery, sourceSuffix } from '../serv
 import { useCatalogRequest } from '../hooks/useCatalogRequest';
 import { contentLanguageLabel, readingLanguages, readReadingLanguage, saveReadingLanguage, validReadingLanguage } from '../services/readingLanguages';
 import { MangaDownloadButton } from '../components/manga/MangaDownloadButton';
+import { StremioSourceForm } from './StremioSourceForm';
 
 const kinds: Record<ContentKind, string> = { anime: 'Anime', manga: 'Mangá', novel: 'Light novel' };
 
 export function SourcesPage() {
   const [params] = useSearchParams();
+  if (params.get('kind') === 'stremio') return <StremioSourceForm key={params.toString()} />;
   return <SourceForm key={params.toString()} />;
 }
 
@@ -30,6 +32,7 @@ function SourceForm() {
   const key = params.toString();
   return <main id="main-content" className="page-shell content-width">
     <div className="page-heading"><span className="eyebrow">SUAS FONTES DE CONTEÚDO</span><h1>Assista e leia pelas fontes conectadas.</h1><p>Informe o título e seu ID no AniList para consultar episódios e capítulos diretamente, mesmo quando o catálogo estiver em manutenção.</p></div>
+    <Link className="button-secondary mb-6" to="/sources?kind=stremio">Consultar filme, série ou anime pelo IMDb<ArrowRight size={16} aria-hidden="true" /></Link>
     <form className="rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:p-7" onSubmit={event => {
       event.preventDefault();
       const next = new URLSearchParams({ kind, id: id.trim().replace(/^anilist:/, ''), title: title.trim(), open: '1' });

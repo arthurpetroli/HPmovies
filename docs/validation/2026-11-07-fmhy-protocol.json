@@ -1,0 +1,279 @@
+{
+  "date": "2026-11-07",
+  "timezone": "America/Sao_Paulo",
+  "upstream": {
+    "repository": "https://github.com/RisPNG/fmhywebstremio",
+    "revision": "e50be0f870af2d4ba964a04e4009bf979b18668d",
+    "version": "1.24.1",
+    "license": "MIT"
+  },
+  "localPatch": "scripts/fmhy-hpmovies.patch",
+  "network": "live, no fixtures or intercepted routes",
+  "scope": "BingeBang only; startup uses shipped registry in development, each requested stream undergoes upstream runtime validation",
+  "limits": [
+    "Protocol samples do not establish audiovisual identity, spoken language or complete playback.",
+    "Up to nine advertised servers are attempted inside the existing deadline; nine available sources are not guaranteed.",
+    "Quality words inside native server labels are upstream claims.",
+    "Only one selected HLS rendition and the first bytes of one progressive source are sampled per title."
+  ],
+  "samples": [
+    {
+      "sample": "Breaking Bad S01E01",
+      "type": "series",
+      "imdb": "tt0903747",
+      "season": 1,
+      "episode": 1,
+      "status": 200,
+      "elapsedMs": 7627,
+      "diagnostics": null,
+      "count": 8,
+      "sources": [
+        {
+          "label": "BingeBang 2160p · Yildun 4K ULTRA HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 1080p · Wezen FULL HD\nN/A",
+          "format": "file",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 1080p · Aldebaran FULL HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 1080p · Sirius FULL HD\nEnglish",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 1080p · Markab FULL HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 1080p · Nashira FULL HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 720p · Vega FULL HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang N/A · Fomalhaut FULL HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        }
+      ],
+      "hls": {
+        "sourceLabel": "BingeBang 1080p · Aldebaran FULL HD\nN/A",
+        "playlists": [
+          {
+            "status": 200,
+            "bytes": 2974,
+            "cors": "*",
+            "encrypted": false
+          },
+          {
+            "status": 200,
+            "bytes": 296643,
+            "cors": "*",
+            "encrypted": false
+          }
+        ],
+        "durationSeconds": 3486.5247779999645,
+        "segment": {
+          "status": 200,
+          "bytes": 139872,
+          "contentType": "video/mp2t",
+          "cors": "*",
+          "transportStreamSync": true
+        }
+      },
+      "progressive": {
+        "sourceLabel": "BingeBang 1080p · Wezen FULL HD\nN/A",
+        "status": 206,
+        "bytes": 65536,
+        "contentType": "video/mp4",
+        "contentRange": "bytes 0-65535/1439519712",
+        "cors": "*",
+        "firstBox": "ftyp"
+      }
+    },
+    {
+      "sample": "Attack on Titan S01E01",
+      "type": "series",
+      "imdb": "tt2560140",
+      "season": 1,
+      "episode": 1,
+      "status": 200,
+      "elapsedMs": 10560,
+      "diagnostics": "TIMEOUT@stage:protocol:bingebang:bingebang.st:resolver",
+      "count": 4,
+      "sources": [
+        {
+          "label": "BingeBang 2160p · Yildun 4K ULTRA HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 1080p · Aldebaran FULL HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 1080p · Wezen FULL HD\nN/A",
+          "format": "file",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 1080p · Vega FULL HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        }
+      ],
+      "hls": {
+        "sourceLabel": "BingeBang 1080p · Aldebaran FULL HD\nN/A",
+        "playlists": [
+          {
+            "status": 200,
+            "bytes": 2970,
+            "cors": "*",
+            "encrypted": false
+          },
+          {
+            "status": 200,
+            "bytes": 131743,
+            "cors": "*",
+            "encrypted": false
+          }
+        ],
+        "durationSeconds": 1549.7568219999987,
+        "segment": {
+          "status": 200,
+          "bytes": 254364,
+          "contentType": "video/mp2t",
+          "cors": "*",
+          "transportStreamSync": true
+        }
+      },
+      "progressive": {
+        "sourceLabel": "BingeBang 1080p · Wezen FULL HD\nN/A",
+        "status": 206,
+        "bytes": 65536,
+        "contentType": "video/mp4",
+        "contentRange": "bytes 0-65535/333340299",
+        "cors": "*",
+        "firstBox": "ftyp"
+      }
+    },
+    {
+      "sample": "Inception (2010)",
+      "type": "movie",
+      "imdb": "tt1375666",
+      "status": 200,
+      "elapsedMs": 10691,
+      "diagnostics": "TIMEOUT@stage:protocol:bingebang:bingebang.st:resolver",
+      "count": 7,
+      "sources": [
+        {
+          "label": "BingeBang 2160p · Sirius 4K ULTRA HD\nEnglish",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 2160p · Yildun 4K ULTRA HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 2160p · Nashira 4K ULTRA HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 1080p · Wezen FULL HD\nN/A",
+          "format": "file",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 800p · Aldebaran FULL HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang 800p · Vega FULL HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        },
+        {
+          "label": "BingeBang N/A · Fomalhaut FULL HD\nN/A",
+          "format": "hls",
+          "loopbackOrigin": true
+        }
+      ],
+      "hls": {
+        "sourceLabel": "BingeBang 2160p · Sirius 4K ULTRA HD\nEnglish",
+        "playlists": [
+          {
+            "status": 200,
+            "bytes": 5986,
+            "cors": "*",
+            "encrypted": false
+          },
+          {
+            "status": 200,
+            "bytes": 2800162,
+            "cors": "*",
+            "encrypted": false
+          }
+        ],
+        "durationSeconds": 8888.296154000003,
+        "initialization": {
+          "status": 200,
+          "bytes": 935,
+          "firstBox": "ftyp"
+        },
+        "segment": {
+          "status": 200,
+          "bytes": 228424,
+          "contentType": "video/mp4",
+          "cors": "*",
+          "firstBox": "styp",
+          "transportStreamSync": false
+        }
+      },
+      "progressive": {
+        "sourceLabel": "BingeBang 1080p · Wezen FULL HD\nN/A",
+        "status": 206,
+        "bytes": 65536,
+        "contentType": "video/mp4",
+        "contentRange": "bytes 0-65535/2414667149",
+        "cors": "*",
+        "firstBox": "ftyp"
+      }
+    }
+  ],
+  "runtimeChecks": {
+    "listener": "127.0.0.1:7010 only",
+    "launcherFixtureTests": {
+      "files": 1,
+      "passed": 4
+    },
+    "upstreamFocusedTests": {
+      "files": 4,
+      "passed": 58
+    },
+    "upstreamBuild": "passed",
+    "localPatchReverseCheck": "passed",
+    "upstreamDependencyAudit": {
+      "reportedVulnerabilities": 36,
+      "critical": 2,
+      "auditFixApplied": false
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { BookOpen, BookText, CalendarDays, ChevronLeft, ChevronRight, Compass, Flame, History, Home, Library, Play, Radio, Search, Settings2, Sparkles } from 'lucide-react';
+import { BookOpen, BookText, CalendarDays, ChevronLeft, ChevronRight, Compass, Film, Flame, History, Home, Library, Play, Radio, Search, Settings2, Sparkles } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import './navigationRail.css';
 
@@ -7,6 +7,7 @@ const destinations = [
   { to: '/', label: 'Início', icon: Home },
   { to: '/explore?sort=trending', label: 'Em alta', icon: Flame },
   { to: '/explore', label: 'Explorar animes', icon: Compass },
+  { to: '/cinema', label: 'Filmes e séries', icon: Film },
   { to: '/schedule', label: 'Agenda de lançamentos', icon: CalendarDays },
   { to: '/library?tab=history', label: 'Histórico', icon: History },
   { to: '/explore?sort=newest', label: 'Novidades', icon: Sparkles },
@@ -19,7 +20,7 @@ export function NavigationRail({ expanded, onToggle, onSearch, onSettings }: { e
   const { pathname, search } = useLocation();
   const activeDestination = (to: string) => {
     const [path, query] = to.split('?');
-    if (path !== pathname) return false;
+    if (path !== pathname && !(path === '/cinema' && pathname.startsWith('/cinema/'))) return false;
     const current = new URLSearchParams(search);
     if (query) return [...new URLSearchParams(query)].every(([key, value]) => current.get(key) === value);
     if (path === '/explore') return !['trending', 'newest'].includes(current.get('sort') || '');

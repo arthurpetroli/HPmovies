@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, Film, Info, Loader2, Subtitles } from 'lucide-react';
 import type { CatalogAnime, Playback, StreamingAvailability, StreamingEpisode, StreamSource, StreamSubtitle } from '../../shared/providers';
+import type { CinemaTitle } from '../../shared/cinema';
 import { selectWatchEpisode, watchEpisodes, watchPlayback, watchStart } from '../services/watchEntry';
 import { libraryService } from '../services/library';
 import { catalogService } from '../services/catalog';
@@ -15,10 +16,12 @@ import { sourceQuery, sourceSuffix, sourceTitles } from '../services/content';
 import { AutomaticSubtitles } from '../components/player/AutomaticSubtitles';
 import { episodeEnding, episodeIntro } from '../services/intro';
 import { setWatchPreference, useWatchPreferences } from '../services/watchPreferences';
+import { cinemaService } from '../services/cinema';
+import { cinemaForEpisode, stremioWatchIdentity } from '../services/watchCinemaContext';
 import '../watch.css';
 
-interface WatchSession { key: string; playback: Playback; resumeTime: number; anime?: CatalogAnime }
-interface WatchLocation { anime?: CatalogAnime; episode?: StreamingEpisode; autoPlay?: boolean; resume?: boolean; fromSources?: boolean }
+interface WatchSession { key: string; playback: Playback; resumeTime: number; anime?: CatalogAnime; cinema?: CinemaTitle }
+interface WatchLocation { anime?: CatalogAnime; cinema?: CinemaTitle; episode?: StreamingEpisode; autoPlay?: boolean; resume?: boolean; fromSources?: boolean }
 
 export function WatchPage() {
   const params = useParams();
@@ -33,7 +36,9 @@ export function WatchPage() {
     && Number(preferredEpisodeValue) <= 100_000 ? Number(preferredEpisodeValue) : undefined;
   const routeEpisodeId = entryId ? '' : routeId;
   const state = location.state as WatchLocation | null;
-  const suppliedAnime = state?.anime || libraryService.getProgress(routeEpisodeId)?.anime;
+  const stremio = stremioWatchIdentity(routeEpisodeId);
+  const progress = libraryService.getProgress(routeEpisodeId);
+  const suppliedAnime = stremio ? undefined : state?.anime || progress?.anime;
   const animeId = String(entryId || suppliedAnime?.id || /^(?:tatakai|toko):([1-9]\d*):/.exec(routeEpisodeId)?.[1] || '');
   const hasSuppliedAnime = !!suppliedAnime;
   const catalogLoader = useCallback(() => animeId && !hasSuppliedAnime ? catalogService.details(animeId) : Promise.resolve(null), [animeId, hasSuppliedAnime]);
@@ -44,11 +49,34 @@ export function WatchPage() {
   const titleHints = requestQuery.titles?.length ? requestQuery.titles : rememberedTitles.length ? rememberedTitles
     : state?.anime ? [state.anime.title, state.anime.titleOriginal || ''].filter(Boolean)
     : entryId && anime ? [anime.title, anime.titleOriginal || ''].filter(Boolean) : [];
-  const hints = sourceSuffix({ ...requestQuery, titles: titleHints });
-  const listTitleKey = JSON.stringify(titleHints.length ? titleHints : [anime?.title, anime?.titleOriginal].filter(Boolean));
+  const hintParams = new URLSearchParams(sourceSuffix({ ...requestQuery, titles: titleHints }));
+  for (const key of ['origin', 'cinema', 'catalog']) if (query.get(key)) hintParams.set(key, query.get(key)!);
+  const hints = hintParams.size ? `?${hintParams}` : '';
+  // Explicit coercion keeps the request key immutable for the React compiler.
+  const listTitleKey = String(JSON.stringify(titleHints.length ? titleHints : [anime?.title, anime?.titleOriginal].filter(Boolean)));
   const indexEnabled = !!animeId && (listTitleKey !== '[]' || !catalog.loading);
   const episodesLoader = useCallback(() => indexEnabled ? watchEpisodes(animeId, JSON.parse(listTitleKey) as string[], episodeAttempt > 0) : Promise.resolve(null), [indexEnabled, animeId, listTitleKey, episodeAttempt]);
   const episodeList = useCatalogRequest(`watch-episodes:${animeId}:${listTitleKey}:${indexEnabled}:${episodeAttempt}`, episodesLoader);
+  const cinemaId = stremio?.imdb || '';
+  const cinemaType = stremio?.type;
+  const cinemaLoader = useCallback(async () => {
+    if (!cinemaId || !cinemaType) return null;
+    const details = await cinemaService.details(cinemaType, cinemaId);
+    const checkedAt = Date.now();
+    return { ...details, episodes: details.episodes.map(episode => ({ ...episode,
+      ...(episode.released && new Date(episode.released).getTime() > checkedAt ? { available: false } : {}),
+    })) };
+  }, [cinemaId, cinemaType]);
+  const cinemaMetadata = useCatalogRequest(`watch-cinema:${cinemaType}:${cinemaId}:${episodeAttempt}`, cinemaLoader);
+  const cinema = cinemaForEpisode(routeEpisodeId, cinemaMetadata.data, state?.cinema, progress?.cinema);
+  const cinemaSeriesId = stremio?.type === 'series' ? stremio.imdb : '';
+  const cinemaProvider = stremio?.provider || 'all';
+  const cinemaEpisodes = { ...cinemaMetadata, data: cinemaMetadata.data?.type === 'series' ? {
+    available: false, state: 'unavailable' as const, message: 'Índice do Cinemeta. O vídeo é consultado ao abrir cada episódio.', episodes: cinemaMetadata.data.episodes.map(episode => ({
+      id: `stremio:${cinemaProvider}:${cinemaId}:${episode.season}:${episode.episode}`,
+      number: episode.episode, title: `T${episode.season} · ${episode.title}`, thumbnail: episode.thumbnail,
+      ...(episode.available === false ? { available: false } : {}),
+    })) } : null };
   const startEnabled = !!entryId && indexEnabled;
   const entryLoader = useCallback(() => startEnabled ? watchStart(animeId, JSON.parse(listTitleKey) as string[], episodeAttempt > 0, preferredEpisode) : Promise.resolve(null), [startEnabled, animeId, listTitleKey, episodeAttempt, preferredEpisode]);
   const entry = useCatalogRequest(`watch-start:${animeId}:${listTitleKey}:${startEnabled}:${episodeAttempt}:${preferredEpisode}`, entryLoader);
@@ -64,9 +92,13 @@ export function WatchPage() {
     });
   }, [entryId, selected, hints, anime, state?.autoPlay, navigate]);
 
+  useEffect(() => {
+    if (cinema) libraryService.updateCinemaMetadata(cinema.id, cinema.type, cinema);
+  }, [cinema]);
+
   // One route component keeps the stage mounted during entry and episode changes.
-  return <WatchEpisode episodeId={episodeId} context={context} hints={hints} anime={anime} entryMode={!!entryId}
-    entryError={entryError} episodeList={{ ...episodeList, loading: !!entryId && !indexEnabled || episodeList.loading }}
+  return <WatchEpisode episodeId={episodeId} context={context} hints={hints} anime={anime} cinema={cinema} entryMode={!!entryId}
+    entryError={entryError} episodeList={cinemaSeriesId ? cinemaEpisodes : { ...episodeList, loading: !!entryId && !indexEnabled || episodeList.loading }}
     onRetryEpisodes={() => setEpisodeAttempt(value => value + 1)} />;
 }
 
@@ -75,13 +107,14 @@ interface WatchEpisodeProps {
   context: WatchLocation | null;
   hints: string;
   anime?: CatalogAnime;
+  cinema?: CinemaTitle;
   entryMode: boolean;
   entryError: string;
   episodeList: { data: StreamingAvailability | null; loading: boolean; error: string };
   onRetryEpisodes: () => void;
 }
 
-function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError, episodeList, onRetryEpisodes }: WatchEpisodeProps) {
+function WatchEpisode({ episodeId, context, hints, anime, cinema, entryMode, entryError, episodeList, onRetryEpisodes }: WatchEpisodeProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const playerRef = useRef<VideoPlayerHandle>(null);
@@ -90,6 +123,7 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
   const [session, setSession] = useState<WatchSession | null>(null);
   const [source, setSource] = useState<StreamSource | null>(null);
   const [captionStatus, setCaptionStatus] = useState({ sourceUrl: '', machineTranslated: false });
+  const [externalCaptions, setExternalCaptions] = useState<{ episodeId: string; tracks: StreamSubtitle[]; selectedId?: string }>({ episodeId: '', tracks: [] });
   const [result, setResult] = useState({ key: '', error: '' });
   const [attempt, setAttempt] = useState(0);
   const [sourceAttempt, setSourceAttempt] = useState(0);
@@ -100,6 +134,7 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
   const subtitleRefreshRef = useRef<{ episodeId: string; position: number; playRequested: boolean } | null>(null);
   const { autoNext, autoSkipIntro } = useWatchPreferences();
   const sourceEpisode = /^(tatakai|toko):([1-9]\d*):(\d+(?:\.\d+)?)$/.exec(episodeId);
+  const stremio = stremioWatchIdentity(episodeId);
   const titleKey = JSON.stringify(sourceQuery(new URLSearchParams(hints)).titles);
   const episodes = episodeList.data?.episodes || [];
   const requestKey = `${episodeId}:${hints}:${attempt}`;
@@ -108,23 +143,37 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
   const playback = session?.playback;
   const ready = !loading && !error && session?.key === requestKey && !!source;
   const navigationAutoPlay = context?.autoPlay === true && window.history.state?.usr?.autoPlay === true;
-  const initialIntentRef = useRef({ key: requestKey, autoPlay: navigationAutoPlay, resume: context?.resume === true, anime });
+  const initialIntentRef = useRef({ key: requestKey, autoPlay: navigationAutoPlay, resume: context?.resume === true, anime, cinema });
   useLayoutEffect(() => {
-    if (initialIntentRef.current.key !== requestKey) initialIntentRef.current = { key: requestKey, autoPlay: navigationAutoPlay, resume: context?.resume === true, anime };
-  }, [requestKey, context, anime, navigationAutoPlay]);
+    if (initialIntentRef.current.key !== requestKey) initialIntentRef.current = { key: requestKey, autoPlay: navigationAutoPlay, resume: context?.resume === true, anime, cinema };
+  }, [requestKey, context, anime, cinema, navigationAutoPlay]);
   const incoming = context?.episode?.id === episodeId ? context.episode : episodes.find(episode => episode.id === episodeId);
   const displayedEpisode = ready && playback ? {
     ...playback.episode,
     title: /^Episódio \d+(?:\.\d+)?$/.test(playback.episode.title) ? incoming?.title || playback.episode.title : playback.episode.title,
     thumbnail: playback.episode.thumbnail || incoming?.thumbnail,
   } : incoming;
-  const displayedTitle = displayedEpisode?.title || (sourceEpisode ? `Episódio ${sourceEpisode[3]}` : episodeId === 'demo' ? 'Demonstração do player' : 'Episódio');
-  const artwork = displayedEpisode?.thumbnail || anime?.banner || anime?.poster;
+  const queryTitle = sourceQuery(new URLSearchParams(hints)).titles?.[0];
+  const cinemaTitle = cinema?.title || queryTitle;
+  const displayedTitle = stremio ? stremio.type === 'movie' ? cinemaTitle || 'Filme' : `${cinemaTitle || 'Série'} · Temporada ${stremio.season}, episódio ${stremio.episode}`
+    : displayedEpisode?.title || (sourceEpisode ? `Episódio ${sourceEpisode[3]}` : episodeId === 'demo' ? 'Demonstração do player' : 'Episódio');
+  const artwork = displayedEpisode?.thumbnail || anime?.banner || cinema?.background || anime?.poster || cinema?.poster;
+  const artworkFallback = anime?.poster || cinema?.poster;
   const sourceBack = new URLSearchParams(hints);
   if (sourceEpisode) { sourceBack.set('kind', 'anime'); sourceBack.set('id', sourceEpisode[2]); sourceBack.set('episode', sourceEpisode[3]); }
   const returnToSources = context?.fromSources || !!sourceQuery(new URLSearchParams(hints)).source;
-  const backPath = returnToSources && sourceEpisode ? `/sources?${sourceBack}` : anime ? `/anime/${encodeURIComponent(anime.id)}` : sourceEpisode ? `/sources?${sourceBack}` : '/explore';
-  const backLabel = returnToSources && sourceEpisode ? 'Voltar às fontes' : anime ? 'Voltar ao anime' : sourceEpisode ? 'Voltar às fontes' : 'Voltar ao catálogo';
+  const navigationParams = new URLSearchParams(hints);
+  const cinemaBack = new URLSearchParams(navigationParams.get('catalog') || '');
+  if (stremio?.type === 'series' && !cinemaBack.has('season')) cinemaBack.set('season', stremio.season);
+  if (stremio) {
+    sourceBack.set('kind', 'stremio'); sourceBack.set('type', stremio.type); sourceBack.set('imdb', stremio.imdb);
+    if (stremio.type === 'series') { sourceBack.set('season', stremio.season); sourceBack.set('episode', stremio.episode); }
+    sourceBack.delete('origin'); sourceBack.delete('cinema'); sourceBack.delete('catalog');
+  }
+  const fromCinema = !!stremio && (navigationParams.get('cinema') === stremio.type || context?.cinema?.id === stremio.imdb && navigationParams.get('origin') !== 'stremio');
+  const backPath = stremio ? fromCinema ? `/cinema/${stremio.type}/${stremio.imdb}${cinemaBack.size ? `?${cinemaBack}` : ''}` : `/sources?${sourceBack}`
+    : returnToSources && sourceEpisode ? `/sources?${sourceBack}` : anime ? `/anime/${encodeURIComponent(anime.id)}` : sourceEpisode ? `/sources?${sourceBack}` : '/explore';
+  const backLabel = stremio ? fromCinema ? 'Voltar aos detalhes' : 'Voltar às fontes' : returnToSources && sourceEpisode ? 'Voltar às fontes' : anime ? 'Voltar ao anime' : sourceEpisode ? 'Voltar às fontes' : 'Voltar ao catálogo';
 
   useLayoutEffect(() => {
     // Navigation intent is consumed once. Reloads/history must resume progress,
@@ -152,7 +201,7 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
       const startAutomatically = refreshed?.playRequested ?? intent.autoPlay;
       intent.autoPlay = false;
       subtitleRefreshRef.current = null;
-      setSession({ key: requestKey, playback: value, anime: intent.anime, resumeTime: refreshed?.position ?? ((!startAutomatically || intent.resume) && previous && !previous.completed ? previous.currentTime : 0) });
+      setSession({ key: requestKey, playback: value, anime: intent.anime, cinema: intent.cinema, resumeTime: refreshed?.position ?? ((!startAutomatically || intent.resume) && previous && !previous.completed ? previous.currentTime : 0) });
       setSource(orderedPlaybackSources(value)[0]);
       setSourceAttempt(value => value + 1);
       failedSourcesRef.current.clear();
@@ -180,8 +229,15 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
     if (!session) return;
     const sessionAnimeId = /^(?:tatakai|toko):([1-9]\d*):/.exec(session.playback.episode.id)?.[1];
     const progressAnime = session.anime || (anime?.id === sessionAnimeId ? anime : undefined);
-    libraryService.saveProgress({ episodeId: session.playback.episode.id, title: session.playback.episode.title, anime: progressAnime, currentTime, duration });
-  }, [session, anime]);
+    const identity = stremioWatchIdentity(session.playback.episode.id);
+    const progressCinema = cinemaForEpisode(session.playback.episode.id, cinema, session.cinema);
+    const episodeNumber = identity?.type === 'series' ? Number(identity.episode) : session.playback.episode.number
+      ?? (sessionAnimeId ? Number(session.playback.episode.id.split(':')[2]) : undefined);
+    libraryService.saveProgress({ episodeId: session.playback.episode.id,
+      title: progressCinema?.title || (identity ? cinemaTitle || (identity.type === 'movie' ? 'Filme' : 'Série') : session.playback.episode.title),
+      anime: progressAnime, cinema: progressCinema, episodeNumber, season: identity?.type === 'series' ? Number(identity.season) : undefined,
+      isDemo: session.playback.isDemo, currentTime, duration });
+  }, [session, anime, cinema, cinemaTitle]);
   const sourceUrl = source?.url ?? '';
   const playingEpisodeId = playback?.episode.id || episodeId;
   const resolveIntro = useCallback((duration: number, signal: AbortSignal) => episodeIntro(playingEpisodeId, duration, signal), [playingEpisodeId]);
@@ -198,7 +254,7 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
   }, [nextId, titleKey]);
   const navigateEpisode = (episode: StreamingEpisode) => {
     if (episode.id === episodeId || episode.available === false) return;
-    navigate(`/watch/${encodeURIComponent(episode.id)}${hints}`, { state: { anime, episode, autoPlay: true, fromSources: context?.fromSources } });
+    navigate(`/watch/${encodeURIComponent(episode.id)}${hints}`, { state: { anime, cinema, episode, autoPlay: true, fromSources: context?.fromSources } });
   };
   const goToNextEpisode = () => {
     // BrowserRouter updates the URL before React commits the next episode.
@@ -211,7 +267,9 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
     const machineTranslated = subtitle?.machineTranslated === true;
     setCaptionStatus(previous => previous.sourceUrl === sourceUrl && previous.machineTranslated === machineTranslated
       ? previous : { sourceUrl, machineTranslated });
-  }, [sourceUrl]);
+    setExternalCaptions(previous => previous.episodeId === episodeId && previous.selectedId !== (subtitle?.id ?? 'off')
+      ? { ...previous, selectedId: subtitle?.id ?? 'off' } : previous);
+  }, [sourceUrl, episodeId]);
 
   const recoverSource = useCallback((failure: VideoSourceError) => {
     if (!session || !source || session.key !== requestKey) return;
@@ -245,7 +303,9 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
     setAttempt(value => value + 1);
   };
   const addAutomaticSubtitle = (track: StreamSubtitle) => {
-    if (!session || !source) return;
+    if (!ready || session?.key !== requestKey || !source) return;
+    setExternalCaptions(previous => ({ episodeId, selectedId: track.id,
+      tracks: [track, ...(previous.episodeId === episodeId ? previous.tracks : []).filter(item => item.id !== track.id)] }));
     const tracks = [track, ...subtitlesForSource(session.playback, source).filter(item => item.id !== track.id)];
     const updatedSource = { ...source, subtitles: tracks };
     setSession({ ...session, playback: { ...session.playback,
@@ -255,7 +315,18 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
     setSource(updatedSource);
     playerRef.current?.selectSubtitle(track);
   };
-  const activeSubtitles = playback && source ? subtitlesForSource(playback, source) : [];
+  const addExternalSubtitle = (track: StreamSubtitle) => {
+    if (!ready || session?.key !== requestKey || !source) return;
+    setExternalCaptions(previous => ({ episodeId, selectedId: track.id,
+      tracks: [track, ...(previous.episodeId === episodeId ? previous.tracks : []).filter(item => item.id !== track.id)] }));
+    playerRef.current?.selectSubtitle(track);
+  };
+  const episodeExternalCaptions = externalCaptions.episodeId === episodeId ? externalCaptions : undefined;
+  // A manual external subtitle belongs to this episode, including its mirrors.
+  // Native source tracks remain scoped to the source that supplied them.
+  const activeSubtitles = [...new Map([
+    ...(playback && source ? subtitlesForSource(playback, source) : []), ...(episodeExternalCaptions?.tracks ?? []),
+  ].map(track => [track.id, track])).values()];
   const portugueseRank = Math.min(4, ...activeSubtitles.map(track => portugueseCaptionRank(track.language)));
   const portugueseAlternative = playback ? orderedPlaybackSources(playback).find(item => item.url !== source?.url
     && subtitlesForSource(playback, item).some(track => portugueseCaptionRank(track.language) < 4)) : undefined;
@@ -263,30 +334,32 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
   const audioLabel = activeAudio ? ({ ja: 'Japonês', en: 'Inglês', 'pt-BR': 'Português brasileiro', pt: 'Português' } as Record<string, string>)[activeAudio] || activeAudio : '';
 
   return <main id="main-content" className="watch-page">
-    {anime && <div className="watch-backdrop" aria-hidden="true"><WatchArtwork image={anime.banner} fallback={anime.poster} /></div>}
+    {(anime || cinema) && <div className="watch-backdrop" aria-hidden="true"><WatchArtwork image={anime?.banner || cinema?.background} fallback={artworkFallback} /></div>}
     <div className="watch-layout">
       <div className="watch-screen" ref={screenRef}>
         <div className="watch-stage" ref={stageRef} aria-busy={loading && !error} aria-label="Área de reprodução">
           {session && source ? <VideoPlayer ref={playerRef} key={`${session.key}:${source.url}:${sourceAttempt}`} source={source}
-            fullscreenContainerRef={stageRef} suspended={!ready} autoSkipIntro={autoSkipIntro} poster={session.playback.episode.thumbnail || anime?.banner || anime?.poster}
-            subtitles={activeSubtitles} intro={source.url === session.playback.sources[0]?.url ? session.playback.intro : undefined}
+            fullscreenContainerRef={stageRef} suspended={!ready} autoSkipIntro={autoSkipIntro} poster={artwork}
+            subtitles={activeSubtitles} episodeId={/^(?:toko|tatakai|stremio):/.test(episodeId) ? episodeId : undefined}
+            initialSubtitleId={episodeExternalCaptions?.selectedId} onExternalSubtitleSelect={addExternalSubtitle}
+            intro={source.url === session.playback.sources[0]?.url ? session.playback.intro : undefined}
             introResolver={resolveIntro} ending={source.url === session.playback.sources[0]?.url ? session.playback.ending : undefined}
             endingResolver={nextId ? resolveEnding : undefined} onNextEpisode={nextId ? goToNextEpisode : undefined}
             onPrepareNextEpisode={nextId ? prepareNextEpisode : undefined}
             onEnded={autoNext && nextId ? goToNextEpisode : undefined} initialTime={session.resumeTime} onProgress={saveProgress}
             onSourceError={recoverSource} onSourcePlaying={() => setRecoveryNotice(null)} onSubtitleChange={updateCaptionStatus} autoPlay={continuePlaying} />
-            : <WatchArtwork image={artwork} fallback={anime?.poster} />}
+            : <WatchArtwork image={artwork} fallback={artworkFallback} />}
           {!ready && <div className={`watch-transition${error ? ' is-error' : ''}`}>
-            <WatchArtwork image={artwork} fallback={anime?.poster} />
+            <WatchArtwork image={artwork} fallback={artworkFallback} />
             {error ? <><Film size={28} aria-hidden="true" /><h2>{episodeId === 'demo' ? 'Não foi possível preparar o player' : 'Episódio indisponível'}</h2><p role="alert">{error}</p><button className="button-primary" onClick={() => episodeId ? setAttempt(value => value + 1) : onRetryEpisodes()}>Tentar novamente</button></>
-              : <><Loader2 size={32} className="animate-spin" aria-hidden="true" /><span role="status">{incoming?.number != null ? `Preparando episódio ${incoming.number}…` : 'Abrindo episódio…'}</span><small>{anime?.title || displayedTitle}</small></>}
+              : <><Loader2 size={32} className="animate-spin" aria-hidden="true" /><span role="status">{stremio?.type === 'movie' ? 'Abrindo filme…' : incoming?.number != null ? `Preparando episódio ${incoming.number}…` : 'Abrindo episódio…'}</span><small>{anime?.title || displayedTitle}</small></>}
           </div>}
         </div>
         <div className="watch-transport">
           <label className="watch-autonext"><input type="checkbox" checked={autoNext} onChange={event => setWatchPreference('autoNext', event.target.checked)} />Avançar ao terminar</label>
           <nav className="watch-navigation" aria-label="Navegação entre episódios">
-            {previousId && <Link to={`/watch/${encodeURIComponent(previousId)}${hints}`} state={{ anime, episode: episodes.find(item => item.id === previousId), autoPlay: true }}><ArrowLeft size={15} aria-hidden="true" />Episódio anterior</Link>}
-            {nextId && <Link to={`/watch/${encodeURIComponent(nextId)}${hints}`} state={{ anime, episode: nextEpisode, autoPlay: true }} onPointerEnter={prepareNextEpisode} onFocus={prepareNextEpisode} onClick={event => {
+            {previousId && <Link to={`/watch/${encodeURIComponent(previousId)}${hints}`} state={{ anime, cinema, episode: episodes.find(item => item.id ===previousId), autoPlay: true }}><ArrowLeft size={15} aria-hidden="true" />Episódio anterior</Link>}
+            {nextId && <Link to={`/watch/${encodeURIComponent(nextId)}${hints}`} state={{ anime, cinema, episode: nextEpisode, autoPlay: true }} onPointerEnter={prepareNextEpisode} onFocus={prepareNextEpisode} onClick={event => {
               if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
               event.preventDefault(); goToNextEpisode();
             }}>Próximo episódio<ArrowRight size={15} aria-hidden="true" /></Link>}
@@ -304,9 +377,9 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
           </>}
         </div>}
       </div>
-      <aside className="watch-sidebar"><WatchEpisodeList episodes={episodes} currentEpisodeId={episodeId} anime={anime} hints={hints}
+      <aside className="watch-sidebar">{stremio?.type === 'movie' ? <section className="rounded-xl border border-white/10 p-5"><h2 className="font-semibold text-white">Filme completo</h2><p className="mt-3 text-sm leading-relaxed text-slate-400">{cinemaTitle || 'Filme'}</p><Link className="button-secondary mt-5" to={backPath}><ArrowLeft size={16} aria-hidden="true" />{backLabel}</Link></section> : <WatchEpisodeList episodes={episodes} currentEpisodeId={episodeId} anime={anime} hints={hints}
         loading={episodeList.loading} error={episodeList.error || (episodeList.data?.state === 'connection_error' ? episodeList.data.message || 'Não foi possível carregar a lista.' : '')}
-        onRetry={onRetryEpisodes} onNavigate={navigateEpisode} /></aside>
+        onRetry={onRetryEpisodes} onNavigate={navigateEpisode} />}</aside>
       <section className="watch-details">
         <p className="watch-episode-label"><Film size={14} aria-hidden="true" />{playback?.isDemo ? 'Demonstração do player' : displayedEpisode?.number != null ? `Episódio ${displayedEpisode.number}` : 'Agora assistindo'}</p>
         <h1>{displayedTitle}</h1>
@@ -341,7 +414,7 @@ function WatchEpisode({ episodeId, context, hints, anime, entryMode, entryError,
             const rank = Math.min(4, ...subtitlesForSource(playback, item).map(track => portugueseCaptionRank(track.language)));
             return <option key={`${item.url}:${index}`} value={item.url}>{item.label ?? (item.type === 'hls' ? 'HLS · qualidade automática' : 'MP4 · original')}{rank === 0 ? ' · legendas PT-BR' : rank < 4 ? ' · legendas em português' : ''}</option>;
           })}</select></label>
-          <AutomaticSubtitles key={source.url} tracks={activeSubtitles} onReady={addAutomaticSubtitle} />
+          <AutomaticSubtitles key={episodeId} tracks={activeSubtitles} selectedTrackId={episodeExternalCaptions?.selectedId} onReady={addAutomaticSubtitle} />
           {captionStatus.sourceUrl === source.url && captionStatus.machineTranslated && <p role="status" aria-atomic="true" className="mt-4 rounded-lg bg-white/5 p-3 text-xs leading-relaxed text-slate-300">Tradução automática: pode conter erros.</p>}
           <div className="mt-6 border-t border-white/10 pt-5"><h3 className="text-xs font-semibold text-slate-300">Controles rápidos</h3><dl className="mt-3 space-y-3 text-xs text-slate-500"><div className="flex justify-between gap-4"><dt>Reproduzir / pausar</dt><dd className="text-slate-300">Espaço ou K</dd></div><div className="flex justify-between gap-4"><dt>Avançar / voltar 10s</dt><dd className="text-slate-300">← / →</dd></div><div className="flex justify-between gap-4"><dt>Tela cheia / som</dt><dd className="text-slate-300">F / M</dd></div></dl><p className="mt-3 text-[11px] leading-relaxed text-slate-600">Os atalhos funcionam com o foco no player.</p></div>
           <div className="mt-6 rounded-lg bg-white/5 p-3 text-xs leading-relaxed text-slate-400">Seu progresso é salvo neste navegador. Use a página inicial para continuar assistindo depois.</div>

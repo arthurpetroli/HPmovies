@@ -76,6 +76,7 @@ export function AnimeDetailsPage() {
   const links = (anime.externalLinks || []).filter((link) => /^https:\/\//i.test(link.url));
   const seasons = (anime.relations || []).filter((relation) => relation.anime.id !== anime.id);
   const firstEpisode = availability?.episodes.find(episode => episode.available !== false);
+  const otherSources = new URLSearchParams({ type: anime.format === 'MOVIE' ? 'movie' : 'series', q: (anime.title.trim() || anime.titleOriginal?.trim() || '').slice(0, 120) });
   const season = [anime.season ? seasonLabels[anime.season] || anime.season : '', anime.year].filter(Boolean).join(' de ');
   const facts = [
     ['Formato', anime.format ? formatLabels[anime.format] || anime.format.replaceAll('_', ' ') : 'Não informado'],
@@ -106,7 +107,9 @@ export function AnimeDetailsPage() {
           <div className="anime-details-cover"><AnimeArtwork key={anime.id} anime={anime} /></div>
           <div className={`anime-details-actions${firstEpisode ? '' : ' has-no-watch'}`}>
             {firstEpisode && <AnimeWatchLink anime={anime} className="anime-details-watch"><Play size={18} fill="currentColor" aria-hidden="true" />Assistir agora</AnimeWatchLink>}
+            {!firstEpisode && anime.status !== 'NOT_YET_RELEASED' && <AnimeWatchLink anime={anime} className="anime-details-watch"><Play size={18} aria-hidden="true" />Consultar fontes e assistir</AnimeWatchLink>}
             <div className="anime-details-save-actions"><button type="button" onClick={() => libraryService.toggle(anime)} aria-pressed={!!entry}>{entry ? <Check size={17} aria-hidden="true" /> : <Bookmark size={17} aria-hidden="true" />}{entry ? 'Na minha lista' : 'Adicionar à lista'}</button><button type="button" className={entry?.favorite ? 'is-favorite' : ''} onClick={() => libraryService.toggleFavorite(anime)} aria-pressed={!!entry?.favorite} aria-label={entry?.favorite ? 'Remover dos favoritos' : 'Favoritar'} title={entry?.favorite ? 'Remover dos favoritos' : 'Favoritar'}><Heart size={18} fill={entry?.favorite ? 'currentColor' : 'none'} aria-hidden="true" /></button></div>
+            <Link className="button-secondary col-span-full text-center" to={`/cinema?${otherSources}`}>Buscar em outras fontes</Link>
           </div>
           <section className="anime-details-facts" aria-labelledby="anime-facts-heading"><h2 id="anime-facts-heading">Informações do anime</h2><dl>{facts.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>
         </aside>

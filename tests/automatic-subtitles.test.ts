@@ -125,3 +125,78 @@ describe('local automatic subtitle provider', () => {
     expect(() => new AutomaticSubtitleProvider({ baseUrl: 'http://[::1]:5000' })).not.toThrow();
   });
 });
+
+describe('optional multilingual local model', () => {
+  const tags = { models: [{ name: 'qwen3.5:9b' }] };
+  const generated = (translations: unknown[]) => ({ done: true, done_reason: 'stop', response: JSON.stringify({ translations }) });
+
+  it('translates another language with exact IDs and original cue timing when the local model exists', async () => {
+    const fetcher = vi.fn(async (raw: string | URL | Request, init?: RequestInit) => {
+      const url = String(raw);
+      if (url.endsWith('/languages')) throw new Error('Argos unavailable');
+      if (url.endsWith('/api/tags')) return response(tags);
+      const body = JSON.parse(init!.body as string);
+      expect(body).toMatchObject({ model: 'qwen3.5:9b', stream: false, think: false });
+      expect(JSON.parse(body.prompt)).toMatchObject({ sourceLanguage: 'es', targetLanguage: 'pt-BR' });
+      expect(body.prompt).not.toContain('-->');
+      return response(generated([{ id: 1, text: 'Até amanhã.' }, { id: 0, text: 'Olá.' }]));
+    });
+    const provider = new AutomaticSubtitleProvider({ enabled: true, ollamaEnabled: true, fetcher });
+    expect(await provider.availability()).toMatchObject({ available: true, sourceLanguages: ['*'] });
+    const track = await provider.translate('WEBVTT\n\n00:01.000 --> 00:03.000\nHola.\n\n00:04.000 --> 00:06.000\nHasta mañana.\n', 'es');
+    const body = new TextDecoder().decode(provider.file(track.url.split('/').at(-1)!).bytes);
+    expect(body).toBe('WEBVTT\n\n00:01.000 --> 00:03.000\nOlá.\n\n00:04.000 --> 00:06.000\nAté amanhã.\n');
+    expect(track.machineTranslated).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps the installed English model preferred and never calls generation for it', async () => {
+    const fetcher = vi.fn(async (raw: string | URL | Request) => String(raw).endsWith('/languages') ? response(languages)
+      : String(raw).endsWith('/api/tags') ? response(tags) : response({ translatedText: ['Olá.'] }));
+    const provider = new AutomaticSubtitleProvider({ enabled: true, ollamaEnabled: true, fetcher });
+    await provider.translate(sample, 'en');
+    expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/api/generate'))).toBe(false);
+    expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/translate'))).toBe(true);
+  });
+
+  it('does not advertise an absent model or download a model on request', async () => {
+    const fetcher = vi.fn(async (raw: string | URL | Request) => String(raw).endsWith('/languages') ? response(languages) : response({ models: [{ name: 'another-model' }] }));
+    const provider = new AutomaticSubtitleProvider({ enabled: true, ollamaEnabled: true, fetcher });
+    expect(await provider.availability()).toMatchObject({ available: true, sourceLanguages: ['en'] });
+    await expect(provider.translate(sample, 'es')).rejects.toMatchObject({ code: 'AUTOMATIC_SUBTITLE_UNSUPPORTED' });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls.every(([url]) => !String(url).endsWith('/api/pull'))).toBe(true);
+  });
+
+  it('rejects missing, repeated, foreign IDs and truncated generation instead of returning a partial subtitle', async () => {
+    for (const output of [generated([]), generated([{ id: 1, text: 'Errado.' }]), generated([{ id: 0, text: 'Olá.' }, { id: 0, text: 'Duplicado.' }]), { ...generated([{ id: 0, text: 'Olá.' }]), done_reason: 'length' }]) {
+      const fetcher = vi.fn(async (raw: string | URL | Request) => String(raw).endsWith('/languages') ? response([])
+        : String(raw).endsWith('/api/tags') ? response(tags) : response(output));
+      const provider = new AutomaticSubtitleProvider({ enabled: true, ollamaEnabled: true, fetcher });
+      await expect(provider.translate(sample, 'fr')).rejects.toMatchObject({ code: 'AUTOMATIC_SUBTITLE_INVALID_RESPONSE' });
+    }
+  });
+
+  it('keeps multilingual generation to one job and detects unspecified source language locally', async () => {
+    let finish: ((result: Response) => void) | undefined;
+    const fetcher = vi.fn(async (raw: string | URL | Request, init?: RequestInit) => {
+      if (String(raw).endsWith('/languages')) return response([]);
+      if (String(raw).endsWith('/api/tags')) return response(tags);
+      expect(JSON.parse(JSON.parse(init!.body as string).prompt).sourceLanguage).toBe('auto-detect');
+      return new Promise<Response>(resolve => { finish = resolve; });
+    });
+    const provider = new AutomaticSubtitleProvider({ enabled: true, ollamaEnabled: true, fetcher });
+    const first = provider.translate(sample, 'und');
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    await expect(provider.translate(sample.replace(/Hello/g, 'Welcome'), 'es')).rejects.toMatchObject({ code: 'AUTOMATIC_SUBTITLE_BUSY' });
+    finish!(response(generated([{ id: 0, text: 'Olá.' }])));
+    await expect(first).resolves.toMatchObject({ machineTranslated: true });
+  });
+
+  it('refuses public Ollama destinations and operator model strings with whitespace', () => {
+    for (const ollamaBaseUrl of ['https://ollama.example', 'http://127.0.0.1:11434/api', 'http://user:secret@localhost:11434']) {
+      expect(() => new AutomaticSubtitleProvider({ ollamaBaseUrl })).toThrow('serviço local');
+    }
+    expect(() => new AutomaticSubtitleProvider({ ollamaModel: 'model with spaces' })).toThrow('Modelo local');
+  });
+});

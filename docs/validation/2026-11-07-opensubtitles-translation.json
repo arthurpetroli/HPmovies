@@ -1,0 +1,68 @@
+{
+  "date": "2026-11-07",
+  "timezone": "America/Sao_Paulo",
+  "scope": "Live local multilingual model checks with short synthetic subtitle text; not an OpenSubtitles download or a complete episode.",
+  "interceptedNetwork": false,
+  "model": "qwen3.5:9b",
+  "engine": "Ollama local, previously installed model",
+  "modelDownloadedByThisChange": false,
+  "samples": [
+    {
+      "sourceLanguage": "es",
+      "targetLanguage": "pt-BR",
+      "inputCues": 3,
+      "outputCues": 3,
+      "allIntervalsPreserved": true,
+      "machineTranslated": true,
+      "elapsedMs": 65179,
+      "modelState": "cold start",
+      "shortOutputManuallyReviewed": true
+    },
+    {
+      "sourceLanguage": "fr",
+      "targetLanguage": "pt-BR",
+      "inputCues": 2,
+      "outputCues": 2,
+      "allIntervalsPreserved": true,
+      "machineTranslated": true,
+      "elapsedMs": 1153,
+      "modelState": "warm model",
+      "shortOutputManuallyReviewed": true
+    }
+  ],
+  "limits": [
+    "Short sample quality does not establish quality for all subtitle versions or languages.",
+    "The language model receives only dialogue and stable numeric IDs. Original timestamps and order are reconstructed outside the model.",
+    "Missing, duplicate or foreign output IDs fail the whole translation instead of publishing partial subtitles.",
+    "One multilingual generation job at a time; bounded batches and thirty-minute total deadline.",
+    "English continues to prefer the installed Argos EN-to-Portuguese model. Ollama is an opt-in fallback for other or unspecified source languages.",
+    "Stopping browser polling does not claim to cancel an already running local backend job."
+  ],
+  "openSubtitlesLiveDiscovery": {
+    "identity": "stremio:all:movie:tt0133093",
+    "downloadStarted": false,
+    "samples": [
+      {
+        "language": "en",
+        "httpStatus": 200,
+        "versions": 55,
+        "serverIssuedTranslationOffers": 55
+      },
+      {
+        "language": "es",
+        "httpStatus": 200,
+        "versions": 38,
+        "serverIssuedTranslationOffers": 38
+      }
+    ],
+    "scope": "Actual OpenSubtitles search through local HPmovies API. These discovery counts do not establish full subtitle translation or synchronization."
+  },
+  "verification": {
+    "backendAffectedTests": 31,
+    "frontendPassedDistinctScenarios": 15,
+    "frontendSkippedMobileFullscreen": 1,
+    "typeScriptBackend": "passed",
+    "typeScriptFrontend": "passed",
+    "eslintFocused": "passed"
+  }
+}

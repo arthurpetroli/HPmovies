@@ -4,12 +4,15 @@ import type { LookupAddress } from 'node:dns';
 import { isIP } from 'node:net';
 import { gunzipSync } from 'node:zlib';
 import type { Playback, ProviderDiagnostic, StreamSubtitle } from '../../../shared/providers.js';
+import type { ExternalSubtitleOption, ExternalSubtitleSearch } from '../../../shared/externalSubtitles.js';
 import { MAX_SUBTITLE_BYTES, subtitleToVtt } from '../../../shared/subtitles.js';
 import { ApiError } from '../config/apiError.js';
 import { AniwatchAPICache } from '../config/cache.js';
 import { pinnedRequest, publicImageAddress } from './content-image.js';
 import type { ImageRequest, ImageResponse } from './content-image.js';
-import { addonSubtitleUrl, contradictsSubtitleEpisode, parseAddonPortugueseSubtitles, permittedAddonSubtitleDownloadUrl } from './opensubtitles-addon.js';
+import { addonSubtitleUrl, contradictsSubtitleEpisode, parseAddonPortugueseSubtitles, parseAddonSubtitles, permittedAddonSubtitleDownloadUrl } from './opensubtitles-addon.js';
+import { externalSubtitleLanguages, subtitleEncoding, subtitleLanguage } from './subtitle-languages.js';
+import { parseStremioEpisodeId } from './stremio.js';
 import { curatedSubtitleIdentity, findCuratedPortugueseSubtitles, permittedCuratedSubtitleUrl, sanitizeCuratedSubtitleText } from './curated-portuguese-subtitles.js';
 import { extractSubtitleArchive } from './subtitle-archive.js';
 
@@ -25,9 +28,9 @@ const unavailable = () => new ApiError(503, 'SUBTITLE_UNAVAILABLE', 'A fonte de 
 interface Mapping {
   id: number; imdb: string; kind: 'movie' | 'series'; season?: number; offset: number; wholeSeries: boolean;
 }
-interface EpisodeIdentity { imdb: string; kind: 'movie' | 'series'; season?: number; episode?: number }
+export interface EpisodeIdentity { imdb: string; kind: 'movie' | 'series'; season?: number; episode?: number }
 interface FileTicket { url: string; format: 'srt' | 'ass' | 'vtt'; encoding: string; archive?: 'zip'; machineTranslated?: boolean; expires: number }
-interface SubtitleCandidate extends Omit<FileTicket, 'expires'> { id: string; language: string; label: string }
+interface SubtitleCandidate extends Omit<FileTicket, 'expires'> { id: string; language: string; label: string; release?: string; downloads?: number }
 interface SubtitleFile { bytes: Uint8Array; contentType: string; cacheControl: string }
 interface Options {
   enabled?: boolean;
@@ -119,7 +122,7 @@ export class PortugueseSubtitleProvider {
     return this.loadingMappings;
   }
 
-  private async identity(animeId: string, episode: number): Promise<EpisodeIdentity | undefined> {
+  async resolveIdentity(animeId: string, episode: number): Promise<EpisodeIdentity | undefined> {
     // Curated identities remain usable when the external mapping list is down.
     const curated = curatedSubtitleIdentity(animeId, episode);
     if (curated) return curated;
@@ -149,8 +152,8 @@ export class PortugueseSubtitleProvider {
     return target ? { imdb: row.imdb, kind: 'series', season: row.season, episode: episode + row.offset } : undefined;
   }
 
-  private issue(row: Record<string, unknown>, identity: EpisodeIdentity, language: 'pt-BR' | 'pt'): StreamSubtitle | undefined {
-    if (row.SubLanguageID !== (language === 'pt-BR' ? 'pob' : 'por') || typeof row.SubDownloadLink !== 'string' || !/^\d{1,20}$/.test(String(row.IDSubtitleFile))) return undefined;
+  private candidate(row: Record<string, unknown>, identity: EpisodeIdentity, language: string): SubtitleCandidate | undefined {
+    if (row.SubLanguageID !== subtitleLanguage(language)?.iso || typeof row.SubDownloadLink !== 'string' || !/^\d{1,20}$/.test(String(row.IDSubtitleFile))) return undefined;
     if (identity.kind === 'series' ? row.MovieKind !== 'episode' || numeric(row.SeriesIMDBParent) !== Number(identity.imdb.slice(2)) || numeric(row.SeriesSeason) !== identity.season || numeric(row.SeriesEpisode) !== identity.episode
       : row.MovieKind !== 'movie' || numeric(row.IDMovieImdb) !== Number(identity.imdb.slice(2))) return undefined;
     if (contradictsSubtitleEpisode(row.SubFileName, identity)) return undefined;
@@ -159,10 +162,18 @@ export class PortugueseSubtitleProvider {
     let url: URL;
     try { url = new URL(row.SubDownloadLink); } catch { return undefined; }
     if (url.protocol !== 'https:' || url.hostname !== 'dl.opensubtitles.org' || url.username || url.password || url.port || url.hash || !url.pathname.startsWith('/en/download/')) return undefined;
-    const encoding = typeof row.SubEncoding === 'string' ? row.SubEncoding.toLowerCase().replace(/_/g, '-') : 'utf-8';
-    if (!['utf-8', 'utf8', 'windows-1252', 'cp1252', 'iso-8859-1', 'utf-16', 'utf-16le'].includes(encoding)) return undefined;
+    const encoding = subtitleEncoding(row.SubEncoding);
+    if (!encoding) return undefined;
     const release = typeof row.SubFileName === 'string' ? row.SubFileName.replace(/[\r\n\0]/g, '').slice(0, 170) : String(row.IDSubtitleFile);
-    return this.register({ id: `opensubtitles-${row.IDSubtitleFile}`, url: url.href, format, encoding, language, label: `OpenSubtitles · ${language} · ${release}` });
+    const count = typeof row.SubDownloadsCnt === 'string' && /^\d{1,12}$/.test(row.SubDownloadsCnt) ? Number(row.SubDownloadsCnt) : row.SubDownloadsCnt;
+    return { id: `opensubtitles-${row.IDSubtitleFile}`, url: url.href, format, encoding, language, release,
+      label: `OpenSubtitles · ${language} · ${release}`,
+      ...(typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? { downloads: count } : {}) };
+  }
+
+  private issue(row: Record<string, unknown>, identity: EpisodeIdentity, language: 'pt-BR' | 'pt'): StreamSubtitle | undefined {
+    const candidate = this.candidate(row, identity, language);
+    return candidate ? this.register(candidate) : undefined;
   }
 
   private register(candidate: SubtitleCandidate): StreamSubtitle {
@@ -174,9 +185,62 @@ export class PortugueseSubtitleProvider {
     return { id: candidate.id, url: `/api/subtitles/file/${token}`, format: 'vtt', language: candidate.language, label: candidate.label, kind: 'subtitles', ...(candidate.machineTranslated ? { machineTranslated: true } : {}) };
   }
 
+  /** User-triggered discovery keeps file versions visible and downloads only the chosen ticket. */
+  async search(episodeId: string, language = 'pt-BR'): Promise<ExternalSubtitleSearch> {
+    const selected = subtitleLanguage(language);
+    if (!selected) throw new ApiError(400, 'INVALID_SUBTITLE_LANGUAGE', 'Escolha um dos idiomas de legenda disponíveis.');
+    if (typeof episodeId !== 'string' || episodeId.length > 200) throw new ApiError(400, 'INVALID_SUBTITLE_EPISODE', 'Identificador de vídeo inválido para buscar legendas.');
+    const anime = /^(?:toko|tatakai):([1-9]\d{0,8}):([1-9]\d{0,5})$/.exec(episodeId);
+    let identity: EpisodeIdentity | undefined;
+    if (anime) {
+      if (Number(anime[2]) > 100_000) throw new ApiError(400, 'INVALID_SUBTITLE_EPISODE', 'Informe um episódio inteiro válido para buscar legendas.');
+    } else {
+      try {
+        const request = parseStremioEpisodeId(episodeId);
+        identity = request.type === 'movie' ? { imdb: request.imdbId, kind: 'movie' }
+          : { imdb: request.imdbId, kind: 'series', season: request.season, episode: request.episode };
+      } catch { throw new ApiError(400, 'INVALID_SUBTITLE_EPISODE', 'Informe um episódio AniList ou vídeo IMDb válido para buscar legendas.'); }
+    }
+    const response: ExternalSubtitleSearch = { episodeId, language: selected.id, languages: externalSubtitleLanguages.map(item => ({ ...item })), subtitles: [] };
+    if (!this.enabled) return { ...response, message: 'A busca externa de legendas está desativada neste ambiente.' };
+    if (anime) identity = await this.resolveIdentity(anime[1], Number(anime[2]));
+    if (!identity) return { ...response, message: 'Não foi encontrada uma correspondência segura de IMDb, temporada e episódio para este anime.' };
+    const resolved = identity;
+    const filter = resolved.kind === 'series' ? `episode-${resolved.episode}/imdbid-${resolved.imdb.slice(2)}/season-${resolved.season}/` : `imdbid-${resolved.imdb.slice(2)}/`;
+    const legacy = async (): Promise<SubtitleCandidate[]> => {
+      const payload = await this.cache.getOrSet(() => this.json(`${REST}/${filter}sublanguageid-${selected.iso}`),
+        `subtitle:list:${resolved.imdb}:${resolved.season}:${resolved.episode}:${selected.id}`, 1800);
+      if (!Array.isArray(payload) || payload.length > 500) throw invalid();
+      return payload.filter(object).flatMap(row => {
+        const candidate = this.candidate(row, resolved, selected.id); return candidate ? [candidate] : [];
+      });
+    };
+    const addon = async (): Promise<SubtitleCandidate[]> => {
+      const payload = await this.cache.getOrSet(() => this.json(addonSubtitleUrl(resolved)),
+        `subtitle:addon:${resolved.imdb}:${resolved.season}:${resolved.episode}`, 1800);
+      return parseAddonSubtitles(payload, resolved, [selected.id]);
+    };
+    const results = await Promise.allSettled([legacy(), addon()]);
+    if (results.every(result => result.status === 'rejected')) throw new ApiError(503, 'SUBTITLE_SEARCH_UNAVAILABLE', 'O OpenSubtitles não respondeu à busca. Tente novamente; o vídeo continua disponível.');
+    const candidates = new Map<string, SubtitleCandidate>();
+    for (const candidate of results.flatMap(result => result.status === 'fulfilled' ? result.value : [])) {
+      const previous = candidates.get(candidate.id);
+      // Prefer the addon's UTF-8-normalizing download for a duplicate file, while
+      // retaining actual popularity metadata returned only by legacy discovery.
+      candidates.set(candidate.id, { ...previous, ...candidate, downloads: candidate.downloads ?? previous?.downloads });
+    }
+    const subtitles = [...candidates.values()].sort((a, b) => (b.downloads ?? -1) - (a.downloads ?? -1) || a.label.localeCompare(b.label, 'pt-BR')).slice(0, 100).map((candidate): ExternalSubtitleOption => ({
+      ...this.register(candidate), provider: 'opensubtitles', release: candidate.release || candidate.label,
+      sourceFormat: candidate.format, ...(candidate.downloads !== undefined ? { downloads: candidate.downloads } : {}),
+    }));
+    return { ...response, subtitles, message: subtitles.length
+      ? `${subtitles.length} versões encontradas. Escolha a versão correspondente ao vídeo; pode ser necessário ajustar a sincronização.`
+      : 'Nenhuma legenda neste idioma foi encontrada para este vídeo.' };
+  }
+
   async subtitles(animeId: string, episode: number): Promise<StreamSubtitle[]> {
     if (!this.enabled || !/^[1-9]\d{0,8}$/.test(animeId)) return [];
-    const identity = await this.identity(animeId, episode); if (!identity) return [];
+    const identity = await this.resolveIdentity(animeId, episode); if (!identity) return [];
     const legacy = (['pt-BR', 'pt'] as const).map(async language => {
       const filter = identity.kind === 'series' ? `episode-${identity.episode}/imdbid-${identity.imdb.slice(2)}/season-${identity.season}/` : `imdbid-${identity.imdb.slice(2)}/`;
       const payload = await this.cache.getOrSet(() => this.json(`${REST}/${filter}sublanguageid-${language === 'pt-BR' ? 'pob' : 'por'}`), `subtitle:list:${identity.imdb}:${identity.season}:${identity.episode}:${language}`, 1800);

@@ -1,0 +1,100 @@
+HPmovies local compatibility patch
+Upstream: RisPNG/fmhywebstremio e50be0f870af2d4ba964a04e4009bf979b18668d (MIT)
+Attempt up to nine advertised BingeBang servers within the existing deadline.
+Preserve native server labels beside inspected resolution and declared audio.
+This does not guarantee that nine servers exist or return validated media.
+
+diff --git a/src/addon/stremio-adapter/runtime-adapter.test.ts b/src/addon/stremio-adapter/runtime-adapter.test.ts
+index 57888db..b638eca 100644
+--- a/src/addon/stremio-adapter/runtime-adapter.test.ts
++++ b/src/addon/stremio-adapter/runtime-adapter.test.ts
+@@ -36,6 +36,11 @@ describe('RuntimeStremioAdapter', () => {
+     expect(formatted).toMatchObject({ name: 'N/A N/A\nEnglish, Spanish', title: 'N/A . N/A' });
+   });
+ 
++  test('keeps native server names beside the inspected resolution without using subtitle languages as audio', () => {
++    const source: SourceRecord = { id: 'bingebang:bingebang.test', canonicalDomain: 'bingebang.test', aliases: [], fmhy: { name: 'BingeBang', firstSeenAt: new Date(0), lastSeenAt: new Date(0) }, status: 'supported' };
++    expect(normalizedStreamToStremio({ ...stream, label: '  Yildun\n  4K ULTRA HD ', resolution: { width: 1920, height: 1080 }, subtitles: [{ url: new URL('https://subtitles.test/br.vtt'), language: 'pt-BR' }] }, source)).toMatchObject({ name: 'BingeBang 1080p · Yildun 4K ULTRA HD\nN/A' });
++  });
++
+   test('keeps the raw player identifier in the description', () => {
+     expect(normalizedStreamToStremio({ ...stream, hostExtractor: 'unknown-player' }).title).toBe('N/A . unknown-player');
+   });
+diff --git a/src/addon/stremio-adapter/runtime-adapter.ts b/src/addon/stremio-adapter/runtime-adapter.ts
+index 4a81c1d..3a9dd74 100644
+--- a/src/addon/stremio-adapter/runtime-adapter.ts
++++ b/src/addon/stremio-adapter/runtime-adapter.ts
+@@ -30,9 +30,10 @@ export function normalizedStreamToStremio(stream: NormalizedStream, source?: Sou
+     return name ? [name] : [];
+   }))].join(', ') || 'N/A';
+   const resolution = stream.resolution?.height ? `${stream.resolution.height}p` : 'N/A';
++  const nativeLabel = stream.label?.replace(/\s+/g, ' ').trim().slice(0, 80);
+   const website = source?.canonicalDomain ? new URL(`https://${source.canonicalDomain}/`).href : 'N/A';
+   const player = stream.hostExtractor?.trim() || 'N/A';
+-  return { url: stream.url.href, ...(stream.subtitles && { subtitles: stream.subtitles.map(track => ({ id: track.url.href, url: track.url.href, lang: track.language ?? track.label ?? 'und' })) }), name: `${brand} ${resolution}\n${language}`, title: `${website} . ${player}`, behaviorHints: { ...(stream.protocol !== 'http' && { notWebReady: true }), ...(stream.headers && { notWebReady: true, proxyHeaders: { request: stream.headers } }) } };
++  return { url: stream.url.href, ...(stream.subtitles && { subtitles: stream.subtitles.map(track => ({ id: track.url.href, url: track.url.href, lang: track.language ?? track.label ?? 'und' })) }), name: `${brand} ${resolution}${nativeLabel ? ` · ${nativeLabel}` : ''}\n${language}`, title: `${website} . ${player}`, behaviorHints: { ...(stream.protocol !== 'http' && { notWebReady: true }), ...(stream.headers && { notWebReady: true, proxyHeaders: { request: stream.headers } }) } };
+ }
+ 
+ export class RuntimeStremioAdapter implements StremioStreamProvider {
+diff --git a/src/engine/core/models/streams.ts b/src/engine/core/models/streams.ts
+index 801a729..cca72ba 100644
+--- a/src/engine/core/models/streams.ts
++++ b/src/engine/core/models/streams.ts
+@@ -29,6 +29,7 @@ export interface StreamCandidate {
+ }
+ 
+ export interface NormalizedStream {
++  label?: string;
+   url: URL;
+   protocol: Exclude<StreamProtocol, 'unknown'>;
+   validation: StreamValidationState;
+diff --git a/src/engine/protocols/inspectors.test.ts b/src/engine/protocols/inspectors.test.ts
+index 8497f58..a773829 100644
+--- a/src/engine/protocols/inspectors.test.ts
++++ b/src/engine/protocols/inspectors.test.ts
+@@ -7,8 +7,8 @@ test.each(['application/vnd.apple.mpegurl; charset=utf-8', 'audio/x-mpegurl'])('
+     const body = request.url.pathname === '/play' ? '#EXTM3U\n#EXTINF:6,\nsegment.ts\n#EXT-X-ENDLIST' : 'media bytes';
+     return { status: 200, headers: { 'content-type': request.url.pathname === '/play' ? contentType : 'video/mp2t' }, finalUrl: request.url, redirectChain: [], body: Buffer.from(body), text: () => body, json: () => ({}), truncated: false, timing: { startedAt: new Date(0), elapsedMs: 1 } };
+   }) };
+-  const result = await new StreamSelector(services).validate([{ url: new URL('https://cdn.test/play'), protocol: 'http', delivery: 'relayed', headers: { referer: 'https://player.test/' }, audioLanguages: ['eng'], sourceId: 'source', sourceExtractor: 'family', discoveredAt: new Date(0) }], { concurrency: 1 }, new AbortController().signal);
+-  expect(result).toMatchObject({ streams: [{ protocol: 'hls', validation: 'validated', delivery: 'relayed', headers: { referer: 'https://player.test/' }, audioLanguages: ['eng'] }], failures: [] });
++  const result = await new StreamSelector(services).validate([{ url: new URL('https://cdn.test/play'), label: 'Yildun 4K ULTRA HD', protocol: 'http', delivery: 'relayed', headers: { referer: 'https://player.test/' }, audioLanguages: ['eng'], sourceId: 'source', sourceExtractor: 'family', discoveredAt: new Date(0) }], { concurrency: 1 }, new AbortController().signal);
++  expect(result).toMatchObject({ streams: [{ protocol: 'hls', validation: 'validated', label: 'Yildun 4K ULTRA HD', delivery: 'relayed', headers: { referer: 'https://player.test/' }, audioLanguages: ['eng'] }], failures: [] });
+   expect((services.request as jest.Mock).mock.calls.map(([request]) => [request.method ?? 'GET', request.url.pathname, request.headers])).toEqual([
+     ['HEAD', '/play', { referer: 'https://player.test/' }],
+     ['GET', '/play', { referer: 'https://player.test/' }],
+diff --git a/src/engine/protocols/stream-selector.ts b/src/engine/protocols/stream-selector.ts
+index 287b96e..242bc87 100644
+--- a/src/engine/protocols/stream-selector.ts
++++ b/src/engine/protocols/stream-selector.ts
+@@ -33,7 +33,7 @@ export class StreamSelector {
+       try {
+         const stream = await inspector.inspect(candidate, this.services, validationSignal);
+         completion?.abort();
+-        return { stream };
++        return { stream: { ...stream, ...(candidate.label && { label: candidate.label }) } };
+       } catch (error) {
+         if (completion?.signal.aborted) return { candidate };
+         const nested = error && typeof error === 'object' && 'failure' in error ? (error as { failure?: Failure }).failure : undefined;
+@@ -48,7 +48,7 @@ export class StreamSelector {
+     })));
+     const unverified = settled.flatMap(item => item.candidate ? [item.candidate] : []);
+     const failures = settled.flatMap(item => item.failure ? [item.failure] : []);
+-    const streams = [...settled.flatMap(item => item.stream ? [item.stream] : []), ...unverified.flatMap((candidate): NormalizedStream[] => candidate.protocol === 'unknown' ? [] : [{ url: candidate.url, protocol: candidate.protocol, validation: 'unverified', ...(candidate.declaredResolution && { resolution: candidate.declaredResolution }), ...(candidate.language && { language: candidate.language }), ...(candidate.audioLanguages && { audioLanguages: candidate.audioLanguages }), ...(candidate.headers && { headers: candidate.headers }), ...(candidate.delivery && { delivery: candidate.delivery }), ...(candidate.subtitles && { subtitles: candidate.subtitles }), sourceId: candidate.sourceId, sourceExtractor: candidate.sourceExtractor, ...(candidate.hostExtractor && { hostExtractor: candidate.hostExtractor }), ...(candidate.providerContentId && { providerContentId: candidate.providerContentId }) }])];
++    const streams = [...settled.flatMap(item => item.stream ? [item.stream] : []), ...unverified.flatMap((candidate): NormalizedStream[] => candidate.protocol === 'unknown' ? [] : [{ url: candidate.url, protocol: candidate.protocol, validation: 'unverified', ...(candidate.label && { label: candidate.label }), ...(candidate.declaredResolution && { resolution: candidate.declaredResolution }), ...(candidate.language && { language: candidate.language }), ...(candidate.audioLanguages && { audioLanguages: candidate.audioLanguages }), ...(candidate.headers && { headers: candidate.headers }), ...(candidate.delivery && { delivery: candidate.delivery }), ...(candidate.subtitles && { subtitles: candidate.subtitles }), sourceId: candidate.sourceId, sourceExtractor: candidate.sourceExtractor, ...(candidate.hostExtractor && { hostExtractor: candidate.hostExtractor }), ...(candidate.providerContentId && { providerContentId: candidate.providerContentId }) }])];
+     return { streams: this.deduplicate(streams).sort((a, b) => ({ validated: 0, unverified: 1, failed: 2 }[a.validation]) - ({ validated: 0, unverified: 1, failed: 2 }[b.validation]) || (b.resolution?.height ?? 0) - (a.resolution?.height ?? 0) || a.sourceId.localeCompare(b.sourceId) || a.url.href.localeCompare(b.url.href)), unverified, failures };
+   }
+ 
+diff --git a/src/extractors/hosts/bingebang-host-architecture.ts b/src/extractors/hosts/bingebang-host-architecture.ts
+index dd2dcba..f02185a 100644
+--- a/src/extractors/hosts/bingebang-host-architecture.ts
++++ b/src/extractors/hosts/bingebang-host-architecture.ts
+@@ -38,7 +38,7 @@ export interface BingeBangHostArchitecture {
+ }
+ 
+ export class BingeBangPlayerHostArchitecture implements BingeBangHostArchitecture {
+-  public constructor(private readonly maxServers = 4) {}
++  public constructor(private readonly maxServers = 9) {}
+ 
+   public async discover(player: URL, media: MediaIdentity, sourceId: string, sourceExtractor: string, services: RequestServices, signal: AbortSignal): Promise<ExtractionResult> {
+     if (media.type === 'episode' && (!media.season || !media.episode)) return { type: 'empty', reason: 'not-found' };

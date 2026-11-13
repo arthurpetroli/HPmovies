@@ -27,6 +27,8 @@ import { WuxiaWorldSiteProvider } from './providers/wuxiaworldsite-novels.js';
 import { streamMediaGateway } from './providers/stream-media.js';
 import { AutomaticSubtitleJobs } from './providers/automatic-subtitle-jobs.js';
 import { IntroSkipProvider } from './providers/intro-skips.js';
+import type { CinemaProvider } from '../../shared/cinema.js';
+import { CinemetaProvider, cinemaQuery, validateCinemaId, validateCinemaType } from './providers/cinemeta.js';
 
 interface AppOptions {
   catalog?: AnimeCatalogProvider;
@@ -41,11 +43,13 @@ interface AppOptions {
   automaticSubtitles?: AutomaticSubtitleJobs;
   introSkips?: IntroSkipProvider;
   mangaArchives?: MangaArchiveJobs;
+  cinema?: CinemaProvider;
 }
 
 export function createApp(options: AppOptions = {}) {
   const app = new Hono<ServerContext>();
   const catalog = options.catalog ?? new AniListCatalogProvider();
+  const cinema = options.cinema ?? new CinemetaProvider();
   const registry = options.registry ?? new StreamingRegistry();
   const streaming = options.streaming ?? registry;
   const legacyEnabled = options.legacyEnabled ?? process.env.ENABLE_LEGACY_HIANIME === 'true';
@@ -114,6 +118,16 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ data: await catalog.schedule(start, end) });
   });
   app.get('/api/catalog/anime/:id', async (c) => c.json({ data: await catalog.details(validateAnimeId(c.req.param('id'))) }));
+  app.get('/api/cinema/catalog', async c => c.json({ data: await cinema.catalog(cinemaQuery(new URL(c.req.url).searchParams)) }));
+  app.get('/api/cinema/filters', async c => {
+    if (new URL(c.req.url).search) throw new ApiError(400, 'INVALID_CINEMA_QUERY', 'A lista de filtros não recebe parâmetros.');
+    if (!cinema.filters) throw new ApiError(503, 'CINEMA_FILTERS_UNAVAILABLE', 'Os filtros de streaming estão indisponíveis. Tente novamente.');
+    return c.json({ data: await cinema.filters() });
+  });
+  app.get('/api/cinema/:type/:imdb', async c => {
+    if (new URL(c.req.url).search) throw new ApiError(400, 'INVALID_CINEMA_QUERY', 'Os detalhes aceitam somente o tipo e o identificador IMDb.');
+    return c.json({ data: await cinema.details(validateCinemaType(c.req.param('type')), validateCinemaId(c.req.param('imdb'))) });
+  });
   app.get('/api/streaming/anime/:id/episodes', async (c) => {
     const id = c.req.param('id');
     if (id !== 'demo') validateAnimeId(id);
@@ -133,6 +147,14 @@ export function createApp(options: AppOptions = {}) {
     if (new URL(c.req.url).search) throw new ApiError(400, 'INVALID_MEDIA_QUERY', 'A mídia aceita somente o identificador emitido pela fonte.');
     const media = await streamMediaGateway.media(c.req.param('token'), c.req.header('range'));
     return new Response(media.bytes as Uint8Array<ArrayBuffer>, { status: media.status, headers: media.headers });
+  });
+
+  app.get('/api/subtitles/search/:episodeId', async c => {
+    const params = new URL(c.req.url).searchParams;
+    if ([...params.keys()].some(key => key !== 'language') || params.getAll('language').length > 1) {
+      throw new ApiError(400, 'INVALID_SUBTITLE_QUERY', 'Informe somente um idioma para buscar legendas.');
+    }
+    return c.json({ data: await automaticSubtitles.offerSearch(await registry.subtitles.search(c.req.param('episodeId'), params.get('language') ?? 'pt-BR')) });
   });
 
   app.get('/api/subtitles/file/:token', async c => {
@@ -162,7 +184,25 @@ export function createApp(options: AppOptions = {}) {
     const params = new URL(c.req.url).searchParams;
     return c.json({ data: await automaticSubtitles.offer(await registry.resolve(id, Number(episode), params.get('source') || undefined, titleHints(params))) });
   });
-  app.get('/api/content/stremio/:imdb/:season/:episode', async c => c.json({ data: await registry.stremio.playback({ imdbId: c.req.param('imdb'), season: Number(c.req.param('season')), episode: Number(c.req.param('episode')), provider: c.req.query('provider') || undefined }) }));
+  const stremioProvider = (params: URLSearchParams) => {
+    if ([...params.keys()].some(key => key !== 'provider') || params.getAll('provider').length > 1) {
+      throw new ApiError(400, 'INVALID_STREMIO_QUERY', 'Informe somente um provedor Stremio opcional.');
+    }
+    return params.get('provider') || undefined;
+  };
+  app.get('/api/content/stremio/movie/:imdb', async c => c.json({ data: await registry.stremio.playback({
+    type: 'movie', imdbId: c.req.param('imdb'), provider: stremioProvider(new URL(c.req.url).searchParams),
+  }) }));
+  app.get('/api/content/stremio/:imdb/:season/:episode', async c => {
+    const season = c.req.param('season'), episode = c.req.param('episode');
+    if (!/^(?:0|[1-9]\d{0,3})$/.test(season) || !/^[1-9]\d{0,5}$/.test(episode)) {
+      throw new ApiError(400, 'INVALID_STREMIO_EPISODE', 'Informe temporada e episódio inteiros válidos.');
+    }
+    return c.json({ data: await registry.stremio.playback({
+      imdbId: c.req.param('imdb'), season: Number(season), episode: Number(episode),
+      provider: stremioProvider(new URL(c.req.url).searchParams),
+    }) });
+  });
   app.get('/api/content/image/:token', async c => {
     const image = await content.image(c.req.param('token'));
     return new Response(image.bytes as Uint8Array<ArrayBuffer>, { headers: { 'Content-Type': image.contentType, 'Cache-Control': image.cacheControl, 'X-Content-Type-Options': 'nosniff' } });

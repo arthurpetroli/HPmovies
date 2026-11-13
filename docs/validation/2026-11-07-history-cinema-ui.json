@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-07",
+  "scope": "Metadados e interface reais, sem interceptação HTTP. Histórico legado semeado em contexto de navegador isolado.",
+  "playbackDecoded": false,
+  "samples": [
+    {
+      "episodeId": "stremio:all:movie:tt27543632",
+      "title": "The Housemaid",
+      "hasPoster": true,
+      "hasBackground": true,
+      "currentTime": 30,
+      "duration": 600,
+      "updatedAt": 1700000400000,
+      "completed": false
+    },
+    {
+      "episodeId": "stremio:all:movie:tt0107688",
+      "title": "The Nightmare Before Christmas",
+      "hasPoster": true,
+      "hasBackground": true,
+      "currentTime": 50,
+      "duration": 600,
+      "updatedAt": 1700000399000,
+      "completed": false
+    },
+    {
+      "episodeId": "stremio:all:movie:tt0068646",
+      "title": "The Godfather",
+      "hasPoster": true,
+      "hasBackground": true,
+      "currentTime": 70,
+      "duration": 600,
+      "updatedAt": 1700000398000,
+      "completed": false
+    },
+    {
+      "episodeId": "stremio:all:tt0903747:2:3",
+      "title": "Breaking Bad",
+      "hasPoster": true,
+      "hasBackground": true,
+      "currentTime": 120,
+      "duration": 2400,
+      "updatedAt": 1700000397000,
+      "completed": false
+    }
+  ],
+  "checks": {
+    "actualArtworkLoaded": true,
+    "legacyTimingAndOrderPreserved": true,
+    "falseDemoBadges": 0,
+    "desktopAnd320pxOverflow": false,
+    "movieLoadingBackground": true,
+    "movieReloadBackground": true,
+    "pageErrors": 0
+  },
+  "screenshots": "/tmp/hpmovies-history-cinema-real"
+}

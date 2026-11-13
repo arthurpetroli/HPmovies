@@ -1,4 +1,304 @@
-# Estado de desenvolvimento — 04/11/2026
+# Estado de desenvolvimento — 08/11/2026
+
+## Conexão Stremio recuperada e inicialização automática — 08/11/2026
+
+Causa do erro “Não foi possível conectar ao addon Stremio”: frontend, API,
+source host e tradutor estavam ativos, mas não havia processo escutando em
+`127.0.0.1:7010`. `npm run dev` ainda não incluía o addon; a etapa anterior exigia
+um segundo terminal com `npm run dev:stremio`. O serviço foi reiniciado e a
+consulta de The Housemaid voltou com 21 fontes, sem demonstração. A descoberta
+de fontes é separada das verificações reais de reprodução abaixo.
+
+Corrigido o ciclo de vida para não depender desse segundo comando. **Agora basta
+`npm run dev`**, com a configuração privada local já existente. `npm start`
+também integra o addon opcional ao ciclo de vida, após build, sem fazer deploy.
+O supervisor é habilitado somente pelo opt-in de loopback e manifesto local
+exato autorizado. Não inicia executáveis para addons públicos/desativados.
+Um serviço existente só é reutilizado após conferir readiness, identidade FMHY
+e capacidades do manifesto; seu processo não é encerrado pelo aplicativo.
+Porta ocupada por serviço diferente é recusada. Filhos próprios recebem até
+três reinícios com intervalos crescentes, sem loop infinito. Sinais durante a
+inicialização cancelam o filho e limpam os recursos já criados. Logs permanecem
+limitados, sem copiar URLs de mídia ou erros privados do upstream. O launcher
+separado continua disponível para diagnóstico.
+
+Verificação desta etapa:
+
+- **827 testes em 70 arquivos**, aprovados com `npm test -- --maxWorkers=2`.
+  Incluem 18 contratos do supervisor opcional, seis do launcher de
+  desenvolvimento e dois adicionais do ciclo de vida de produção. Mocks e
+  serviços HTTP sintéticos cobrem opt-in, reuso, ownership, reinício, porta
+  divergente, cancelamento, encerramento e ausência de logs privados. A primeira
+  rodada com paralelismo padrão falhou no teste preexistente de expiração de
+  downloads de mangá durante a carga de validação; a rodada com dois workers
+  passou integralmente, sem mudar esse teste nem a implementação de downloads.
+- Lint, build com TypeScript e `git diff --check` aprovados. Permanece o aviso
+  conhecido do chunk Watch/HLS acima de 500 kB.
+- Reinício real completo: todos os serviços foram encerrados e **somente
+  `npm run dev`** foi executado. O processo FMHY passou a ser filho do launcher
+  do aplicativo. Um encerramento controlado desse filho foi recuperado
+  automaticamente em **823 ms**, com a identidade do manifesto conferida.
+- Reprodução real, sem fixtures, interceptação ou fallback de demo:
+  **Inception** via Stremio: 16 fontes, Nashira, áudio/vídeo 3840×1598;
+  **Attack on Titan T1/E1** via Stremio: 13 fontes, Yildun, 3840×2160;
+  anime nativo **`tatakai:16498:1`**: 18 fontes, Wezen, 1920×1080, mantendo
+  o ID nativo e a fonte Stremio selecionada após seek. Todos avançaram antes e
+  depois de seek, sem erro de página ou overflow em 320 px. Frames amostrados
+  foram inspecionados; isso não audita filme/episódio integral, idioma do áudio,
+  sincronização das legendas ou disponibilidade de todos os títulos/servidores.
+  Uma imagem de catálogo TMDB falhou, sem afetar a reprodução da amostra.
+
+Evidência normalizada, sem URLs de mídia:
+[recuperação Stremio](validation/2026-11-08-stremio-recovery.json).
+Instruções atuais em [STREMIO-INTEGRATION.md](STREMIO-INTEGRATION.md).
+Serviços deixados ativos em loopback nas portas 5173, 4000, 7010, 8099 e 5000.
+No browser já aberto na tela de erro, clicar “Tentar novamente” ou recarregar.
+Não houve mudança de `.env`, fontes privadas, licenças ou dependências do
+aplicativo, nem commit, push ou deploy. Bibliotecas temporárias do Chromium
+foram novamente extraídas em `/tmp` para a validação local.
+
+## Histórico, episódio nos cards e fundo do cinema concluídos — 07/11/2026
+
+Retomada após a interrupção de energia. As mudanças anteriores de fontes,
+catálogo completo, OpenSubtitles e tradução por IA foram preservadas. Esta etapa
+corrigiu as três falhas visuais e de contexto relatadas nas últimas capturas.
+
+- Filmes e séries no histórico recuperam título, fundo e pôster pelo IMDb e tipo
+  exatos do ID de reprodução. Os registros antigos `Filme · tt…` são enriquecidos
+  ao aparecer no carrossel ou histórico, sem limpar o armazenamento, duplicar
+  entradas ou alterar posição, duração, data, conclusão e ordem. Metadados têm
+  cache, deduplicação e no máximo quatro consultas simultâneas. Se a consulta
+  falhar, aparece “Filme” ou “Série”; nenhuma mídia real ganha o selo de demo por
+  estar sem metadados. O selo exige ID demo ou `isDemo: true` explícito.
+- Cards de anime mostram “Episódio N”; séries mostram temporada e episódio.
+  A numeração vem do ID efetivamente assistido, inclusive no histórico antigo.
+  Filmes recebem a identificação “Filme”. Os links conservam a intenção de
+  retomada e o contexto de cinema após reload.
+- O carregamento inicial e o player recebem fundo/pôster dos detalhes ou do
+  histórico imediatamente. URLs diretas e o formulário IMDb também consultam
+  metadados em paralelo à reprodução. O pôster serve de fallback quando não há
+  fundo. Metadados atrasados enriquecem o histórico e o player sem remontar o
+  vídeo, perder a posição ou consultar a mídia novamente. Contexto de anime
+  continua separado do cinema. Não são persistidos episódios completos,
+  descrições extensas, fontes, tickets ou URLs de imagem com credenciais/query.
+- Corrigida uma corrida preexistente no catálogo: buscar e trocar rapidamente
+  o tipo podia apagar `q` antes do render da navegação. Filtros agora mesclam a
+  query atual do browser. Busca, streaming, região, página e temporada continuam
+  no retorno dos detalhes/player. Regressão determinística incluída.
+
+Verificação desta etapa:
+
+- **801 testes em 68 arquivos** aprovados (`npm test`), incluindo preservação e
+  saneamento do histórico, identidade/numeração/links e fila de metadados.
+- **72 cenários distintos de navegador** aprovados em desktop/celular nas
+  rodadas de histórico, catálogo, formulário IMDb, fluxo do player, entrada por
+  cards, índice de anime e recuperação de fontes. Incluem 12 novos cenários de
+  histórico/cinema e dois da corrida dos filtros. Fixtures sintéticas e eventos
+  de mídia simulados testam contratos de interface e persistência; não comprovam
+  reprodução de um filme ou episódio externo. As verificações de HLS público
+  usadas nas regressões também não comprovam identidade/idioma de anime.
+- Lint, build com TypeScript e `git diff --check` aprovados. Permanece o aviso
+  conhecido do chunk Watch/HLS acima de 500 kB.
+- Verificação externa de metadados e imagens, sem interceptação HTTP: The
+  Housemaid (`tt27543632`), The Nightmare Before Christmas (`tt0107688`), The
+  Godfather (`tt0068646`) e Breaking Bad (`tt0903747`, T2/E3). Histórico legado
+  semeado em navegador isolado; títulos e imagens reais foram carregados,
+  tempos/datas preservados, sem selo falso de demo. Fundo do filme antes da
+  mídia e após reload, desktop e 320 px conferidos, sem overflow ou erro de
+  página. Não houve revalidação integral da reprodução nesta etapa.
+
+Evidência normalizada:
+[histórico e cinema](validation/2026-11-07-history-cinema-ui.json).
+Capturas inspecionadas em `/tmp/hpmovies-history-cinema-real/`.
+As bibliotecas temporárias do navegador precisaram ser restauradas após a queda;
+para Playwright nesta máquina, usar
+`LD_LIBRARY_PATH=/tmp/hpmovies-browser-libs/extracted/usr/lib/x86_64-linux-gnu`.
+São bibliotecas extraídas em `/tmp`, sem nova dependência do aplicativo.
+
+Os serviços foram reiniciados e deixados ativos em loopback nas portas 5173,
+4000, 7010, 8099 e 5000. Para reiniciar após outra queda: `npm run dev:stremio`
+e `npm run dev`, em terminais separados. Abrir `http://127.0.0.1:5173/` ou
+`/library?tab=history`; os cards antigos serão atualizados pelos metadados sem
+apagar o progresso. Código e resultados salvos no workspace. Sem commit, push,
+deploy, alteração de `.env`, licenças ou bundle privado nesta retomada.
+
+## Retomada concluída: fontes nos animes, OpenSubtitles/IA e catálogo completo — 07/11/2026
+
+Esta seção substitui as limitações da etapa inicial abaixo: o catálogo não fica
+mais restrito a oito títulos e as novas fontes já entram diretamente no player
+dos animes, sem exigir busca manual no catálogo de filmes e séries.
+
+`StreamingRegistry` consulta os provedores antigos e Stremio em paralelo. Usa
+`resolveIdentity` do mapeamento já empregado nas legendas para ligar AniList a
+IMDb/temporada/episódio; recusa correspondência ambígua, mantém ID e metadados
+do episódio AniList e deduplica fontes sem misturar legendas nativas de vídeos
+diferentes. Uma falha externa preserva os vídeos disponíveis. Stremio também
+pode recuperar episódios quando a fonte anterior falha. O filtro explícito de
+fonte no resolver continua respeitado. Índices de episódios não foram inventados.
+Os detalhes permitem consultar o player mesmo se o índice antigo estiver vazio.
+
+OpenSubtitles agora tem busca sob demanda em **48 idiomas**, lista de versões,
+release, formato e downloads reais quando fornecidos. A seleção acontece em
+Configurações do player > Buscar no OpenSubtitles. O download usa tickets locais
+validados, sem receber URL arbitrária do browser. A faixa escolhida mantém o
+vídeo montado e a posição, acompanha as fontes do mesmo episódio e não vaza para
+o próximo. Desativação manual, tamanho, fundo e sincronização foram preservados.
+O diálogo mantém foco modal, retorno de foco, Escape, tela cheia e layout a 320 px.
+
+As versões externas recebem a oferta de tradução na seção Sua experiência, mesmo
+quando existe uma legenda portuguesa ou uma tradução anterior. O Argos instalado
+permanece preferido para inglês. Outros idiomas e origem não identificada podem
+usar o Ollama local com `qwen3.5:9b`, já instalado, sem baixar outro modelo.
+`AUTOMATIC_SUBTITLES_OLLAMA_ENABLED=true` foi acrescentado ao ambiente privado;
+o exemplo público explica as três opções de configuração. Não houve alteração
+dos scripts/modelos Python. IDs, ordem e timestamps são reconstruídos fora da IA;
+respostas incompletas, repetidas ou truncadas falham integralmente. Um job
+multilíngue por vez, lotes de 16 falas/1.800 caracteres e limite total de 30 minutos.
+Parar acompanhamento interrompe o polling e informa que o job pode continuar.
+O aviso de tradução automática permanece. Qualidade não é garantida em todos
+os idiomas; modelo indisponível tem mensagem própria e não interrompe vídeo.
+
+O catálogo padrão usa a origem oficial do Cinemeta para páginas de 50 entradas,
+sem a lista editorial fixa. Busca e filtros de streaming/região combinados usam
+o GraphQL público do JustWatch, sem chave privada. Foram encontrados **256
+provedores distintos**, 48 no Brasil e 235 nos EUA, com interseção entre regiões.
+Netflix, Disney+, Prime Video e outros são retornados pela fonte; Hulu apareceu
+nos EUA. A troca de região limpa um provedor incompatível. Filtros e página
+seguem na URL, nos detalhes, no player e no retorno. O filtro de streaming usa
+assinatura (`FLATRATE`), separado de compra/aluguel. Metadados não comprovam
+reprodução ou disponibilidade das fontes de vídeo.
+
+Verificação final: **781 testes em 66 arquivos**, lint e build com TypeScript
+aprovados. **55 cenários de navegador aprovados e um fullscreen móvel pulado**,
+incluindo regressões do player, legendas, tradução, fontes e catálogo. O aviso
+conhecido do chunk Watch/HLS acima de 500 kB continua. Fixtures de contrato e
+vídeo público de teste estão separados das verificações externas reais abaixo.
+
+Verificações reais, sem interceptação de rotas:
+
+- Attack on Titan (`16498`), episódio 1: 13 fontes na rodada final, incluindo
+  BingeBang e outras do addon no mesmo episódio `tatakai:16498:1`. Wezen MP4
+  decodificou áudio/vídeo a 1920×1080, duração de 1.439,29 s. A busca mostrou
+  14 versões inglesas; a escolhida foi baixada e traduzida pelo Argos, com
+  **324 entradas**. Houve texto português visível, vídeo sem remount ou perda
+  de posição, sem erro de página ou overflow a 320 px. É amostra de reprodução,
+  não inspeção integral do episódio nem garantia de sincronização de cada fala.
+- Matrix: busca inglesa retornou 55 ofertas de tradução e espanhola 38.
+  Esses números são descoberta, não tradução integral dessas 93 versões.
+- Ollama: três falas sintéticas em espanhol e duas em francês foram traduzidas
+  com intervalos preservados. Carga inicial de 65,179 s; modelo aquecido, 1,153 s.
+  São testes reais do modelo com texto sintético, separados dos arquivos reais
+  do OpenSubtitles. Não demonstram qualidade universal.
+- Catálogo: filmes com 50 e 46 títulos nas páginas 1 e 2, sem sobreposição;
+  séries com 50; Netflix BR 48, Disney+ BR 49, Hulu EUA 46; busca por título
+  combinada com Netflix funcionou. Filtros, retorno, desktop e 320 px conferidos,
+  sem erro de página ou overflow. Não se afirma auditoria de todos os títulos.
+
+Evidências sem URLs de mídia ou legendas integrais:
+[anime/OpenSubtitles](validation/2026-11-07-anime-opensubtitles-playback.json),
+[IA e descoberta](validation/2026-11-07-opensubtitles-translation.json) e
+[catálogo completo](validation/2026-11-07-cinema-full-catalog.json).
+O primeiro checker do anime esperou visibilidade de um elemento HTML `track`
+oculto; a espera foi corrigida para presença no DOM e a nova rodada passou,
+sem alterar o aplicativo por causa dessa falha do checker.
+Capturas locais em `/tmp/hpmovies-anime-subtitles-1794061161588/` e
+`/tmp/hpmovies-cinema-full-real-1794061114146/`.
+
+Retomada: `npm run dev:stremio` e `npm run dev` em terminais separados; catálogo
+em `http://127.0.0.1:5173/cinema`. A validação deixou os serviços em loopback
+ativos nas portas 5173, 4000, 7010, 8099 e 5000. O Ollama existente usa 11434.
+Teste real adicional: `npm run test:anime-subtitles:real`. Playwright precisou
+do mesmo `LD_LIBRARY_PATH` temporário descrito na seção anterior. Instruções
+atuais em [STREMIO-INTEGRATION.md](STREMIO-INTEGRATION.md). `.env`, bundle privado
+e checkout FMHY permanecem ignorados. Sem commit, push, deploy ou dependências
+novas no HPmovies; permanecem os riscos upstream documentados na etapa inicial.
+
+## BingeBang, Stremio e filmes e séries — 07/11/2026
+
+Implementados catálogo `/cinema`, busca por título, detalhes e temporadas com
+índice real Cinemeta. A abertura segue IMDb, temporada e episódio explícitos;
+filmes usam recurso `movie`. O formulário `/sources?kind=stremio` também permite
+consultar animes por IMDb. Não há conversão automática AniList para IMDb.
+Os detalhes dos animes existentes oferecem uma busca nas novas fontes pelo
+título e tipo, para escolher a edição IMDb correspondente antes de assistir.
+O player preserva o retorno aos detalhes ou ao formulário após reload e entre
+episódios. Episódios futuros não oferecem ação de reprodução. Layout validado
+em desktop e a 320 px, mantendo a identidade e os componentes existentes.
+
+A seleção inicial tem oito filmes e oito séries com metadados consultados no
+Cinemeta e identificação editorial. A listagem popular respondeu 403 nesta rede;
+buscas e metadados funcionaram. Nas amostras, a busca retornou até 20 títulos;
+não se afirma paginação exaustiva. Sinopses e títulos preservam o idioma da fonte.
+
+O addon `RisPNG/fmhywebstremio` v1.24.1, revisão
+`e50be0f870af2d4ba964a04e4009bf979b18668d`, foi instalado separadamente em
+`.local/fmhywebstremio`, com licença MIT preservada. O patch versionado
+`scripts/fmhy-hpmovies.patch` amplia de quatro para nove as tentativas BingeBang
+e conserva nomes nativos no seletor. O prazo original continua limitado; isso
+não garante nove fontes disponíveis. O launcher `npm run dev:stremio` restringe
+o listener a `127.0.0.1:7010`, supervisiona seu filho e omite logs upstream que
+poderiam expor URLs temporárias. Instalação upstream relatou 36 vulnerabilidades,
+duas críticas; não foi aplicado audit fix nem preparado deploy.
+
+Os nomes fornecidos pelo usuário foram Aldebaran, Markab, Yildun, Vega, Sirius,
+Wezen, Fomalhaut, Nashira e Botein. O protocolo nativo usa search, página de
+reprodução e tickets em `/api/player/sources` e `/api/player/resolve`; não oferece
+nove APIs públicas estáticas. Oito nomes apareceram nas amostras; Botein não
+retornou. GET `/tv` respondeu 403, mas o fluxo nativo via addon funcionou.
+O registro embarcado e o README upstream divergiam sobre a saúde de BingeBang;
+nenhum deles substitui uma consulta real.
+
+Stremio agora aceita filmes, IDs agregados `all`, opt-in para relay da mesma
+origem loopback e timeout configurável. MP4 `media.bin` exige MIME e assinatura
+verificados em leitura limitada. Cabeçalhos arbitrários, torrents, redirects e
+origens locais diferentes continuam recusados. A configuração privada `.env`
+foi atualizada somente nas três chaves Stremio; não foi versionada. Nenhuma
+dependência foi adicionada ao aplicativo. Bundle privado e fontes antigas
+permanecem intactos.
+
+Verificação final do código: **740 testes em 62 arquivos**, lint e build com
+TypeScript aprovados. Permanece o aviso conhecido do chunk player/HLS acima de
+500 kB. **28 cenários distintos de navegador** passaram em desktop e celular
+(24 de catálogo/fontes e quatro da busca a partir dos animes). Usam fixtures
+explícitas e são independentes das
+amostras externas. Foram conferidos busca, tipos, paginação de contrato, temporadas,
+episódios futuros, IMDb, teclado, reload, retorno, estados de erro e regressão
+das fontes de anime, mangá e novel.
+
+Verificação real de protocolo BingeBang, separada dos testes: Breaking Bad S01E01
+retornou oito fontes; Attack on Titan S01E01, quatro; Inception, sete. Nas duas
+últimas consultas houve timeout parcial upstream, preservado no relatório.
+Playlists, segmentos e MP4/Range foram amostrados. O browser usando a configuração
+com todas as fontes habilitadas recebeu respectivamente 14, 10 e 11 candidatos.
+Yildun foi selecionado nas séries e Nashira no filme. Os três decodificaram vídeo
+e áudio, avançaram por oito segundos antes de seek e quatro depois, sem erro de
+página ou overflow a 320 px. Resoluções observadas: 3840×2160 nas séries e
+3840×1598 no filme; não se afirma resolução nativa da produção original.
+Os frames amostrados foram inspecionados, mas episódio integral, identidade
+audiovisual completa, idioma falado e todos os servidores não foram auditados.
+Não foram oferecidas faixas externas de legenda nas fontes escolhidas; o frame
+de Inception mostrou texto inglês embutido no próprio vídeo. Não há promessa
+de áudio ou legenda PT-BR nessas novas fontes.
+
+Uma quarta reprodução real selecionou manualmente Wezen em Breaking Bad S01E01:
+MP4 1920×1080, áudio e vídeo decodificados, seek seguido de avanço, respostas
+206 e sem overflow a 320 px. Isso verifica o caminho `media.bin` no browser,
+além da sondagem limitada do backend. Fontes e durações variaram entre consultas;
+o relatório conserva os valores de cada execução, sem tratá-los como fixos.
+
+Detalhes, preparação reproduzível, limites e comandos em
+[STREMIO-INTEGRATION.md](STREMIO-INTEGRATION.md). Evidências sem URLs assinadas:
+[protocolo](validation/2026-11-07-fmhy-protocol.json) e
+[player real](validation/2026-11-07-stremio-playback.json).
+Capturas temporárias em `/tmp/hpmovies-stremio-live-1794030183649/`.
+O caso MP4 está em `/tmp/hpmovies-stremio-live-1794030351200/`.
+
+Retomada local: `npm run dev:stremio` em um terminal, `npm run dev` em outro e
+abrir `http://127.0.0.1:5173/cinema`. As duas instâncias desta validação foram
+mantidas ativas. Para repetir o teste real, `npm run test:stremio:real`.
+Playwright usou bibliotecas extraídas em
+`/tmp/hpmovies-browser-libs/extracted/usr/lib/x86_64-linux-gnu` via
+`LD_LIBRARY_PATH`, sem instalação de sistema. Sem commit, push ou deploy.
 
 Retomada atual: desenvolvimento com `npm run dev`, frontend em
 `http://127.0.0.1:5173`, API em `:4000`, fontes em `:8099` e tradutor opcional

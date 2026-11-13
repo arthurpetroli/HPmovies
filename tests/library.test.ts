@@ -78,4 +78,40 @@ describe('local library', () => {
     storage.set('hpmovies.library.v1', JSON.stringify({ list: [], history: [] }));
     expect(libraryService.getList()).toEqual([]);
   });
+
+  it('repairs legacy cinema metadata without changing timing, order or completion', async () => {
+    const old = { episodeId: 'stremio:all:movie:tt27543632', title: 'Filme · tt27543632', currentTime: 42, duration: 600, updatedAt: 123, completed: false };
+    const other = { ...old, episodeId: 'tatakai:1:7', title: 'Episódio 7', updatedAt: 124 };
+    const { libraryService } = await setup(JSON.stringify({ list: [], history: [other, old] }));
+    const cinema = { id: 'tt27543632', type: 'movie' as const, title: 'The Housemaid', genres: ['Drama'], poster: 'https://images.metahub.space/poster/img' };
+    libraryService.updateCinemaMetadata(cinema.id, cinema.type, cinema);
+    expect(libraryService.getHistory().map(item => item.episodeId)).toEqual([other.episodeId, old.episodeId]);
+    expect(libraryService.getProgress(old.episodeId)).toMatchObject({ ...old, title: cinema.title, cinema });
+    libraryService.updateCinemaMetadata('tt0903747', 'series', { ...cinema, id: 'tt0903747', type: 'series', title: 'Outra obra' });
+    expect(libraryService.getProgress(old.episodeId)?.title).toBe('The Housemaid');
+  });
+
+  it('keeps cinema metadata when a later progress update arrives without it and drops large or private fields', async () => {
+    const { libraryService, storage } = await setup();
+    const episodeId = 'stremio:all:movie:tt27543632';
+    const cinema = { id: 'tt27543632', type: 'movie' as const, title: 'The Housemaid', genres: ['Drama'], description: 'Large description',
+      background: 'https://images.metahub.space/background/img', poster: 'https://images.metahub.space/poster/img?private=do-not-store', episodes: [{ id: 'unused' }] };
+    libraryService.saveProgress({ episodeId, title: 'Título temporário', cinema, isDemo: false, currentTime: 30, duration: 600 });
+    libraryService.saveProgress({ episodeId, title: 'Filme · tt27543632', currentTime: 45, duration: 600 });
+    expect(libraryService.getProgress(episodeId)).toMatchObject({ title: 'The Housemaid', currentTime: 45, cinema: { id: cinema.id, background: cinema.background } });
+    const serialized = storage.get('hpmovies.library.v1') || '';
+    expect(serialized).not.toContain('Large description');
+    expect(serialized).not.toContain('do-not-store');
+    expect(serialized).not.toContain('episodes');
+  });
+
+  it('ignores invalid optional cinema metadata while retaining valid legacy progress', async () => {
+    const old = { episodeId: 'stremio:all:movie:tt27543632', title: 'Filme', currentTime: 25, duration: 600, updatedAt: 123, completed: false,
+      cinema: { id: 'tt0903747', type: 'series', title: 'Wrong identity', genres: [] }, episodeNumber: -3, season: -1 };
+    const { libraryService } = await setup(JSON.stringify({ list: [], history: [old] }));
+    expect(libraryService.getHistory()).toHaveLength(1);
+    expect(libraryService.getHistory()[0].cinema).toBeUndefined();
+    expect(libraryService.getHistory()[0].episodeNumber).toBeUndefined();
+    expect(libraryService.getHistory()[0].currentTime).toBe(25);
+  });
 });

@@ -27,16 +27,18 @@ function setup(overrides: Record<string, unknown> = {}) {
   const exit = vi.fn();
   const logger = { info: vi.fn(), error: vi.fn() };
   const translator = { stop: vi.fn(async () => {}) };
+  const stremio = { stop: vi.fn(async () => {}) };
   const sources = { stop: vi.fn(async () => {}) };
   const server = { origin: 'http://127.0.0.1:4000', stop: vi.fn(async () => {}) };
   const closeCache = vi.fn(async () => {});
   const verifyBuild = vi.fn(async () => {});
   const startTranslator = vi.fn(async () => translator);
+  const startStremio = vi.fn(async () => stremio);
   const startSources = vi.fn(async () => sources);
   const startProductionServer = vi.fn(async () => server);
   const loadProduction = vi.fn(async () => ({ startProductionServer, closeCache }));
-  const runtime = createProductionRuntime({ signals, exit, logger, env: {}, verifyBuild, startTranslator, startSources, loadProduction, ...overrides });
-  return { runtime, signals, exit, logger, translator, sources, server, closeCache, verifyBuild, startTranslator, startSources, loadProduction, startProductionServer };
+  const runtime = createProductionRuntime({ signals, exit, logger, env: {}, verifyBuild, startTranslator, startStremio, startSources, loadProduction, ...overrides });
+  return { runtime, signals, exit, logger, translator, stremio, sources, server, closeCache, verifyBuild, startTranslator, startStremio, startSources, loadProduction, startProductionServer };
 }
 
 describe('production lifecycle', () => {
@@ -48,7 +50,7 @@ describe('production lifecycle', () => {
     context.signals.emit('SIGTERM');
     context.signals.emit('SIGINT');
     await context.runtime.stop();
-    for (const close of [context.server.stop, context.sources.stop, context.translator.stop, context.closeCache]) expect(close).toHaveBeenCalledTimes(1);
+    for (const close of [context.server.stop, context.sources.stop, context.translator.stop, context.stremio.stop, context.closeCache]) expect(close).toHaveBeenCalledTimes(1);
     expect(context.exit).toHaveBeenCalledExactlyOnceWith(0);
     expect(context.signals.listenerCount('SIGTERM')).toBe(0);
   });
@@ -73,6 +75,7 @@ describe('production lifecycle', () => {
     await context.runtime.stop(1);
     expect(context.sources.stop).toHaveBeenCalledOnce();
     expect(context.translator.stop).toHaveBeenCalledOnce();
+    expect(context.stremio.stop).toHaveBeenCalledOnce();
     expect(closeCache).toHaveBeenCalledOnce();
     expect(context.logger.error).toHaveBeenCalledWith(expect.stringContaining('porta de servidor'));
     expect(JSON.stringify(context.logger.error.mock.calls)).not.toContain('do-not-log');
@@ -101,6 +104,37 @@ describe('production lifecycle', () => {
     expect(translator.stop).toHaveBeenCalledOnce();
     expect(context.startSources).not.toHaveBeenCalled();
     expect(context.exit).toHaveBeenCalledExactlyOnceWith(0);
+  });
+
+  it('cancels addon readiness without reporting an application failure on normal shutdown', async () => {
+    const started = vi.fn();
+    let signal: AbortSignal | undefined;
+    const context = setup({ startStremio: (options: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+      signal = options.signal;
+      started();
+      signal.addEventListener('abort', () => reject(new Error('Cancelled')), { once: true });
+    }) });
+    await vi.waitFor(() => expect(started).toHaveBeenCalledOnce());
+    context.signals.emit('SIGTERM');
+    expect(signal?.aborted).toBe(true);
+    await context.runtime.ready;
+    await context.runtime.stop();
+    expect(context.translator.stop).toHaveBeenCalledOnce();
+    expect(context.startSources).not.toHaveBeenCalled();
+    expect(context.logger.error).not.toHaveBeenCalled();
+    expect(context.exit).toHaveBeenCalledExactlyOnceWith(0);
+  });
+
+  it('closes earlier helpers and hides private details when the addon fails to start', async () => {
+    const error = new Error('https://private.example/?token=do-not-log');
+    const context = setup({ startStremio: async () => { throw error; } });
+    await expect(context.runtime.ready).rejects.toBe(error);
+    await context.runtime.stop(1);
+    expect(context.translator.stop).toHaveBeenCalledOnce();
+    expect(context.startSources).not.toHaveBeenCalled();
+    expect(JSON.stringify(context.logger.error.mock.calls)).not.toContain('do-not-log');
+    expect(context.logger.error).toHaveBeenCalledWith(expect.stringContaining('addon Stremio local'));
+    expect(context.exit).toHaveBeenCalledExactlyOnceWith(1);
   });
 
   it('closes available services while another helper is still starting', async () => {

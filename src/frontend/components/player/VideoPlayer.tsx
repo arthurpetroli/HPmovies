@@ -7,12 +7,16 @@ import { loadConvertedSubtitle, readCaptionPreferences, saveCaptionPreferences }
 import { hasValidIntro, orderedSubtitles, portugueseCaptionRank, preferredSubtitleId } from './playbackUtils';
 import './playerCaptions.css';
 import type { IntroTiming } from '../../services/intro';
+import { ExternalSubtitlePicker } from './ExternalSubtitlePicker';
 
 interface VideoPlayerProps {
   ref?: Ref<VideoPlayerHandle>;
   source: StreamSource;
   poster?: string;
   subtitles?: StreamSubtitle[];
+  episodeId?: string;
+  initialSubtitleId?: string;
+  onExternalSubtitleSelect?: (track: StreamSubtitle) => void;
   intro?: { start: number; end: number };
   introResolver?: (duration: number, signal: AbortSignal) => Promise<IntroTiming | undefined>;
   ending?: IntroTiming;
@@ -67,7 +71,7 @@ function useEpisodeTiming(native: IntroTiming | undefined, resolver: VideoPlayer
   return hasValidIntro(native, duration) ? native : resolved.key === key ? resolved.value : undefined;
 }
 
-export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, intro, introResolver, ending, endingResolver, onNextEpisode, onPrepareNextEpisode, initialTime = 0, onProgress, onSourceError, onSourcePlaying, onEnded, onSubtitleChange, autoPlay = false, autoSkipIntro = false, suspended = false, fullscreenContainerRef, className = '' }: VideoPlayerProps) {
+export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, episodeId, initialSubtitleId, onExternalSubtitleSelect, intro, introResolver, ending, endingResolver, onNextEpisode, onPrepareNextEpisode, initialTime = 0, onProgress, onSourceError, onSourcePlaying, onEnded, onSubtitleChange, autoPlay = false, autoSkipIntro = false, suspended = false, fullscreenContainerRef, className = '' }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const captionTrackRef = useRef<HTMLTrackElement>(null);
   const captionTextRef = useRef<HTMLSpanElement>(null);
@@ -96,12 +100,15 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
   const [fullscreen, setFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [externalPickerOpen, setExternalPickerOpen] = useState(false);
   const [qualities, setQualities] = useState<QualityLevel[]>([]);
   const [quality, setQuality] = useState(-1);
   const [activeHeight, setActiveHeight] = useState<number | undefined>();
   const [speed, setSpeed] = useState(1);
   const [captionPreferences] = useState(readCaptionPreferences);
-  const [subtitleSelection, setSubtitleSelection] = useState(() => ({ id: preferredSubtitleId(subtitles, captionPreferences.language), revision: 0 }));
+  const [subtitleSelection, setSubtitleSelection] = useState(() => ({
+    id: initialSubtitleId === 'off' || subtitles.some(track => track.id === initialSubtitleId) ? initialSubtitleId! : preferredSubtitleId(subtitles, captionPreferences.language), revision: 0,
+  }));
   const subtitleId = subtitleSelection.id;
   const setSubtitleId = useCallback((id: string) => setSubtitleSelection(previous => ({ id, revision: previous.revision + 1 })), []);
   const [captionLanguage, setCaptionLanguage] = useState(captionPreferences.language);
@@ -555,12 +562,16 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
         </select>{source.type === 'hls' && qualities.length === 0 && <span className="block text-xs text-white/40">A qualidade é gerenciada pelo navegador nesta fonte.</span>}</label>
         <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Velocidade</span><select aria-label="Velocidade de reprodução" className={selectClass} value={speed} onChange={event => { if (videoRef.current) videoRef.current.playbackRate = Number(event.target.value); }}>{[0.5, 0.75, 1, 1.25, 1.5, 2].map(value => <option key={value} value={value}>{value === 1 ? 'Normal (1×)' : `${value}×`}</option>)}</select></label>
         <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Legendas</span><select aria-label="Idioma das legendas" className={selectClass} value={subtitleId} onChange={event => { const selected = event.target.value; setSubtitleId(selected); setCaptionLanguage(selected === 'off' ? 'off' : subtitles.find(track => track.id === selected)?.language); }}><option value="off">Desativadas</option>{orderedSubtitles(subtitles).map(track => <option key={track.id} value={track.id}>{track.label} · {track.language}</option>)}</select></label>
+        {episodeId && onExternalSubtitleSelect && <button type="button" className="mb-4 min-h-11 w-full rounded-lg border border-teal-300/30 px-3 py-3 text-left text-sm text-teal-200 hover:bg-teal-300/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-300" onClick={() => setExternalPickerOpen(true)}>Buscar no OpenSubtitles</button>}
         {selectedSubtitle && <>
           <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Tamanho da legenda</span><select aria-label="Tamanho da legenda" className={selectClass} value={captionSize} onChange={event => setCaptionSize(event.target.value as 'small' | 'medium' | 'large')}><option value="small">Pequena</option><option value="medium">Média</option><option value="large">Grande</option></select></label>
           <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Sincronização · {captionOffset > 0 ? '+' : ''}{captionOffset.toFixed(1)}s</span><input aria-label="Sincronização da legenda" className="w-full accent-teal-400" type="range" min={-10} max={10} step={0.1} value={captionOffset} onChange={event => setCaptionOffset(Number(event.target.value))} /><span className="block text-xs text-white/40">Valores positivos atrasam a legenda. ASS usa apenas texto, sem efeitos.</span></label>
           <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="h-4 w-4 accent-teal-400" checked={captionBackground} onChange={event => setCaptionBackground(event.target.checked)} />Fundo preto da legenda</label>
         </>}
       </div>}
+
+      {externalPickerOpen && episodeId && !suspended && onExternalSubtitleSelect && <ExternalSubtitlePicker key={episodeId} episodeId={episodeId} selectedId={subtitleId}
+        onClose={() => setExternalPickerOpen(false)} onSelect={track => { onExternalSubtitleSelect(track); setExternalPickerOpen(false); }} />}
 
       <div className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black via-black/70 to-transparent px-3 pb-2 pt-10 transition-opacity sm:px-5 sm:pb-3 ${controlsVisible || !playing || settingsOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`} inert={error || (!controlsVisible && playing && !settingsOpen) ? true : undefined}>
         <label className="block"><span className="sr-only">Posição do vídeo</span><input aria-label="Posição do vídeo" aria-valuetext={`${formatTime(time)} de ${formatTime(duration)}`} type="range" min={0} max={duration || 1} step={0.1} value={Math.min(time, duration || 1)} disabled={!duration} onChange={event => { if (videoRef.current) videoRef.current.currentTime = Number(event.target.value); }} className="h-1.5 w-full cursor-pointer accent-teal-400" /></label>

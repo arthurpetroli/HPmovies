@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AutomaticSubtitleJob, Playback, StreamSubtitle } from '../../../shared/providers.js';
+import type { ExternalSubtitleSearch } from '../../../shared/externalSubtitles.js';
 import { subtitleToVtt } from '../../../shared/subtitles.js';
 import { ApiError } from '../config/apiError.js';
 import { AutomaticSubtitleProvider } from './automatic-subtitles.js';
@@ -33,24 +34,43 @@ export class AutomaticSubtitleJobs {
     for (const [key, job] of this.jobs) if (job.expires <= this.now() && job.value.state !== 'pending') this.jobs.delete(key);
   }
 
+  private attach(episodeId: string, track: StreamSubtitle, sourceLanguages: string[], manual = false): StreamSubtitle {
+    const language = track.language.toLowerCase().replace(/_/g, '-').split('-')[0];
+    if (track.machineTranslated || !manual && /\b(?:forced|signs|songs)\b/i.test(track.label) || language === 'pt' || (!sourceLanguages.includes(language) && !sourceLanguages.includes('*'))
+      || !/^\/api\/(?:streaming\/media|subtitles\/file)\/[a-zA-Z0-9_-]+$/.test(track.url)) return track;
+    const key = JSON.stringify([episodeId, track.url, language, track.format]);
+    let token = this.offerKeys.get(key);
+    if (!token) {
+      if (this.offers.size >= 2048) return track;
+      token = randomUUID();
+      this.offers.set(token, { track: { ...track, language }, key, expires: this.now() + 60 * 60_000 });
+      this.offerKeys.set(key, token);
+    }
+    return { ...track, translationToken: token };
+  }
+
+  /** Search results use the same server-issued file tickets as playback captions. */
+  async offerSearch(result: ExternalSubtitleSearch): Promise<ExternalSubtitleSearch> {
+    if (!result.subtitles.some(track => !track.language.toLowerCase().startsWith('pt') && !track.machineTranslated)) return result;
+    const availability = await this.translator.availability().catch(() => ({ available: false, sourceLanguages: [] as string[], message: 'A tradução automática local está indisponível.' }));
+    this.prune();
+    return { ...result, subtitles: result.subtitles.map(track => {
+      const language = track.language.toLowerCase().replace(/_/g, '-').split('-')[0];
+      if (language === 'pt' || track.machineTranslated) return track;
+      const supported = availability.sourceLanguages.includes(language) || availability.sourceLanguages.includes('*');
+      const offered = availability.available ? this.attach(result.episodeId, track, availability.sourceLanguages, true) : track;
+      return { ...track, ...offered, ...(!offered.translationToken ? { translationMessage: availability.available
+        ? supported ? 'Não foi possível preparar a tradução desta versão agora. Tente consultar as legendas novamente.'
+          : 'Não há modelo local instalado para traduzir o idioma desta legenda. Escolha outra versão ou prepare o modelo desse idioma.'
+        : availability.message } : {}) };
+    }) };
+  }
+
   async offer(playback: Playback): Promise<Playback> {
     const availability = await this.translator.availability().catch(() => ({ available: false, sourceLanguages: [] as string[] }));
     if (!availability.available || playback.isDemo) return playback;
     this.prune();
-    const attach = (tracks: StreamSubtitle[]) => tracks.map(track => {
-      const language = track.language.toLowerCase().replace(/_/g, '-').split('-')[0];
-      if (track.machineTranslated || /\b(?:forced|signs|songs)\b/i.test(track.label) || language === 'pt' || !availability.sourceLanguages.includes(language)
-        || !/^\/api\/(?:streaming\/media|subtitles\/file)\/[a-zA-Z0-9_-]+$/.test(track.url)) return track;
-      const key = JSON.stringify([playback.episode.id, track.url, language, track.format]);
-      let token = this.offerKeys.get(key);
-      if (!token) {
-        if (this.offers.size >= 2048) return track;
-        token = randomUUID();
-        this.offers.set(token, { track: { ...track, language }, key, expires: this.now() + 60 * 60_000 });
-        this.offerKeys.set(key, token);
-      }
-      return { ...track, translationToken: token };
-    });
+    const attach = (tracks: StreamSubtitle[]) => tracks.map(track => this.attach(playback.episode.id, track, availability.sourceLanguages));
     // Unscoped captions belong only to the primary source, as in the player.
     return { ...playback, subtitles: attach(playback.subtitles), sources: playback.sources.map(source => ({ ...source,
       ...(source.subtitles ? { subtitles: attach(source.subtitles) } : {}),
