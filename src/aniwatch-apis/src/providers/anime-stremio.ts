@@ -1,7 +1,7 @@
 import type { Playback, ProviderDiagnostic, StreamSource, StreamSubtitle } from '../../../shared/providers.js';
 import { ApiError } from '../config/apiError.js';
 import type { EpisodeIdentity } from './portuguese-subtitles.js';
-import type { StremioStreamingProvider } from './stremio.js';
+import type { StremioPlaybackRequest, StremioStreamingProvider } from './stremio.js';
 
 interface Options {
   stremio: Pick<StremioStreamingProvider, 'hasConfiguredAddons' | 'playback'>;
@@ -24,7 +24,7 @@ export class AnimeStremioProvider {
       checkedAt: new Date().toISOString(), message, capabilities: ['anime-streaming', 'stremio-http'] };
   }
 
-  async resolve(animeId: string, episode: number, episodeId: string): Promise<AnimeStremioResult> {
+  async resolve(animeId: string, episode: number, episodeId: string, refresh = false): Promise<AnimeStremioResult> {
     if (!this.options.stremio.hasConfiguredAddons()) return {};
     const missing = () => ({ diagnostic: this.status('unavailable', 'Não há correspondência segura entre este episódio AniList e uma edição IMDb. As outras fontes permanecem disponíveis.') });
     if (!/^[1-9]\d{0,8}$/.test(animeId) || !Number.isSafeInteger(episode) || episode < 1 || episode > 100_000) return missing();
@@ -34,9 +34,10 @@ export class AnimeStremioProvider {
       const series = identity.kind === 'series' && Number.isInteger(identity.season) && Number(identity.season) >= 0 && Number(identity.season) <= 1000
         && Number.isInteger(identity.episode) && Number(identity.episode) > 0 && Number(identity.episode) <= 100_000;
       if (identity.kind === 'movie' ? episode !== 1 : !series) return missing();
-      const playback = await this.options.stremio.playback(identity.kind === 'movie'
+      const request: StremioPlaybackRequest = identity.kind === 'movie'
         ? { type: 'movie', imdbId: identity.imdb }
-        : { imdbId: identity.imdb, season: identity.season!, episode: identity.episode! });
+        : { imdbId: identity.imdb, season: identity.season!, episode: identity.episode! };
+      const playback = refresh ? await this.options.stremio.playback(request, undefined, true) : await this.options.stremio.playback(request);
       if (!playback.sources.length || playback.isDemo) throw new ApiError(404, 'STREMIO_EPISODE_UNAVAILABLE', 'As fontes Stremio não retornaram vídeo para este episódio.');
       return { playback: { ...playback, episode: { id: episodeId, number: episode, title: `Episódio ${episode}`, available: true } } };
     } catch (error) {

@@ -40,7 +40,7 @@ export function cinemaQuery(params: URLSearchParams): CinemaQuery {
   return { type, ...(search ? { search } : {}), page: Number(page), ...(provider ? { provider } : {}), ...(region ? { region } : {}) };
 }
 
-function image(input: unknown): string | undefined {
+export function cinemaArtwork(input: unknown): string | undefined {
   if (typeof input !== 'string' || input.length > 2000) return undefined;
   try {
     const url = new URL(input);
@@ -57,7 +57,7 @@ function title(input: unknown, type: CinemaType): CinemaTitle | undefined {
   const rating = typeof row.imdbRating === 'string' && row.imdbRating.trim() ? Number(row.imdbRating) : row.imdbRating;
   return {
     id: row.id, type, title: text(row.name, 300)!,
-    poster: image(row.poster), background: image(row.background), description: text(row.description, 20_000),
+    poster: cinemaArtwork(row.poster), background: cinemaArtwork(row.background), description: text(row.description, 20_000),
     year: text(row.releaseInfo, 50) ?? text(row.year, 50), runtime: text(row.runtime, 100),
     genres: Array.isArray(genres) ? genres.flatMap(value => text(value, 80) ? [text(value, 80)!] : []).slice(0, 30) : [],
     ...(typeof rating === 'number' && Number.isFinite(rating) && rating >= 0 && rating <= 10 ? { rating } : {}),
@@ -75,7 +75,7 @@ function episodes(input: unknown, imdbId: string): CinemaEpisode[] {
     if (row.id !== id) return [];
     const date = text(row.released, 100);
     return [{ id, season, episode, title: text(row.title, 300) ?? text(row.name, 300) ?? `Episódio ${episode}`,
-      ...(date && Number.isFinite(Date.parse(date)) ? { released: new Date(date).toISOString() } : {}), thumbnail: image(row.thumbnail) }];
+      ...(date && Number.isFinite(Date.parse(date)) ? { released: new Date(date).toISOString() } : {}), thumbnail: cinemaArtwork(row.thumbnail) }];
   });
   return [...new Map(rows.map(row => [row.id, row])).values()].sort((a, b) => a.season - b.season || a.episode - b.episode);
 }

@@ -1,0 +1,28 @@
+/* Controles do player: vidro, deslizadores com o verde da marca e botão central discreto. */
+.video-player .player-big-play {
+  position: absolute; left: 50%; top: 50%; z-index: 22; display: flex; align-items: center; justify-content: center;
+  width: 76px; height: 76px; border: 1px solid rgb(255 255 255 / .35); border-radius: 50%;
+  background: rgb(8 11 17 / .5); color: #fff; transform: translate(-50%, -50%);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  box-shadow: 0 0 0 10px rgb(255 255 255 / .06), 0 24px 50px -12px rgb(0 0 0 / .75);
+  transition: transform .35s var(--ease), background-color .2s, color .2s, border-color .2s;
+}
+.video-player .player-big-play:hover { border-color: transparent; background: var(--accent); color: var(--accent-ink); transform: translate(-50%, -50%) scale(1.07); }
+.video-player .player-big-play:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+
+.video-player .player-range { --fill: 0%; height: 20px; margin: 0; padding: 0; border-radius: 999px; background: transparent; cursor: pointer; appearance: none; -webkit-appearance: none; }
+.video-player .player-range--volume { width: 88px; }
+.video-player .player-range::-webkit-slider-runnable-track { height: 5px; border-radius: 999px; background: linear-gradient(90deg, var(--accent) var(--fill), rgb(255 255 255 / .28) var(--fill)); }
+.video-player .player-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; margin-top: -4.5px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgb(0 0 0 / .55); transform: scale(0); transition: transform .18s var(--ease); }
+.video-player .player-range:hover::-webkit-slider-thumb, .video-player .player-range:focus-visible::-webkit-slider-thumb, .video-player .player-range:active::-webkit-slider-thumb { transform: scale(1); }
+.video-player .player-range::-moz-range-track { height: 5px; border-radius: 999px; background: rgb(255 255 255 / .28); }
+.video-player .player-range::-moz-range-progress { height: 5px; border-radius: 999px; background: var(--accent); }
+.video-player .player-range::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: #fff; }
+.video-player .player-range:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.video-player .player-range:disabled { cursor: default; opacity: .5; }
+@media (hover: none) {
+  .video-player .player-range::-webkit-slider-thumb { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .video-player .player-big-play, .video-player .player-range::-webkit-slider-thumb { transition: none; }
+}

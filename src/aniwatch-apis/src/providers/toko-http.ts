@@ -1,6 +1,8 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { ApiError } from '../config/apiError.js';
+import { RequestSlots } from '../config/requestSlots.js';
 import { AniwatchAPICache } from '../config/cache.js';
+import { normalizeProviderKey } from '../config/integrations.js';
 import type { TokoConfig } from '../config/integrations.js';
 
 export interface TokoHealth {
@@ -137,7 +139,7 @@ export class TokoHttpClient {
   private readonly fetcher: typeof fetch;
   private readonly cache: AniwatchAPICache;
   private readonly retryDelayMs: number;
-  private activeRequests = 0;
+  private readonly slots: RequestSlots;
   private readonly apiMode: 'standalone' | 'extension-host';
   private readonly namespace: string;
   private readonly issuedChapters = new Map<string, { expiresAt: number; anilistId: number; providerChapterId?: string }>();
@@ -149,9 +151,11 @@ export class TokoHttpClient {
     this.fetcher = options.fetcher ?? fetch;
     this.cache = options.cache ?? new AniwatchAPICache({ maxEntries: 128 });
     this.retryDelayMs = Math.max(0, Math.min(options.retryDelayMs ?? 150, 1_000));
+    // Four requests at a time; others wait briefly in order instead of failing immediately.
+    this.slots = new RequestSlots(4, Math.min(20_000, Math.max(2_000, config.timeoutMs * 2)), () => new ApiError(503, 'TOKO_BUSY', 'O Toko já está verificando outras consultas. Tente novamente.'));
   }
 
-  private async json<T>(path: string, params: URLSearchParams, parse: (input: unknown) => T, ttl: number, scope = ''): Promise<T> {
+  private async json<T>(path: string, params: URLSearchParams, parse: (input: unknown) => T, ttl: number, scope = '', refresh = false): Promise<T> {
     if (!this.config.enabled) throw new ApiError(503, 'TOKO_DISABLED', 'A integração HTTP do Toko está desativada.');
     // Paths are constants from verified endpoints; untrusted values only enter query parameters.
     const base = this.config.baseUrl.replace(/\/api\/v3\/?$/, '');
@@ -159,72 +163,68 @@ export class TokoHttpClient {
     const url = new URL(`${base}${endpoint}`);
     params.sort();
     url.search = params.toString();
-    return this.cache.getOrSet(async () => {
-      if (this.activeRequests >= 4) throw new ApiError(503, 'TOKO_BUSY', 'O Toko já está verificando outras consultas. Tente novamente.');
-      this.activeRequests++;
-      try {
-        for (let attempt = 0; ; attempt++) {
-          try {
-            const response = await this.fetcher(url.toString(), {
-              headers: { Accept: 'application/json' },
-              redirect: 'manual',
-              signal: AbortSignal.timeout(this.config.timeoutMs),
-            });
-            if (!response.ok) await response.body?.cancel();
-            if (response.status === 401 || response.status === 403) {
-              throw new ApiError(503, 'TOKO_UNAUTHORIZED', 'O serviço Toko recusou o acesso à integração.');
+    const key = `toko:http:${scope}:${url}`;
+    if (refresh && this.apiMode === 'extension-host') url.searchParams.set('refresh', '1');
+    return this.cache.getOrSet(() => this.slots.run(async () => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const response = await this.fetcher(url.toString(), {
+            headers: { Accept: 'application/json' },
+            redirect: 'manual',
+            signal: AbortSignal.timeout(this.config.timeoutMs),
+          });
+          if (!response.ok) await response.body?.cancel();
+          if (response.status === 401 || response.status === 403) {
+            throw new ApiError(503, 'TOKO_UNAUTHORIZED', 'O serviço Toko recusou o acesso à integração.');
+          }
+          if (response.status >= 300 && response.status < 400) {
+            throw new ApiError(502, 'TOKO_REDIRECT_REFUSED', 'O serviço Toko respondeu com um redirecionamento não permitido.');
+          }
+          if (response.status === 404) throw new ApiError(404, 'TOKO_NOT_FOUND', 'O recurso solicitado não foi encontrado no Toko.');
+          if (!response.ok) {
+            if (response.status === 429 || response.status >= 500) {
+              throw new ApiError(503, 'TOKO_UPSTREAM_UNAVAILABLE', 'O Toko está temporariamente indisponível.');
             }
-            if (response.status >= 300 && response.status < 400) {
-              throw new ApiError(502, 'TOKO_REDIRECT_REFUSED', 'O serviço Toko respondeu com um redirecionamento não permitido.');
-            }
-            if (response.status === 404) throw new ApiError(404, 'TOKO_NOT_FOUND', 'O recurso solicitado não foi encontrado no Toko.');
-            if (!response.ok) {
-              if (response.status === 429 || response.status >= 500) {
-                throw new ApiError(503, 'TOKO_UPSTREAM_UNAVAILABLE', 'O Toko está temporariamente indisponível.');
-              }
-              throw new ApiError(502, 'TOKO_UPSTREAM_ERROR', 'O serviço Toko não aceitou a consulta.');
-            }
-            const contentType = response.headers.get('content-type') ?? '';
-            if (!/^application\/(?:[a-z0-9.-]+\+)?json\b/i.test(contentType)) {
-              await response.body?.cancel();
-              return invalid();
-            }
-            const declared = Number(response.headers.get('content-length') ?? 0);
-            if (declared > 2_000_000) {
-              await response.body?.cancel();
+            throw new ApiError(502, 'TOKO_UPSTREAM_ERROR', 'O serviço Toko não aceitou a consulta.');
+          }
+          const contentType = response.headers.get('content-type') ?? '';
+          if (!/^application\/(?:[a-z0-9.-]+\+)?json\b/i.test(contentType)) {
+            await response.body?.cancel();
+            return invalid();
+          }
+          const declared = Number(response.headers.get('content-length') ?? 0);
+          if (declared > 2_000_000) {
+            await response.body?.cancel();
+            throw new ApiError(502, 'TOKO_RESPONSE_TOO_LARGE', 'A resposta do Toko excedeu o limite de tamanho.');
+          }
+          const reader = response.body?.getReader();
+          if (!reader) return invalid();
+          const chunks: Uint8Array[] = [];
+          let bytes = 0;
+          while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            bytes += chunk.value.byteLength;
+            if (bytes > 2_000_000) {
+              await reader.cancel();
               throw new ApiError(502, 'TOKO_RESPONSE_TOO_LARGE', 'A resposta do Toko excedeu o limite de tamanho.');
             }
-            const reader = response.body?.getReader();
-            if (!reader) return invalid();
-            const chunks: Uint8Array[] = [];
-            let bytes = 0;
-            while (true) {
-              const chunk = await reader.read();
-              if (chunk.done) break;
-              bytes += chunk.value.byteLength;
-              if (bytes > 2_000_000) {
-                await reader.cancel();
-                throw new ApiError(502, 'TOKO_RESPONSE_TOO_LARGE', 'A resposta do Toko excedeu o limite de tamanho.');
-              }
-              chunks.push(chunk.value);
-            }
-            let payload: unknown;
-            try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return invalid(); }
-            return parse(payload);
-          } catch (error) {
-            const normalized = error instanceof ApiError ? error
-              : error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name)
-                ? new ApiError(504, 'TOKO_TIMEOUT', 'O Toko demorou demais para responder.')
-                : new ApiError(503, 'TOKO_CONNECTION_ERROR', 'Não foi possível conectar ao serviço Toko.');
-            const retryable = ['TOKO_TIMEOUT', 'TOKO_CONNECTION_ERROR', 'TOKO_UPSTREAM_UNAVAILABLE'].includes(normalized.code);
-            if (!retryable || attempt >= this.config.retries) throw normalized;
-            await delay(this.retryDelayMs * (attempt + 1));
+            chunks.push(chunk.value);
           }
+          let payload: unknown;
+          try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return invalid(); }
+          return parse(payload);
+        } catch (error) {
+          const normalized = error instanceof ApiError ? error
+            : error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name)
+              ? new ApiError(504, 'TOKO_TIMEOUT', 'O Toko demorou demais para responder.')
+              : new ApiError(503, 'TOKO_CONNECTION_ERROR', 'Não foi possível conectar ao serviço Toko.');
+          const retryable = ['TOKO_TIMEOUT', 'TOKO_CONNECTION_ERROR', 'TOKO_UPSTREAM_UNAVAILABLE'].includes(normalized.code);
+          if (!retryable || attempt >= this.config.retries) throw normalized;
+          await delay(this.retryDelayMs * (attempt + 1));
         }
-      } finally {
-        this.activeRequests--;
       }
-    }, `toko:http:${scope}:${url.toString()}`, ttl);
+    }), key, ttl, refresh);
   }
 
   private query(anilistId: number, titles: string[] = []): URLSearchParams {
@@ -287,7 +287,7 @@ export class TokoHttpClient {
     }), 120);
   }
 
-  streams(anilistId: number, episode: number, titles?: string[]): Promise<TokoStreamResponse> {
+  streams(anilistId: number, episode: number, titles?: string[], refresh = false): Promise<TokoStreamResponse> {
     if (!this.config.contentAuthorized || !this.config.allowedProviders.length
       || !(this.config.allowedMediaHosts.length || this.config.allowedStreamDomains?.length)) {
       throw new ApiError(503, 'TOKO_UNAUTHORIZED', 'Nenhuma fonte autorizada foi configurada para reprodução no Toko.');
@@ -330,14 +330,18 @@ export class TokoHttpClient {
           }),
         };
       });
-      return {
-        sources,
-        providerStatus: (data.providerStatus === undefined ? [] : list(data.providerStatus, 500)).map((item) => {
-          const row = object(item);
-          return { provider: text(row.provider) ?? text(row.providerName) ?? 'toko', status: text(row.status, 64) ?? 'unknown' };
-        }),
-      };
-    }, 30);
+      const providerStatus = (data.providerStatus === undefined ? [] : list(data.providerStatus, 500)).map((item) => {
+        const row = object(item);
+        return { provider: text(row.provider) ?? text(row.providerName) ?? 'toko', status: text(row.status, 64) ?? 'unknown' };
+      });
+      // The host returns HTTP 200 even when a configured resolver times out.
+      // Do not cache that temporary failure as an episode with no media.
+      if (!sources.length && providerStatus.some(({ provider, status }) =>
+        this.config.allowedProviders.includes(normalizeProviderKey(provider)) && ['error', 'timeout'].includes(status.toLowerCase()))) {
+        throw new ApiError(503, 'TOKO_UPSTREAM_UNAVAILABLE', 'Uma fonte de vídeo do Toko não respondeu agora. Tente novamente em instantes.');
+      }
+      return { sources, providerStatus };
+    }, 30, '', refresh);
   }
 
   private requireContentProvider(provider: string): void {

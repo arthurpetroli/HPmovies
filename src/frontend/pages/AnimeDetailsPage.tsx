@@ -11,6 +11,7 @@ import { catalogService } from '../services/catalog';
 import { libraryService, useLibrary } from '../services/library';
 import { streamingService } from '../services/streaming';
 import { useCatalogRequest } from '../hooks/useCatalogRequest';
+import { withCatalogEpisodes } from '../services/catalogEpisodes';
 import '../animeDetails.css';
 
 const statusLabels: Record<string, string> = { RELEASING: 'Em exibição', FINISHED: 'Concluído', NOT_YET_RELEASED: 'Em breve', CANCELLED: 'Cancelado', HIATUS: 'Em pausa' };
@@ -30,7 +31,7 @@ function AnimeArtwork({ anime, backdrop = false }: { anime: CatalogAnime; backdr
   const [failed, setFailed] = useState<string[]>([]);
   const sources = backdrop ? [anime.banner, anime.poster] : [anime.poster];
   const image = sources.find((source): source is string => !!source && !failed.includes(source));
-  return image ? <img src={image} alt={backdrop ? '' : `Capa de ${anime.title}`} fetchPriority={backdrop ? 'auto' : 'high'} onError={() => setFailed(value => [...value, image])} />
+  return image ? <img src={image} alt={backdrop ? '' : `Capa de ${anime.title}`} data-art={image === anime.banner ? 'banner' : 'poster'} fetchPriority={backdrop ? 'auto' : 'high'} onError={() => setFailed(value => [...value, image])} />
     : <div className="anime-details-artwork-empty"><Film size={42} aria-hidden="true" /><span>{backdrop ? '' : anime.title}</span></div>;
 }
 
@@ -75,7 +76,8 @@ export function AnimeDetailsPage() {
   if (error || !anime) return <main id="main-content" className="page-shell content-width"><Link className="back-link" to="/explore"><ArrowLeft size={16} />Voltar ao catálogo</Link><CatalogError message={error} onRetry={() => setRetry((value) => value + 1)} /></main>;
   const links = (anime.externalLinks || []).filter((link) => /^https:\/\//i.test(link.url));
   const seasons = (anime.relations || []).filter((relation) => relation.anime.id !== anime.id);
-  const firstEpisode = availability?.episodes.find(episode => episode.available !== false);
+  const firstEpisode = !availability?.catalogFallback && availability?.episodes.find(episode => episode.available !== false);
+  const shownAvailability = episodesLoading ? availability : withCatalogEpisodes(availability, anime);
   const otherSources = new URLSearchParams({ type: anime.format === 'MOVIE' ? 'movie' : 'series', q: (anime.title.trim() || anime.titleOriginal?.trim() || '').slice(0, 120) });
   const season = [anime.season ? seasonLabels[anime.season] || anime.season : '', anime.year].filter(Boolean).join(' de ');
   const facts = [
@@ -129,7 +131,7 @@ export function AnimeDetailsPage() {
               {anime.description && anime.description.length > 400 && <button type="button" className="anime-details-expand" onClick={() => setExpandedAnime(expanded ? '' : animeId)} aria-expanded={expanded}>{expanded ? 'Ler menos' : 'Ler sinopse completa'}</button>}
               <AnimeTrailer key={anime.id} anime={anime} />
             </section>
-            <AnimeEpisodeList key={animeId} anime={anime} availability={availability} loading={episodesLoading} error={streamError} onRetry={() => setEpisodeRetry(value => value + 1)} />
+            <AnimeEpisodeList key={animeId} anime={anime} availability={shownAvailability} loading={episodesLoading} error={shownAvailability?.catalogFallback ? '' : streamError} onRetry={() => setEpisodeRetry(value => value + 1)} />
             {!!anime.characters?.length && <section className="anime-details-characters" id="personagens" aria-labelledby="anime-characters-heading"><div className="anime-details-section-title"><h2 id="anime-characters-heading">Personagens</h2><span>Quem faz parte desta história</span></div><div className="character-list">{anime.characters.map(character => <article key={character.id}>{character.image ? <img src={character.image} alt="" loading="lazy" /> : <span className="anime-details-character-empty"><Film size={22} aria-hidden="true" /></span>}<div><h3>{character.name}</h3><p>{character.role === 'MAIN' ? 'Principal' : character.role === 'SUPPORTING' ? 'Coadjuvante' : 'Participação'}</p></div></article>)}</div></section>}
             {seasons.length > 0 && <section className="anime-details-relations" id="relacionados" aria-labelledby="anime-relations-heading"><div className="anime-details-section-title"><h2 id="anime-relations-heading">Temporadas e histórias relacionadas</h2></div><div className="relations-carousel scrollbar-hide">{seasons.map(({ relation, anime: related }) => <Link key={`${relation}-${related.id}`} className="relation-card" to={`/anime/${related.id}`}><img src={related.poster} alt="" loading="lazy" /><div><span>{relationLabels[relation] || relation}</span><h3>{related.title}</h3><small>{[related.year, related.format?.replace('_', ' ')].filter(Boolean).join(' · ')}</small></div><ArrowUpRight size={17} aria-hidden="true" /></Link>)}</div></section>}
             {anime.recommendations && <AnimeRowCarousel title="Mais histórias para sua lista" subtitle="Recomendações da comunidade do AniList." animes={anime.recommendations} />}

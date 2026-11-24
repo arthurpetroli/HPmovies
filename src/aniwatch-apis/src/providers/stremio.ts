@@ -4,6 +4,7 @@ import type {
   StreamingAvailability, StreamingSource, StreamSubtitle,
 } from '../../../shared/providers.js';
 import { ApiError } from '../config/apiError.js';
+import { RequestSlots } from '../config/requestSlots.js';
 import { AniwatchAPICache } from '../config/cache.js';
 
 /** Operator configuration. Addon payloads are never installed or executed. */
@@ -231,7 +232,7 @@ export class StremioStreamingProvider implements AnimeStreamingProvider {
   private readonly cache: AniwatchAPICache;
   private readonly timeoutMs: number;
   private readonly allowLoopback: boolean;
-  private activeRequests = 0;
+  private readonly slots = new RequestSlots(MAX_REQUESTS, 20_000, () => new ApiError(503, 'STREMIO_BUSY', 'Há outras consultas Stremio em andamento. Tente novamente.'));
 
   constructor(options: StremioProviderOptions) {
     this.allowLoopback = options.allowLoopback === true;
@@ -255,10 +256,9 @@ export class StremioStreamingProvider implements AnimeStreamingProvider {
     this.timeoutMs = timeout;
   }
 
-  private async json<T>(url: string, parse: (input: unknown) => T, ttl: number): Promise<T> {
-    return this.cache.getOrSet(async () => {
-      if (this.activeRequests >= MAX_REQUESTS) throw new ApiError(503, 'STREMIO_BUSY', 'Há outras consultas Stremio em andamento. Tente novamente.');
-      this.activeRequests++;
+  private async json<T>(url: string, parse: (input: unknown) => T, ttl: number, refresh = false): Promise<T> {
+    // Requests beyond the limit wait in order for a free slot instead of failing immediately.
+    return this.cache.getOrSet(() => this.slots.run(async () => {
       try {
         const response = await this.fetcher(url, {
           headers: { Accept: 'application/json' }, credentials: 'omit', referrerPolicy: 'no-referrer',
@@ -300,8 +300,8 @@ export class StremioStreamingProvider implements AnimeStreamingProvider {
         if (error instanceof ApiError) throw error;
         if (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name)) throw new ApiError(504, 'STREMIO_TIMEOUT', 'O addon Stremio demorou demais para responder.');
         throw new ApiError(503, 'STREMIO_CONNECTION_ERROR', 'Não foi possível conectar ao addon Stremio.');
-      } finally { this.activeRequests--; }
-    }, `stremio:http:${url}`, ttl);
+      }
+    }), `stremio:http:${url}`, ttl, refresh);
   }
 
   private manifest(addon: StremioAddonConfig): Promise<AddonManifest> {
@@ -395,7 +395,7 @@ export class StremioStreamingProvider implements AnimeStreamingProvider {
     };
   }
 
-  private async resolve(addon: StremioAddonConfig, request: StremioPlaybackRequest): Promise<AddonResult> {
+  private async resolve(addon: StremioAddonConfig, request: StremioPlaybackRequest, refresh: boolean): Promise<AddonResult> {
     try {
       const manifest = await this.manifest(addon);
       const type = request.type ?? 'series';
@@ -411,7 +411,7 @@ export class StremioStreamingProvider implements AnimeStreamingProvider {
         const data = object(input);
         if (!data || !Array.isArray(data.streams) || data.streams.length > 500) return invalid();
         return data.streams as unknown[];
-      }, 30);
+      }, 30, refresh);
       const normalized = rows.flatMap((row, index) => {
         const result = normalizeStream(row, addon, index, this.allowLoopback);
         return result ? [result] : [];
@@ -434,14 +434,14 @@ export class StremioStreamingProvider implements AnimeStreamingProvider {
     }
   }
 
-  async playback(input: StremioPlaybackRequest | string): Promise<Playback> {
+  async playback(input: StremioPlaybackRequest | string, _titles?: string[], refresh = false): Promise<Playback> {
     const request = typeof input === 'string' ? parseStremioEpisodeId(input) : input;
     validateRequest(request);
     const configured = request.provider ? this.addons.filter((addon) => addon.id === request.provider) : this.addons;
     if (!configured.length) throw new ApiError(404, 'STREMIO_ADDON_NOT_FOUND', 'Nenhum addon Stremio corresponde à consulta.');
     const permitted = configured.filter((addon) => this.hasMediaPermission(addon));
     if (!permitted.length) throw new ApiError(503, 'STREMIO_UNAUTHORIZED', 'Nenhum addon Stremio possui permissão de conteúdo e domínios de mídia configurados.');
-    const results = await pool(permitted, (addon) => this.resolve(addon, request));
+    const results = await pool(permitted, (addon) => this.resolve(addon, request, refresh));
     const sources = results.flatMap((result) => result.sources);
     if (!sources.length) throw results.find((result) => result.error?.status !== 404)?.error ?? results[0].error ?? new ApiError(404, 'STREMIO_EPISODE_UNAVAILABLE', 'Nenhuma mídia Stremio foi encontrada para este episódio.');
     const subtitles = [...new Map(sources.flatMap((source) => source.subtitles).map((track) => [`${track.url}:${track.language}`, track])).values()];

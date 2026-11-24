@@ -18,6 +18,7 @@ import { episodeEnding, episodeIntro } from '../services/intro';
 import { setWatchPreference, useWatchPreferences } from '../services/watchPreferences';
 import { cinemaService } from '../services/cinema';
 import { cinemaForEpisode, stremioWatchIdentity } from '../services/watchCinemaContext';
+import { withCatalogEpisodes } from '../services/catalogEpisodes';
 import '../watch.css';
 
 interface WatchSession { key: string; playback: Playback; resumeTime: number; anime?: CatalogAnime; cinema?: CinemaTitle }
@@ -80,10 +81,12 @@ export function WatchPage() {
   const startEnabled = !!entryId && indexEnabled;
   const entryLoader = useCallback(() => startEnabled ? watchStart(animeId, JSON.parse(listTitleKey) as string[], episodeAttempt > 0, preferredEpisode) : Promise.resolve(null), [startEnabled, animeId, listTitleKey, episodeAttempt, preferredEpisode]);
   const entry = useCatalogRequest(`watch-start:${animeId}:${listTitleKey}:${startEnabled}:${episodeAttempt}:${preferredEpisode}`, entryLoader);
-  const selected = entryId ? entry.data?.episode || (!entry.loading && preferredEpisode === undefined ? selectWatchEpisode(entryId, episodeList.data?.episodes || []) : undefined) : undefined;
+  const indexedEpisodes = episodeList.data?.catalogFallback ? [] : episodeList.data?.episodes || [];
+  const selected = entryId ? entry.data?.episode || (!entry.loading && preferredEpisode === undefined ? selectWatchEpisode(entryId, indexedEpisodes) : undefined) : undefined;
   const episodeId = selected?.id || routeEpisodeId;
+  const indexFailure = episodeList.data?.catalogFallback ? '' : episodeList.data?.message;
   const entryError = entryId && startEnabled && !entry.loading && (preferredEpisode !== undefined || !episodeList.loading) && !selected
-    ? entry.error || episodeList.error || episodeList.data?.message || 'Os episódios deste anime ainda não foram encontrados nas fontes conectadas.' : '';
+    ? entry.error || episodeList.error || indexFailure || 'Não foi possível abrir um episódio deste anime.' : '';
   const context = entryId ? { ...state, anime, episode: selected, resume: true } : state;
 
   useEffect(() => {
@@ -96,9 +99,15 @@ export function WatchPage() {
     if (cinema) libraryService.updateCinemaMetadata(cinema.id, cinema.type, cinema);
   }, [cinema]);
 
+  // When no source index answers, the sidebar and next/previous use the catalog
+  // episode count; each episode is still resolved by the sources when opened.
+  const animeEpisodeList = { ...episodeList, loading: !!entryId && !indexEnabled || episodeList.loading };
+  const catalogList = !cinemaSeriesId && !animeEpisodeList.loading ? withCatalogEpisodes(episodeList.data, anime) : null;
+  const shownEpisodeList = catalogList?.catalogFallback ? { ...animeEpisodeList, data: catalogList, error: '' } : animeEpisodeList;
+
   // One route component keeps the stage mounted during entry and episode changes.
   return <WatchEpisode episodeId={episodeId} context={context} hints={hints} anime={anime} cinema={cinema} entryMode={!!entryId}
-    entryError={entryError} episodeList={cinemaSeriesId ? cinemaEpisodes : { ...episodeList, loading: !!entryId && !indexEnabled || episodeList.loading }}
+    entryError={entryError} episodeList={cinemaSeriesId ? cinemaEpisodes : shownEpisodeList}
     onRetryEpisodes={() => setEpisodeAttempt(value => value + 1)} />;
 }
 
@@ -125,13 +134,15 @@ function WatchEpisode({ episodeId, context, hints, anime, cinema, entryMode, ent
   const [captionStatus, setCaptionStatus] = useState({ sourceUrl: '', machineTranslated: false });
   const [externalCaptions, setExternalCaptions] = useState<{ episodeId: string; tracks: StreamSubtitle[]; selectedId?: string }>({ episodeId: '', tracks: [] });
   const [result, setResult] = useState({ key: '', error: '' });
-  const [attempt, setAttempt] = useState(0);
+  const [retry, setRetry] = useState({ key: location.key, count: 0 });
+  const attempt = retry.key === location.key ? retry.count : 0;
+  if (retry.key !== location.key) setRetry({ key: location.key, count: 0 });
   const [sourceAttempt, setSourceAttempt] = useState(0);
   const [continuePlaying, setContinuePlaying] = useState(false);
   const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
   const failedSourcesRef = useRef(new Set<string>());
-  const subtitleRefreshRef = useRef<{ episodeId: string; position: number; playRequested: boolean } | null>(null);
+  const playbackRefreshRef = useRef<{ episodeId: string; position: number; playRequested: boolean } | null>(null);
   const { autoNext, autoSkipIntro } = useWatchPreferences();
   const sourceEpisode = /^(tatakai|toko):([1-9]\d*):(\d+(?:\.\d+)?)$/.exec(episodeId);
   const stremio = stremioWatchIdentity(episodeId);
@@ -147,7 +158,14 @@ function WatchEpisode({ episodeId, context, hints, anime, cinema, entryMode, ent
   useLayoutEffect(() => {
     if (initialIntentRef.current.key !== requestKey) initialIntentRef.current = { key: requestKey, autoPlay: navigationAutoPlay, resume: context?.resume === true, anime, cinema };
   }, [requestKey, context, anime, cinema, navigationAutoPlay]);
-  const incoming = context?.episode?.id === episodeId ? context.episode : episodes.find(episode => episode.id === episodeId);
+  const listedEpisode = episodes.find(episode => episode.id === episodeId);
+  const navigationEpisode = context?.episode?.id === episodeId ? context.episode : undefined;
+  // Late index metadata can fill a generic title or absent image from navigation.
+  const incoming = listedEpisode ? {
+    ...navigationEpisode, ...listedEpisode,
+    thumbnail: listedEpisode.thumbnail || navigationEpisode?.thumbnail,
+    title: /^Episódio \d+(?:\.\d+)?$/.test(listedEpisode.title) ? navigationEpisode?.title || listedEpisode.title : listedEpisode.title,
+  } : navigationEpisode;
   const displayedEpisode = ready && playback ? {
     ...playback.episode,
     title: /^Episódio \d+(?:\.\d+)?$/.test(playback.episode.title) ? incoming?.title || playback.episode.title : playback.episode.title,
@@ -197,10 +215,10 @@ function WatchEpisode({ episodeId, context, hints, anime, cinema, entryMode, ent
       if (!value.sources.length) throw new Error('A reprodução ainda não está disponível para este episódio.');
       sourceTitles.save('anime', episodeId, titles);
       const previous = libraryService.getProgress(episodeId);
-      const refreshed = subtitleRefreshRef.current?.episodeId === episodeId ? subtitleRefreshRef.current : null;
+      const refreshed = playbackRefreshRef.current?.episodeId === episodeId ? playbackRefreshRef.current : null;
       const startAutomatically = refreshed?.playRequested ?? intent.autoPlay;
       intent.autoPlay = false;
-      subtitleRefreshRef.current = null;
+      playbackRefreshRef.current = null;
       setSession({ key: requestKey, playback: value, anime: intent.anime, cinema: intent.cinema, resumeTime: refreshed?.position ?? ((!startAutomatically || intent.resume) && previous && !previous.completed ? previous.currentTime : 0) });
       setSource(orderedPlaybackSources(value)[0]);
       setSourceAttempt(value => value + 1);
@@ -297,10 +315,19 @@ function WatchEpisode({ episodeId, context, hints, anime, cinema, entryMode, ent
     setSource(chosen);
     setSourceAttempt(value => value + 1);
   };
-  const refreshSubtitles = () => {
-    subtitleRefreshRef.current = { episodeId, position: playerRef.current?.getPosition() ?? session?.resumeTime ?? 0,
-      playRequested: playerRef.current?.getPlayRequested() ?? false };
-    setAttempt(value => value + 1);
+  const refreshPlayback = () => {
+    if (!episodeId) {
+      onRetryEpisodes();
+      return;
+    }
+    if (ready && session) {
+      playbackRefreshRef.current = {
+        episodeId,
+        position: playerRef.current?.getPosition() ?? session.resumeTime,
+        playRequested: playerRef.current?.getPlayRequested() ?? false,
+      };
+    }
+    setRetry({ key: location.key, count: attempt + 1 });
   };
   const addAutomaticSubtitle = (track: StreamSubtitle) => {
     if (!ready || session?.key !== requestKey || !source) return;
@@ -347,11 +374,11 @@ function WatchEpisode({ episodeId, context, hints, anime, cinema, entryMode, ent
             endingResolver={nextId ? resolveEnding : undefined} onNextEpisode={nextId ? goToNextEpisode : undefined}
             onPrepareNextEpisode={nextId ? prepareNextEpisode : undefined}
             onEnded={autoNext && nextId ? goToNextEpisode : undefined} initialTime={session.resumeTime} onProgress={saveProgress}
-            onSourceError={recoverSource} onSourcePlaying={() => setRecoveryNotice(null)} onSubtitleChange={updateCaptionStatus} autoPlay={continuePlaying} />
+            onSourceError={recoverSource} onRetrySources={refreshPlayback} onSourcePlaying={() => setRecoveryNotice(null)} onSubtitleChange={updateCaptionStatus} autoPlay={continuePlaying} />
             : <WatchArtwork image={artwork} fallback={artworkFallback} />}
           {!ready && <div className={`watch-transition${error ? ' is-error' : ''}`}>
             <WatchArtwork image={artwork} fallback={artworkFallback} />
-            {error ? <><Film size={28} aria-hidden="true" /><h2>{episodeId === 'demo' ? 'Não foi possível preparar o player' : 'Episódio indisponível'}</h2><p role="alert">{error}</p><button className="button-primary" onClick={() => episodeId ? setAttempt(value => value + 1) : onRetryEpisodes()}>Tentar novamente</button></>
+            {error ? <><Film size={28} aria-hidden="true" /><h2>{episodeId === 'demo' ? 'Não foi possível preparar o player' : 'Episódio indisponível'}</h2><p role="alert">{error}</p><button className="button-primary" onClick={refreshPlayback}>Tentar novamente</button></>
               : <><Loader2 size={32} className="animate-spin" aria-hidden="true" /><span role="status">{stremio?.type === 'movie' ? 'Abrindo filme…' : incoming?.number != null ? `Preparando episódio ${incoming.number}…` : 'Abrindo episódio…'}</span><small>{anime?.title || displayedTitle}</small></>}
           </div>}
         </div>
@@ -365,7 +392,7 @@ function WatchEpisode({ episodeId, context, hints, anime, cinema, entryMode, ent
             }}>Próximo episódio<ArrowRight size={15} aria-hidden="true" /></Link>}
           </nav>
         </div>
-        {ready && recoveryNotice && <div role="status" className={`mt-3 rounded-lg border px-4 py-3 text-sm ${exhausted ? 'border-amber-400/20 bg-amber-400/5 text-amber-200' : 'border-teal-400/20 bg-teal-400/5 text-slate-300'}`}><p>{recoveryNotice}</p>{exhausted && <button type="button" className="button-primary mt-3" onClick={() => setAttempt(value => value + 1)}>Tentar fontes novamente</button>}</div>}
+        {ready && recoveryNotice && <div role="status" className={`mt-3 rounded-lg border px-4 py-3 text-sm ${exhausted ? 'border-amber-400/20 bg-amber-400/5 text-amber-200' : 'border-teal-400/20 bg-teal-400/5 text-slate-300'}`}><p>{recoveryNotice}</p></div>}
         {ready && portugueseRank === 4 && <div role="region" aria-label="Disponibilidade de legendas" className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm leading-relaxed text-slate-300">
           <p role="status">{activeSubtitles.length ? 'Esta fonte não tem legenda em português. Outros idiomas podem ser escolhidos nas configurações do player.' : 'Esta fonte não forneceu legendas para este episódio.'}</p>
           {portugueseAlternative ? <>
@@ -373,11 +400,11 @@ function WatchEpisode({ episodeId, context, hints, anime, cinema, entryMode, ent
             <button type="button" className="button-secondary mt-3 min-h-11" onClick={() => chooseSource(portugueseAlternative)}>Usar fonte com legenda em português</button>
           </> : <>
             <p className="mt-2 text-xs text-slate-400">{activeSubtitles.some(track => track.translationToken) ? 'Você pode gerar uma tradução em português na seção Sua experiência.' : !activeSubtitles.length ? 'A tradução automática precisa de uma legenda de origem. Você pode consultar as fontes novamente.' : 'Você pode consultar as fontes novamente para procurar legendas em português.'}</p>
-            <button type="button" className="button-secondary mt-3 min-h-11" onClick={refreshSubtitles}>Buscar fontes e legendas novamente</button>
+            <button type="button" className="button-secondary mt-3 min-h-11" onClick={refreshPlayback}>Buscar fontes e legendas novamente</button>
           </>}
         </div>}
       </div>
-      <aside className="watch-sidebar">{stremio?.type === 'movie' ? <section className="rounded-xl border border-white/10 p-5"><h2 className="font-semibold text-white">Filme completo</h2><p className="mt-3 text-sm leading-relaxed text-slate-400">{cinemaTitle || 'Filme'}</p><Link className="button-secondary mt-5" to={backPath}><ArrowLeft size={16} aria-hidden="true" />{backLabel}</Link></section> : <WatchEpisodeList episodes={episodes} currentEpisodeId={episodeId} anime={anime} hints={hints}
+      <aside className="watch-sidebar">{stremio?.type === 'movie' ? <section className="surface-card p-5"><h2 className="font-semibold text-white">Filme completo</h2><p className="mt-3 text-sm leading-relaxed text-slate-400">{cinemaTitle || 'Filme'}</p><Link className="button-secondary mt-5" to={backPath}><ArrowLeft size={16} aria-hidden="true" />{backLabel}</Link></section> : <WatchEpisodeList episodes={episodes} currentEpisodeId={episodeId} playbackReady={ready} anime={anime} hints={hints}
         loading={episodeList.loading} error={episodeList.error || (episodeList.data?.state === 'connection_error' ? episodeList.data.message || 'Não foi possível carregar a lista.' : '')}
         onRetry={onRetryEpisodes} onNavigate={navigateEpisode} />}</aside>
       <section className="watch-details">
@@ -406,7 +433,7 @@ function WatchEpisode({ episodeId, context, hints, anime, cinema, entryMode, ent
       {ready && playback && source && <>
         <aside aria-labelledby="watch-experience-title" className="watch-preferences">
           <h2 id="watch-experience-title" className="text-base font-semibold text-white">Sua experiência</h2><p className="mt-2 text-xs leading-relaxed text-slate-500">A reprodução usa apenas as fontes disponíveis para este conteúdo.</p>
-          <label className="mt-6 block"><span className="mb-2 block text-xs font-medium text-slate-400">Fonte de vídeo</span><select className="w-full rounded-lg border border-white/15 bg-[#151d25] px-3 py-2.5 text-sm text-white focus:border-teal-400 focus:outline-none" value={source.url} onChange={event => {
+          <label className="mt-6 block"><span className="mb-2 block text-xs font-medium text-slate-400">Fonte de vídeo</span><select className="field-control" value={source.url} onChange={event => {
             const chosen = playback.sources.find(item => item.url === event.target.value);
             if (!chosen || chosen.url === source.url) return;
             chooseSource(chosen);

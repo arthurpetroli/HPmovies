@@ -33,11 +33,14 @@ test('navigation exposes working destinations and a keyboard-accessible search',
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)).toBe(false);
 });
 
-test('settings trap focus, close with Escape and persist the ambient preference', async ({ page }) => {
+test('settings trap focus, close with Escape and persist the ambient preference', async ({ page, isMobile }) => {
   await fixture(page);
   await page.goto('/watch/anime/21?title=Teste');
   await expect(page.locator('.watch-backdrop')).toBeVisible();
   const open = page.getByRole('button', { name: 'Configurações', exact: true });
+  // No celular o menu completo (com as configurações) fica na gaveta aberta pelo botão Menu.
+  const openMenu = async () => { if (isMobile) await page.getByRole('button', { name: 'Expandir navegação', exact: true }).click(); };
+  await openMenu();
   await open.click();
   const dialog = page.getByRole('dialog', { name: 'Sua experiência' });
   await expect(dialog).toBeVisible();
@@ -48,6 +51,7 @@ test('settings trap focus, close with Escape and persist the ambient preference'
   await expect(open).toBeFocused();
   await page.reload();
   await expect(page.locator('.watch-backdrop')).not.toBeVisible();
+  await openMenu();
   await open.click();
   await expect(dialog.getByRole('checkbox', { name: /Fundo com arte do anime/ })).not.toBeChecked();
   await dialog.getByRole('button', { name: 'Fechar configurações', exact: true }).click();
@@ -65,8 +69,8 @@ test('compact search gains a backdrop only after scrolling and preserves the que
   await expect(header).toHaveAttribute('data-scrolled', 'false');
   expect(await backdropOpacity()).toBe('0');
   const initialBounds = (await input.boundingBox())!;
-  expect(initialBounds.height).toBe(36);
-  if (!isMobile) expect(initialBounds.width).toBe(440);
+  expect(initialBounds.height).toBe(46);
+  if (!isMobile) expect(initialBounds.width).toBe(540);
   expect((await page.getByRole('button', { name: 'Ver resultados', exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await input.fill('navegação');
   await expect(page.getByRole('option').first()).toBeVisible();
@@ -81,7 +85,7 @@ test('compact search gains a backdrop only after scrolling and preserves the que
   expect((await input.boundingBox())!.y).toBe(initialBounds.y);
   await input.evaluate(element => (element as HTMLInputElement).blur());
   await expect(input).not.toBeFocused();
-  // The extra padding keeps a 44px touch area around the smaller visual field.
+  // O preenchimento da forma mantém uma área de toque confortável ao redor do campo.
   await page.locator('.floating-search form').click({ position: { x: 20, y: 1 } });
   await expect(input).toBeFocused();
   await input.evaluate(element => (element as HTMLInputElement).blur());

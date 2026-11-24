@@ -18,11 +18,12 @@ afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await c
 async function actualHost() {
   const directory = await mkdtemp(path.join(tmpdir(), 'hpmovies-content-test-'));
   cleanup.push(() => rm(directory, { recursive: true, force: true }));
-  const bundle = `module.exports = {
+  const bundle = `let streamCalls = 0;
+  module.exports = {
     listProviders() { return [{name:'allowed',kind:'stream'}]; },
     async streamAll(opts,onChunk) {
       if (!opts.titles.includes('Obra de teste')) throw new Error('Caller title required during metadata outage');
-      onChunk({results:[{url:'https://media.example.com/episode.mp4',type:'mp4',providerName:'allowed',providerKey:'allowed',audioLanguage:'ja'}],diagnostic:{provider:'allowed',status:'ok'}});
+      onChunk({results:[{url:'https://media.example.com/episode.mp4',type:'mp4',providerName:'allowed',providerKey:'allowed',audioLanguage:'ja',quality:String(++streamCalls)}],diagnostic:{provider:'allowed',status:'ok'}});
     },
     async getMangaChapters(opts) { if(opts.title!=='Obra de teste') throw new Error('title missing'); return [{number:1,title:'Manga chapter',sources:[{provider:'allowed',chapterKey:'opaque-chapter-1',providerChapterId:'upstream-1',language:'pt-BR',scanlator:'Grupo de teste'}]}]; },
     async getMangaPages(opts) { if(opts.providerChapterId!=='upstream-1') throw new Error('Provider chapter identity missing'); return [{pageNumber:1,imageUrl:'https://media.example.com/page.jpg'}]; },
@@ -57,6 +58,30 @@ describe('Tatakai local host through HPmovies content API', () => {
     expect((await response.json()).data).toMatchObject({ episode: { id: 'tatakai:1:1' }, sources: [{ url: expect.stringMatching(/^\/api\/streaming\/media\/[0-9a-f-]{36}$/), type: 'mp4' }], isDemo: false });
     const playback = await app.request('/api/streaming/episodes/tatakai:1:1?title=Obra%20de%20teste');
     expect(playback.status).toBe(200);
+  });
+
+  it('refreshes through both playback routes without replaying the cached host response', async () => {
+    const host = await actualHost();
+    const { app } = backend(host.baseUrl);
+    const content = `/api/content/anime/anilist:1/episodes/1${hints}`;
+    const streaming = '/api/streaming/episodes/tatakai:1:1?title=Obra%20de%20teste';
+    const quality = async (route: string) => {
+      const response = await app.request(route);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      return (await response.json()).data.sources[0].quality;
+    };
+    expect(await quality(content)).toBe('1');
+    expect(await quality(streaming)).toBe('1');
+    expect(await quality(`${content}&refresh=1`)).toBe('2');
+    expect(await quality(streaming)).toBe('2');
+    expect(await quality(`${streaming}&refresh=1`)).toBe('3');
+    expect(await quality(content)).toBe('3');
+    for (const route of [content, streaming]) {
+      expect((await app.request(`${route}&refresh=0`)).status).toBe(400);
+      expect((await app.request(`${route}&refresh=1&refresh=1`)).status).toBe(400);
+    }
+    expect(await quality(streaming)).toBe('3');
   });
 
   it('lists PT-BR chapters and resolves provider-specific pages across a backend restart', async () => {

@@ -14,6 +14,7 @@ import { ExplorePage } from './frontend/pages/ExplorePage';
 import { LibraryPage } from './frontend/pages/LibraryPage';
 import { WatchLoadingShell } from './frontend/components/player/WatchLoadingShell';
 import { loadWatchPage } from './frontend/services/watchEntry';
+import { OPEN_SETTINGS_EVENT } from './frontend/services/adultMode';
 
 const SchedulePage = lazy(() => import('./frontend/pages/SchedulePage').then(module => ({ default: module.SchedulePage })));
 const WatchPage = lazy(() => loadWatchPage().then((module) => ({ default: module.WatchPage })));
@@ -28,6 +29,10 @@ const SourcesPage = lazy(() => import('./frontend/pages/SourcesPage').then(modul
 const CinemaPage = lazy(() => import('./frontend/pages/CinemaPage').then(module => ({ default: module.CinemaPage })));
 const CinemaDetailsPage = lazy(() => import('./frontend/pages/CinemaDetailsPage').then(module => ({ default: module.CinemaDetailsPage })));
 const SourceMangaReaderPage = lazy(() => import('./frontend/pages/MangaReaderPage').then(module => ({ default: module.SourceMangaReaderPage })));
+// Adult pages stay out of the main bundle and render only with adult mode on.
+const AdultHomePage = lazy(() => import('./frontend/pages/AdultHomePage').then(module => ({ default: module.AdultHomePage })));
+const AdultDetailsPage = lazy(() => import('./frontend/pages/AdultDetailsPage').then(module => ({ default: module.AdultDetailsPage })));
+const AdultWatchPage = lazy(() => import('./frontend/pages/AdultWatchPage').then(module => ({ default: module.AdultWatchPage })));
 
 function ScrollReset() {
   const { pathname } = useLocation();
@@ -49,6 +54,11 @@ function App() {
   const [searchRequest, setSearchRequest] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const preferences = useWatchPreferences();
+  useEffect(() => {
+    const open = () => setSettingsOpen(true);
+    window.addEventListener(OPEN_SETTINGS_EVENT, open);
+    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, open);
+  }, []);
   return (
     <BrowserRouter>
       <div className={`app-layout min-h-screen bg-[var(--background)] text-white${navigationExpanded ? ' navigation-expanded' : ''}${preferences.ambient ? '' : ' ambient-disabled'}`}>
@@ -78,6 +88,9 @@ function App() {
           <Route path="/category/:category" element={<AnimeCategoryPage />} />
           <Route path="/genre/:genre" element={<AnimeGenrePage />} />
           <Route path="/watch/*" element={<WatchPage />} />
+          <Route path="/adult" element={<AdultHomePage />} />
+          <Route path="/adult/anime/:animeId" element={<AdultDetailsPage />} />
+          <Route path="/adult/watch/:animeId/:episode" element={<AdultWatchPage />} />
           <Route path="*" element={<main className="mx-auto min-h-[65vh] max-w-3xl px-6 pt-40 text-center"><h1 className="mb-4 text-3xl font-bold">Página não encontrada</h1><Link to="/" className="text-emerald-300 hover:underline">Voltar ao início</Link></main>} />
         </Routes>
         </Suspense>

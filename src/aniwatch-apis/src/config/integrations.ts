@@ -25,9 +25,23 @@ export interface TatakaiConfig {
   retries?: number;
 }
 
+/** The operator's own hentai-api instance (github.com/sulvii/hentai-api); adult routes only. */
+export interface HentaiApiConfig extends TokoConfig {
+  apiKey?: string;
+}
+
+/** Streaming sites read by HPmovies itself; adult routes only. */
+export const ADULT_SITE_IDS = ['animeshentai', 'assistirhentai', 'muitohentai'] as const;
+export type AdultSiteId = typeof ADULT_SITE_IDS[number];
+export interface AdultSitesConfig extends TokoConfig {
+  sites: AdultSiteId[];
+}
+
 export interface IntegrationsConfig {
   toko: TokoConfig;
   tatakai: TatakaiConfig;
+  hentaiApi: HentaiApiConfig;
+  adultSites: AdultSitesConfig;
 }
 
 const boolean = (value: string | undefined, fallback: boolean, key: string) => {
@@ -112,6 +126,39 @@ export function loadIntegrationsConfig(env: NodeJS.ProcessEnv = process.env): In
       timeoutMs: integer(env.TATAKAI_TIMEOUT_MS, 8000, 250, 60000, 'TATAKAI_TIMEOUT_MS'),
       retries: integer(env.TATAKAI_RETRIES, 0, 0, 2, 'TATAKAI_RETRIES'),
     },
+    hentaiApi: hentaiApiConfig(env),
+    adultSites: adultSitesConfig(env),
+  };
+}
+
+function adultSitesConfig(env: NodeJS.ProcessEnv): AdultSitesConfig {
+  const sites = [...new Set((env.ADULT_SITES ?? '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean))];
+  const unknown = sites.find(site => !(ADULT_SITE_IDS as readonly string[]).includes(site));
+  if (unknown) throw new Error(`ADULT_SITES aceita somente: ${ADULT_SITE_IDS.join(', ')}.`);
+  return {
+    enabled: sites.length > 0, baseUrl: '', retries: 0, sites: sites as AdultSiteId[],
+    timeoutMs: integer(env.ADULT_SITES_TIMEOUT_MS, 15_000, 1_000, 60_000, 'ADULT_SITES_TIMEOUT_MS'),
+    contentAuthorized: boolean(env.ADULT_SITES_CONTENT_AUTHORIZED, false, 'ADULT_SITES_CONTENT_AUTHORIZED'),
+    allowedProviders: sites,
+    allowedMediaHosts: [],
+    allowedStreamDomains: mediaHosts(env.ADULT_SITES_ALLOWED_STREAM_DOMAINS, 'ADULT_SITES_ALLOWED_STREAM_DOMAINS'),
+    allowedRequestOrigins: [],
+  };
+}
+
+function hentaiApiConfig(env: NodeJS.ProcessEnv): HentaiApiConfig {
+  const baseUrl = env.HENTAI_API_URL?.trim() ? serviceUrl(env.HENTAI_API_URL.trim(), 'HENTAI_API_URL') : '';
+  const apiKey = env.HENTAI_API_KEY?.trim();
+  if (apiKey && (apiKey.length > 256 || /[\s\0]/.test(apiKey))) throw new Error('HENTAI_API_KEY inválida.');
+  return {
+    enabled: !!baseUrl, baseUrl, retries: 0,
+    timeoutMs: integer(env.HENTAI_API_TIMEOUT_MS, 15_000, 1_000, 60_000, 'HENTAI_API_TIMEOUT_MS'),
+    contentAuthorized: boolean(env.HENTAI_API_CONTENT_AUTHORIZED, false, 'HENTAI_API_CONTENT_AUTHORIZED'),
+    allowedProviders: ['hanime', 'hentaihaven'],
+    allowedMediaHosts: mediaHosts(env.HENTAI_API_ALLOWED_MEDIA_HOSTS, 'HENTAI_API_ALLOWED_MEDIA_HOSTS'),
+    allowedStreamDomains: mediaHosts(env.HENTAI_API_ALLOWED_STREAM_DOMAINS, 'HENTAI_API_ALLOWED_STREAM_DOMAINS'),
+    allowedRequestOrigins: requestOrigins(env.HENTAI_API_ALLOWED_REQUEST_ORIGINS),
+    ...(apiKey ? { apiKey } : {}),
   };
 }
 

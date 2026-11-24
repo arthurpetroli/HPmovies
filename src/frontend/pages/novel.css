@@ -6,3 +6,31 @@
 .novel-origin-link:focus-visible,.novel-reader-source:focus-visible{outline:2px solid currentColor;outline-offset:4px}
 .novel-filter-grid select{min-height:44px}
 @media(max-width:639.98px){.novel-filter-grid .novel-provider-filter{grid-column:1/-1}}
+
+/* ==========================================================================
+   Tema HPmovies — light novels. O leitor mantém seus temas (escuro, claro, sépia).
+   ========================================================================== */
+.novel-demo-callout { gap: 24px; border: 1px solid var(--accent-line); border-radius: var(--r-xl); background: radial-gradient(120% 160% at 0% 50%, rgb(88 224 188 / .14), transparent 62%), var(--ink-2); }
+.novel-demo-icon { border: 1px solid var(--accent-line); border-radius: 18px; background: var(--accent-wash); color: var(--accent); }
+.novel-demo-callout h2 { font-family: var(--font-display); letter-spacing: -.025em; }
+.novel-demo-callout p { color: var(--text-2); font-size: 14.5px; }
+.novel-search { max-width: 720px; }
+.novel-filter-grid label { color: var(--text-3); font-size: 12.5px; }
+.novel-filter-grid select, .novel-filter-grid input {
+  min-height: 44px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background-color: var(--ink-3); color: var(--text); font-size: 14px;
+}
+.novel-filter-grid select { padding-right: 36px; background-image: var(--chevron); background-repeat: no-repeat; background-position: right 12px center; background-size: 16px; }
+.novel-filter-grid select:focus, .novel-filter-grid input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.novel-resume-card { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--ink-2); }
+.novel-resume-card:hover { border-color: var(--accent-line); transform: translateY(-2px); }
+.novel-resume-card > svg:first-child { color: var(--accent); }
+.novel-resume-card span { color: var(--text-3); }
+.novel-demo-poster { border-radius: var(--r-lg); }
+.novel-authors { color: var(--text-2); }
+.novel-chapter-link { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--ink-2); transition: background-color .2s var(--ease), border-color .2s var(--ease), transform .3s var(--ease); }
+.novel-chapter-link:hover { border-color: var(--accent-line); background: var(--ink-3); transform: translateY(-1px); }
+.novel-chapter-number { color: var(--accent-2); font-family: var(--font-display); }
+.novel-chapter-link > div > span { color: var(--text-3); }
+.novel-chapter-link > svg { color: var(--text-3); }
+.novel-reader-button:focus-visible, .novel-reader-back:focus-visible, .novel-reader a:focus-visible, .novel-reader button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.novel-reading-settings select { background-image: var(--chevron); background-repeat: no-repeat; background-position: right 10px center; background-size: 16px; padding-right: 34px; }

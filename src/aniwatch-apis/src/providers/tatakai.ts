@@ -59,8 +59,8 @@ export class TatakaiStreamingProvider implements AnimeStreamingProvider {
     return this.adapter.episodes(animeId, titles);
   }
 
-  async playback(episodeId: string, titles?: string[]): Promise<Playback> {
+  async playback(episodeId: string, titles?: string[], refresh = false): Promise<Playback> {
     if (!this.config.enabled || !this.config.namespace) throw new ApiError(503, 'TATAKAI_UNAVAILABLE', 'Configure um host local Tatakai e seu namespace para resolver a reprodução.');
-    return this.adapter.playback(episodeId, titles);
+    return refresh ? this.adapter.playback(episodeId, titles, true) : this.adapter.playback(episodeId, titles);
   }
 }

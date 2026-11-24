@@ -11,6 +11,7 @@ const searchable = (value: string) => value.normalize('NFD').replace(/[\u0300-\u
 interface Props {
   episodes: StreamingEpisode[];
   currentEpisodeId: string;
+  playbackReady: boolean;
   anime?: CatalogAnime;
   hints?: string;
   loading: boolean;
@@ -29,7 +30,7 @@ function EpisodeArtwork({ episode, anime }: { episode: StreamingEpisode; anime?:
   </span>;
 }
 
-export function WatchEpisodeList({ episodes, currentEpisodeId, anime, hints, loading, error, onRetry, onNavigate }: Props) {
+export function WatchEpisodeList({ episodes, currentEpisodeId, playbackReady, anime, hints, loading, error, onRetry, onNavigate }: Props) {
   const [filters, setFilters] = useState({ episodeId: currentEpisodeId, search: '', group: null as number | null, page: 0 });
   const listRef = useRef<HTMLDivElement>(null);
   // Follow episode navigation without resetting filters when only loading state changes.
@@ -64,7 +65,6 @@ export function WatchEpisodeList({ episodes, currentEpisodeId, anime, hints, loa
 
   return <section className="watch-episodes" aria-labelledby="watch-episodes-heading" aria-busy={loading}>
     <header className="watch-episodes-heading"><h2 id="watch-episodes-heading">Episódios</h2>{episodes.length > 0 && <span>{episodes.length}</span>}</header>
-    {error && <div className="watch-episodes-message" role="alert"><p>{error}</p><button type="button" onClick={onRetry}><RefreshCw size={14} aria-hidden="true" />Tentar novamente</button></div>}
     {loading && !episodes.length ? <div className="watch-episodes-skeletons" aria-label="Carregando episódios">{Array.from({ length: 5 }, (_, index) => <div className="watch-episodes-skeleton" key={index}><span className="skeleton" /><div><span className="skeleton" /><span className="skeleton" /></div></div>)}</div>
       : episodes.length ? <>
         <div className="watch-episodes-filters">
@@ -75,7 +75,11 @@ export function WatchEpisodeList({ episodes, currentEpisodeId, anime, hints, loa
           {visible.length ? visible.map(episode => {
             const current = episode.id === currentEpisodeId;
             const label = `${episode.number != null ? `episódio ${episode.number} — ` : ''}${episode.title}`;
-            const content = <><EpisodeArtwork episode={episode} anime={anime} /><span className="watch-episodes-caption"><strong>{episode.title}</strong><span>{current ? <><Play size={11} fill="currentColor" aria-hidden="true" />Em reprodução</> : episode.available === false ? 'Indisponível' : episode.number != null ? `Episódio ${episode.number}` : 'Assistir episódio'}</span></span></>;
+            const caption = current
+              ? playbackReady ? <><Play size={11} fill="currentColor" aria-hidden="true" />Em reprodução</> : 'Selecionado'
+              : episode.available === false ? 'Indisponível'
+                : episode.number != null && episode.title !== `Episódio ${episode.number}` ? `Episódio ${episode.number}` : 'Assistir episódio';
+            const content = <><EpisodeArtwork episode={episode} anime={anime} /><span className="watch-episodes-caption"><strong>{episode.title}</strong><span>{caption}</span></span></>;
             return episode.available === false ? <div key={episode.id} className="watch-episodes-item is-unavailable" aria-disabled="true">{content}</div>
               : <Link key={episode.id} className={`watch-episodes-item${current ? ' is-current' : ''}`} to={`/watch/${encodeURIComponent(episode.id)}${suffix}`} state={{ anime, episode, autoPlay: true }} aria-label={`Assistir ${label}`} aria-current={current ? 'page' : undefined} onClick={event => {
                 if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -85,6 +89,8 @@ export function WatchEpisodeList({ episodes, currentEpisodeId, anime, hints, loa
           }) : <div className="watch-episodes-empty" role="status"><SearchX size={23} aria-hidden="true" /><p>Nenhum episódio encontrado.</p><button type="button" onClick={clearFilters}>Limpar busca</button></div>}
         </div>
         {query && <div className="watch-episodes-results" aria-live="polite"><span>{matches.length} {matches.length === 1 ? 'resultado' : 'resultados'}</span>{totalPages > 1 && <nav aria-label="Páginas da busca de episódios"><button type="button" aria-label="Página anterior da busca de episódios" disabled={currentPage === 0} onClick={() => setFilters({ ...activeFilters, page: currentPage - 1 })}><ChevronLeft size={17} /></button><span>{currentPage + 1} de {totalPages}</span><button type="button" aria-label="Próxima página da busca de episódios" disabled={currentPage === totalPages - 1} onClick={() => setFilters({ ...activeFilters, page: currentPage + 1 })}><ChevronRight size={17} /></button></nav>}</div>}
-      </> : !error && <div className="watch-episodes-empty"><Film size={26} aria-hidden="true" /><p>A lista de episódios ainda não está disponível.</p><button type="button" onClick={onRetry}><RefreshCw size={14} aria-hidden="true" />Buscar episódios novamente</button></div>}
+      </> : error
+        ? <div className="watch-episodes-message" role="alert"><p>{error}</p><button type="button" onClick={onRetry}><RefreshCw size={14} aria-hidden="true" />Tentar novamente</button></div>
+        : <div className="watch-episodes-empty"><Film size={26} aria-hidden="true" /><p>A lista de episódios ainda não está disponível.</p><button type="button" onClick={onRetry}><RefreshCw size={14} aria-hidden="true" />Buscar episódios novamente</button></div>}
   </section>;
 }

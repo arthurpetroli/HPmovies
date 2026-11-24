@@ -33,7 +33,7 @@ export function MangaHomePage() {
   const catalogSuffix = `${languageSuffix}&provider=${provider}`;
   const error = browsing ? catalog.error : home.error; const loading = browsing ? catalog.loading : home.loading;
   return <main id="main-content" className="manga-page content-width page-shell">
-    <div className="manga-heading"><div><span className="eyebrow">HPMOVIES · MANGÁS</span><h1>Uma página. Outro universo.</h1><p>Descubra novas histórias e acompanhe as suas favoritas, com prioridade para português brasileiro.</p></div><span className="manga-heading-icon"><BookOpen size={40} /></span></div>
+    <div className="manga-heading"><div><h1>Uma página. Outro universo.</h1><p>Descubra novas histórias e acompanhe as suas favoritas, com prioridade para português brasileiro.</p></div><span className="manga-heading-icon"><BookOpen size={40} /></span></div>
     <section className="manga-provider-options" aria-label="Provedores de mangá">
       <div><h2>Escolha onde ler</h2><p>Leia aqui com seus ajustes, visite o provedor ou baixe capítulos, volumes e a obra em ZIP. Idioma e disponibilidade variam por edição.</p></div>
       <div className="manga-provider-actions"><Link className="button-primary" to="/manga?provider=mangalivre&language=pt-br">Explorar Mangá Livre (PT-BR)</Link><MangaSourceLink href={mangaProviderSite(provider)} label={`Visitar ${providerLabel}`} className="button-secondary" /><Link className="button-secondary" to={`/sources?kind=manga&${languageSuffix}`}>Consultar mangá pelas fontes<ArrowRight size={16} aria-hidden="true" /></Link></div>

@@ -52,7 +52,7 @@ export function AutomaticSubtitles({ tracks, selectedTrackId, onReady }: { track
     <h3 className="text-sm font-semibold text-white">Tradução de legendas com IA</h3>
     <p className="mt-2 text-xs leading-relaxed text-slate-400">Traduz a versão escolhida para português, inclusive do OpenSubtitles. Precisa de um modelo compatível com o idioma de origem; pode levar alguns minutos e conter erros.</p>
     <label className="mt-3 block"><span className="mb-2 block text-xs text-slate-400">Legenda de origem</span>
-      <select disabled={busy} value={chosen.id} onChange={event => setSelection({ context: selectedTrackId, id: event.target.value })} className="w-full min-w-0 rounded-lg border border-white/15 bg-[#151d25] px-3 py-2.5 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-400 disabled:opacity-60">
+      <select disabled={busy} value={chosen.id} onChange={event => setSelection({ context: selectedTrackId, id: event.target.value })} className="field-control min-w-0 disabled:opacity-60">
         {candidates.map(track => <option key={track.id} value={track.id}>{track.label}</option>)}
       </select>
     </label>

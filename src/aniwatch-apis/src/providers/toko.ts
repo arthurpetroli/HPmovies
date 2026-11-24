@@ -163,7 +163,10 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
       // Keep a genuine source index visible even when its first video's CDN
       // fails. Other entries are resolved independently when selected.
       const probe = await this.resolveSources(Number(animeId), first.number, titles)
-        .catch(error => ({ sources: [] as StreamingSource[], failureState: errorState(error) }));
+        .catch(error => ({
+          sources: [] as StreamingSource[], failureState: errorState(error),
+          message: error instanceof ApiError ? error.message : undefined,
+        }));
       const available = probe.sources.length > 0;
       const state = available ? 'available' : probe.failureState;
       const episodes: StreamingEpisode[] = indexed.map((episode) => ({
@@ -176,6 +179,7 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
       }));
       const message = available
         ? 'Fonte permitida confirmada para o primeiro episódio; os demais são verificados ao abrir o player.'
+        : 'message' in probe && probe.message ? probe.message
         : state === 'unauthorized' ? 'Foram encontradas fontes técnicas, mas nenhuma atende às permissões de reprodução e acesso direto configuradas.'
           : state === 'connection_error' ? 'As fontes responderam, mas a verificação do manifesto e do primeiro trecho de vídeo falhou. Tente novamente ou escolha outra fonte.'
           : 'O índice contém episódios, mas não há mídia disponível no momento.';
@@ -187,8 +191,9 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
     }
   }
 
-  private async resolveSources(anilistId: number, episode: number, titles?: string[]) {
-    const result = await this.client.streams(anilistId, episode, titles);
+  private async resolveSources(anilistId: number, episode: number, titles?: string[], refresh = false) {
+    const result = refresh ? await this.client.streams(anilistId, episode, titles, true)
+      : await this.client.streams(anilistId, episode, titles);
     const eligible = result.sources.filter(source => !isKnownSourceMismatch({
       anilistId, episode, providerId: normalizeProviderKey(source.providerKey || source.providerName),
       audioLanguage: normalizeTokoLanguage(source.audioLanguage), type: source.type,
@@ -215,7 +220,7 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
     return { sources, returnedSources: eligible.length, failureState };
   }
 
-  async playback(episodeId: string, titles?: string[]): Promise<Playback> {
+  async playback(episodeId: string, titles?: string[], refresh = false): Promise<Playback> {
     const prefix = `${this.id}:`;
     const token = episodeId.startsWith(prefix) ? episodeId.slice(prefix.length) : '';
     const match = /^([1-9]\d{0,9}):((?:0|[1-9]\d{0,5})(?:\.\d{1,3})?)$/.exec(token);
@@ -232,7 +237,7 @@ export class TokoStreamingProvider implements AnimeStreamingProvider {
       value => { episodeIndex.value = value; },
       () => { /* An unavailable index does not invalidate verified media. */ },
     );
-    const result = await this.resolveSources(Number(match[1]), Number(match[2]), titles);
+    const result = await this.resolveSources(Number(match[1]), Number(match[2]), titles, refresh);
     if (!result.sources.length) {
       if (result.failureState === 'unauthorized') throw new ApiError(503, 'TOKO_UNAUTHORIZED', 'As fontes retornadas não atendem às permissões de domínio, provedor ou cabeçalhos configuradas.');
       if (result.returnedSources > 0) throw new ApiError(502, 'STREAM_MEDIA_UNAVAILABLE', 'Nenhuma fonte passou na verificação inicial de vídeo. Reabra o episódio ou escolha outra fonte.');

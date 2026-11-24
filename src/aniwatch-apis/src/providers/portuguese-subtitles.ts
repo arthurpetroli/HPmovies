@@ -3,13 +3,14 @@ import { lookup } from 'node:dns/promises';
 import type { LookupAddress } from 'node:dns';
 import { isIP } from 'node:net';
 import { gunzipSync } from 'node:zlib';
-import type { Playback, ProviderDiagnostic, StreamSubtitle } from '../../../shared/providers.js';
+import type { Playback, ProviderDiagnostic, StreamingEpisode, StreamSubtitle } from '../../../shared/providers.js';
 import type { ExternalSubtitleOption, ExternalSubtitleSearch } from '../../../shared/externalSubtitles.js';
 import { MAX_SUBTITLE_BYTES, subtitleToVtt } from '../../../shared/subtitles.js';
 import { ApiError } from '../config/apiError.js';
 import { AniwatchAPICache } from '../config/cache.js';
 import { pinnedRequest, publicImageAddress } from './content-image.js';
 import type { ImageRequest, ImageResponse } from './content-image.js';
+import { cinemaArtwork } from './cinemeta.js';
 import { addonSubtitleUrl, contradictsSubtitleEpisode, parseAddonPortugueseSubtitles, parseAddonSubtitles, permittedAddonSubtitleDownloadUrl } from './opensubtitles-addon.js';
 import { externalSubtitleLanguages, subtitleEncoding, subtitleLanguage } from './subtitle-languages.js';
 import { parseStremioEpisodeId } from './stremio.js';
@@ -17,6 +18,8 @@ import { curatedSubtitleIdentity, findCuratedPortugueseSubtitles, permittedCurat
 import { extractSubtitleArchive } from './subtitle-archive.js';
 
 const MAPPINGS = 'https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-full.json';
+/** Once media is ready, how long playback may still wait for external subtitles. */
+const SUBTITLE_WAIT_MS = 6_000;
 const REST = 'https://rest.opensubtitles.org/search';
 const MAX_FILE = 4_000_000;
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -28,6 +31,7 @@ const unavailable = () => new ApiError(503, 'SUBTITLE_UNAVAILABLE', 'A fonte de 
 interface Mapping {
   id: number; imdb: string; kind: 'movie' | 'series'; season?: number; offset: number; wholeSeries: boolean;
 }
+interface SeriesVideo { season: number; episode: number; video: Record<string, unknown> }
 export interface EpisodeIdentity { imdb: string; kind: 'movie' | 'series'; season?: number; episode?: number }
 interface FileTicket { url: string; format: 'srt' | 'ass' | 'vtt'; encoding: string; archive?: 'zip'; machineTranslated?: boolean; expires: number }
 interface SubtitleCandidate extends Omit<FileTicket, 'expires'> { id: string; language: string; label: string; release?: string; downloads?: number }
@@ -72,6 +76,30 @@ export function parseSubtitleMappings(input: unknown): Map<number, Mapping> {
     }
   }
   return result;
+}
+
+/** Keep absolute numbering aligned with the same mappings used for playback and captions. */
+function* mappedEpisodes(row: Mapping, videos: SeriesVideo[]) {
+  if (!row.wholeSeries) {
+    for (const video of videos) {
+      const number = video.episode - row.offset;
+      if (video.season === row.season && number > 0) yield { number, ...video };
+    }
+    return;
+  }
+  let previousSeason = 1;
+  let previousEpisode = 0;
+  let number = 0;
+  for (const video of videos) {
+    const { season, episode } = video;
+    if (season === 0) continue;
+    // A gap invalidates numbering from that point onward, not the known prefix.
+    if (!(season === previousSeason && episode === previousEpisode + 1)
+      && !(previousEpisode > 0 && season === previousSeason + 1 && episode === 1)) return;
+    yield { number: ++number, ...video };
+    previousSeason = season;
+    previousEpisode = episode;
+  }
 }
 
 /** A separate, fail-soft subtitle source. No credentials, browser or challenge solver. */
@@ -122,6 +150,25 @@ export class PortugueseSubtitleProvider {
     return this.loadingMappings;
   }
 
+  private seriesVideos(imdb: string): Promise<SeriesVideo[]> {
+    return this.cache.getOrSet(async () => {
+      const metadata = await this.json(`https://v3-cinemeta.strem.io/meta/series/${imdb}.json`, 6_000_000);
+      if (!object(metadata) || !object(metadata.meta) || metadata.meta.id !== imdb || !Array.isArray(metadata.meta.videos) || metadata.meta.videos.length > 20_000) throw invalid();
+      const videos: SeriesVideo[] = [];
+      const seen = new Set<string>();
+      for (const video of metadata.meta.videos) {
+        if (!object(video) || !integer(video.season, 1000) || !integer(video.episode) || Number(video.episode) === 0) continue;
+        const season = Number(video.season), episode = Number(video.episode);
+        const id = `${imdb}:${season}:${episode}`;
+        if (video.id !== id) continue;
+        if (seen.has(id)) throw invalid();
+        seen.add(id);
+        videos.push({ season, episode, video });
+      }
+      return videos.sort((a, b) => a.season - b.season || a.episode - b.episode);
+    }, `subtitle:identity:${imdb}`, 86400);
+  }
+
   async resolveIdentity(animeId: string, episode: number): Promise<EpisodeIdentity | undefined> {
     // Curated identities remain usable when the external mapping list is down.
     const curated = curatedSubtitleIdentity(animeId, episode);
@@ -129,27 +176,31 @@ export class PortugueseSubtitleProvider {
     const row = (await this.mapping()).get(Number(animeId));
     if (!row || !Number.isSafeInteger(episode) || episode < 1 || episode > 100_000) return undefined;
     if (row.kind === 'movie') return episode === 1 ? { imdb: row.imdb, kind: 'movie' } : undefined;
-    const metadata = await this.cache.getOrSet(() => this.json(`https://v3-cinemeta.strem.io/meta/series/${row.imdb}.json`, 6_000_000), `subtitle:identity:${row.imdb}`, 86400);
-    if (!object(metadata) || !object(metadata.meta) || metadata.meta.id !== row.imdb || !Array.isArray(metadata.meta.videos) || metadata.meta.videos.length > 20_000) throw invalid();
-    const videos = metadata.meta.videos.filter(object).filter(video => integer(video.season, 1000) && integer(video.episode) && Number(video.episode) > 0 && video.id === `${row.imdb}:${video.season}:${video.episode}`);
-    const keys = videos.map(video => video.id); if (new Set(keys).size !== keys.length) throw invalid();
-    if (row.wholeSeries) {
-      const ordered = videos.filter(video => Number(video.season) > 0).sort((a, b) => Number(a.season) - Number(b.season) || Number(a.episode) - Number(b.episode));
-      let previousSeason = 1, previousEpisode = 0;
-      for (let index = 0; index < episode; index++) {
-        const target = ordered[index]; if (!target) return undefined;
-        const season = Number(target.season), number = Number(target.episode);
-        // A missing earlier episode or season makes the absolute position ambiguous.
-        // A gap after the requested episode does not invalidate an already known prefix.
-        if (!(season === previousSeason && number === previousEpisode + 1)
-          && !(previousEpisode > 0 && season === previousSeason + 1 && number === 1)) return undefined;
-        if (index === episode - 1) return { imdb: row.imdb, kind: 'series', season, episode: number };
-        previousSeason = season; previousEpisode = number;
-      }
-      return undefined;
+    for (const target of mappedEpisodes(row, await this.seriesVideos(row.imdb))) {
+      if (target.number === episode) return { imdb: row.imdb, kind: 'series', season: target.season, episode: target.episode };
+      if (target.number > episode) break;
     }
-    const target = videos.find(video => video.season === row.season && video.episode === episode + row.offset);
-    return target ? { imdb: row.imdb, kind: 'series', season: row.season, episode: episode + row.offset } : undefined;
+    return undefined;
+  }
+
+  /** An index of public metadata only, with no assertion that media exists. */
+  async episodeMetadata(animeId: string): Promise<StreamingEpisode[]> {
+    if (!/^[1-9]\d{0,8}$/.test(animeId)) return [];
+    const row = (await this.mapping()).get(Number(animeId));
+    if (row?.kind !== 'series') return [];
+    const episodes: StreamingEpisode[] = [];
+    const now = Date.now();
+    for (const { number, season, episode, video } of mappedEpisodes(row, await this.seriesVideos(row.imdb))) {
+      if (number > 5_000) break;
+      if (typeof video.released === 'string' && Date.parse(video.released) > now) continue;
+      const curated = curatedSubtitleIdentity(animeId, number);
+      if (curated && (curated.kind !== 'series' || curated.imdb !== row.imdb || curated.season !== season || curated.episode !== episode)) continue;
+      const title = [video.title, video.name].find(value => typeof value === 'string' && value.length <= 300 && value.trim());
+      const thumbnail = cinemaArtwork(video.thumbnail);
+      episodes.push({ id: `tatakai:${animeId}:${number}`, number, title: typeof title === 'string' ? title.trim() : `Episódio ${number}`,
+        ...(thumbnail && !new URL(thumbnail).search ? { thumbnail } : {}) });
+    }
+    return episodes;
   }
 
   private candidate(row: Record<string, unknown>, identity: EpisodeIdentity, language: string): SubtitleCandidate | undefined {
@@ -265,11 +316,23 @@ export class PortugueseSubtitleProvider {
     return [...new Map(tracks.map(track => [track.id, track])).values()];
   }
 
-  async enrich(playback: Playback, animeId: string): Promise<Playback> {
+  /** Starts the external search together with the source lookups; `enrich` reuses the same promise. */
+  prefetch(animeId: string, episode: number): { episode: number; tracks: Promise<StreamSubtitle[]> } | undefined {
+    if (!this.enabled || !Number.isFinite(episode)) return undefined;
+    const tracks = this.subtitles(animeId, episode);
+    tracks.catch(() => undefined);
+    return { episode, tracks };
+  }
+
+  async enrich(playback: Playback, animeId: string, pending?: { episode: number; tracks: Promise<StreamSubtitle[]> }): Promise<Playback> {
     if (!this.enabled || playback.isDemo || !playback.episode.number) return playback;
     const diagnostic = (state: ProviderDiagnostic['state'], message: string): ProviderDiagnostic => ({ id: 'opensubtitles', name: 'Legendas em português · fontes externas', enabled: true, technicalAvailable: state !== 'connection_error', authorized: true, state, checkedAt: new Date().toISOString(), message, capabilities: ['external-subtitles'] });
     try {
-      const tracks = await this.subtitles(animeId, playback.episode.number);
+      // Media is ready: wait a bounded time for subtitles that started with the source lookups.
+      const search = pending && pending.episode === playback.episode.number ? pending.tracks : this.subtitles(animeId, playback.episode.number);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const tracks = await Promise.race([search, new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), SUBTITLE_WAIT_MS); })]).finally(() => clearTimeout(timer));
+      if (tracks === null) return { ...playback, diagnostics: [...(playback.diagnostics ?? []), diagnostic('connection_error', 'As legendas externas demoraram a responder; o vídeo começou sem elas. Use Buscar legendas nas configurações do player.')] };
       const score = (track: StreamSubtitle) => track.language.startsWith('pt') ? (track.machineTranslated ? 0 : 4) + (track.language === 'pt-BR' ? 3 : 2) : 0;
       const merge = (items: StreamSubtitle[]) => [...new Map([...items, ...tracks].map(track => [track.id, track])).values()].sort((a, b) => score(b) - score(a));
       return { ...playback, sources: playback.sources.map(source => ({ ...source, subtitles: merge(source.subtitles ?? []) })), subtitles: merge(playback.subtitles), diagnostics: [...(playback.diagnostics ?? []), diagnostic(tracks.length ? 'available' : 'empty', tracks.length ? `${tracks.length} legendas em português encontradas para esta série, temporada e episódio. A versão do vídeo pode exigir ajuste de sincronização.` : 'Nenhuma legenda em português com correspondência segura foi encontrada.')] };

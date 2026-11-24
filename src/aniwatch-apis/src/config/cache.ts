@@ -62,9 +62,10 @@ export class AniwatchAPICache {
     dataGetter: () => Promise<T>,
     key: string,
     expirySeconds = AniwatchAPICache.DEFAULT_CACHE_EXPIRY_SECONDS,
+    refresh = false,
   ): Promise<T> {
     const entry = this.entries.get(key);
-    if (entry && entry.expiresAt > this.now()) {
+    if (!refresh && entry && entry.expiresAt > this.now()) {
       this.entries.delete(key);
       this.entries.set(key, entry);
       return entry.value as T;
@@ -79,7 +80,7 @@ export class AniwatchAPICache {
     const ttl = Number.isFinite(expirySeconds)
       ? Math.min(86400, Math.max(1, Math.floor(expirySeconds)))
       : AniwatchAPICache.DEFAULT_CACHE_EXPIRY_SECONDS;
-    const task = this.load(dataGetter, key, ttl);
+    const task = this.load(dataGetter, key, ttl, refresh);
     this.pending.set(key, task);
     try {
       return await task;
@@ -88,8 +89,8 @@ export class AniwatchAPICache {
     }
   }
 
-  private async load<T>(dataGetter: () => Promise<T>, key: string, ttl: number): Promise<T> {
-    if (this.client) {
+  private async load<T>(dataGetter: () => Promise<T>, key: string, ttl: number, refresh: boolean): Promise<T> {
+    if (this.client && !refresh) {
       try {
         const raw = await this.client.get(key);
         if (raw !== null) {

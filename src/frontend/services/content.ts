@@ -51,9 +51,11 @@ const chapter = (value: unknown): value is ContentChapter => object(value) && ty
   && (value.number === undefined || typeof value.number === 'string');
 
 export const contentService = {
-  playback: (id: string, episode: string, query: SourceQuery = {}) => {
-    // The streaming endpoint accepts the source and title hints, not reading filters.
-    return requestData<Playback>(`/content/anime/${encodeURIComponent(id)}/episodes/${encodeURIComponent(episode)}${sourceSuffix({ source: query.source, titles: query.titles })}`, isPlayback, { timeoutMs: 65_000 }).then(playback => {
+  playback: (id: string, episode: string, query: SourceQuery & { refresh?: boolean } = {}) => {
+    const params = sourceParams({ source: query.source, titles: query.titles });
+    if (query.refresh) params.set('refresh', '1');
+    const suffix = params.size ? `?${params}` : '';
+    return requestData<Playback>(`/content/anime/${encodeURIComponent(id)}/episodes/${encodeURIComponent(episode)}${suffix}`, isPlayback, { timeoutMs: 65_000 }).then(playback => {
       sourceTitles.save('anime', playback.episode.id, query.titles);
       return playbackMedia(playback);
     });

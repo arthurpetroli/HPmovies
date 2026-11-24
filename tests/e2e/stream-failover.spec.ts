@@ -94,7 +94,7 @@ test('explicit retry refreshes expired tickets with the same title hints and pre
     requests.push(new URL(route.request().url()));
     return route.fulfill({ json: { data: {
       episode: { id: 'stream-failover', title: 'Teste de renovação de links' },
-      sources: [{ url: requests.length === 1 ? expired : demo, type: 'hls', label: 'Fonte QA', subtitles: [] }],
+      sources: [{ url: requests.at(-1)?.searchParams.get('refresh') === '1' ? demo : expired, type: 'hls', label: 'Fonte QA', subtitles: [] }],
       subtitles: [], audioLanguages: [], isDemo: true,
     } } });
   });
@@ -110,7 +110,9 @@ test('explicit retry refreshes expired tickets with the same title hints and pre
   await expect(page.getByRole('button', { name: 'Reproduzir vídeo', exact: true })).toBeVisible({ timeout: 25000 });
   expect(requests).toHaveLength(2);
   expect(requests[1].searchParams.getAll('titles[]')).toEqual(['Teste de links']);
-  expect(requests[1].toString()).toBe(requests[0].toString());
+  expect(requests[0].searchParams.has('refresh')).toBe(false);
+  expect(requests[1].searchParams.get('refresh')).toBe('1');
+  expect(requests[1].pathname).toBe(requests[0].pathname);
   await expect.poll(() => page.locator('video').evaluate(video => (video as HTMLVideoElement).currentTime)).toBeGreaterThanOrEqual(12);
   expect(await page.locator('video').evaluate(video => (video as HTMLVideoElement).paused)).toBe(true);
   await page.getByRole('button', { name: 'Reproduzir vídeo', exact: true }).click();

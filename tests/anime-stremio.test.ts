@@ -32,6 +32,17 @@ function registry() {
   return { value, source, identity, tatakai, toko };
 }
 
+function registryWithGrace(sourceGraceMs: number) {
+  const stremio = new StremioStreamingProvider({ addons: [{ id: 'fmhy', name: 'QA addon', manifestUrl: 'https://addon.example.com/manifest.json', authorized: true, allowedMediaHosts: ['media.example.com'] }] });
+  const subtitles = new PortugueseSubtitleProvider({ enabled: false });
+  vi.spyOn(subtitles, 'resolveIdentity').mockResolvedValue({ imdb: 'tt1234567', kind: 'series', season: 2, episode: 1 });
+  const source = vi.spyOn(stremio, 'playback').mockResolvedValue(remote());
+  const value = new StreamingRegistry({ stremio, subtitles, sourceGraceMs });
+  vi.spyOn(value.tatakai, 'playback').mockResolvedValue(playback());
+  vi.spyOn(value.toko, 'playback').mockRejectedValue(new ApiError(404, 'EPISODE_UNAVAILABLE', 'QA source missing'));
+  return { value, source };
+}
+
 describe('safe AniList to Stremio video adaptation', () => {
   it('uses the explicit mapped season and episode while keeping the AniList playback identity', async () => {
     const { provider, stremio, resolved } = adapter();
@@ -116,6 +127,15 @@ describe('anime sources inside the existing registry/player path', () => {
     expect((await addon.value.playback('tatakai:42:13')).sources).toHaveLength(1);
   });
 
+  it('refreshes the original episode and its mapped addon streams together', async () => {
+    const { value, source, tatakai } = registry();
+    const result = await value.playback('tatakai:42:13', ['Anime QA'], true);
+    expect(tatakai).toHaveBeenCalledWith('tatakai:42:13', ['Anime QA'], true);
+    expect(source).toHaveBeenCalledWith({ imdbId: 'tt1234567', season: 2, episode: 1 }, undefined, true);
+    expect(result.episode.id).toBe('tatakai:42:13');
+    expect(result.sources.map(item => item.providerId)).toEqual(['legacy', 'fmhy']);
+  });
+
   it('rescues a failed legacy episode with safely mapped Stremio media and the same player route', async () => {
     const { value, tatakai } = registry(); tatakai.mockRejectedValue(new ApiError(502, 'STREAM_MEDIA_UNAVAILABLE', 'QA failed media'));
     const result = await value.playback('tatakai:42:13');
@@ -138,6 +158,28 @@ describe('anime sources inside the existing registry/player path', () => {
     expect(result.episode.id).toBe('tatakai:42:13');
   });
 
+  it('answers shortly after the first playable source instead of waiting for a slow addon', async () => {
+    const { value, source } = registryWithGrace(40);
+    let finish!: (value: Playback) => void;
+    source.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const started = Date.now();
+    const result = await value.playback('tatakai:42:13');
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(result.sources.map(item => item.providerId)).toEqual(['legacy']);
+    finish(remote());
+  });
+
+  it('explains an outage of the main source together with the addon result, keeping its error code', async () => {
+    const { value, tatakai, source } = registry();
+    tatakai.mockRejectedValue(new ApiError(503, 'TOKO_UPSTREAM_UNAVAILABLE', 'QA upstream down'));
+    source.mockRejectedValue(new ApiError(404, 'STREMIO_EPISODE_UNAVAILABLE', 'QA no media'));
+    await expect(value.playback('tatakai:42:13')).rejects.toMatchObject({ status: 503, code: 'TOKO_UPSTREAM_UNAVAILABLE', message: expect.stringContaining('addon Stremio não encontrou este episódio') });
+    tatakai.mockRejectedValue(new ApiError(404, 'EPISODE_UNAVAILABLE', 'QA missing'));
+    await expect(value.playback('tatakai:42:13')).rejects.toMatchObject({ status: 404, code: 'STREMIO_EPISODE_UNAVAILABLE', message: expect.stringContaining('Nenhuma fonte conectada tem este episódio') });
+    tatakai.mockRejectedValue(new ApiError(503, 'TOKO_UNAUTHORIZED', 'QA permission required'));
+    await expect(value.playback('tatakai:42:13')).rejects.toMatchObject({ code: 'TOKO_UNAUTHORIZED', message: 'QA permission required' });
+  });
+
   it('respects an explicitly selected content source and keeps fractional legacy episodes valid', async () => {
     const { value, source, identity, toko, tatakai } = registry();
     toko.mockResolvedValue(playback('toko'));
@@ -146,6 +188,15 @@ describe('anime sources inside the existing registry/player path', () => {
     await value.playback('tatakai:42:0.5');
     expect(tatakai).toHaveBeenCalledWith('tatakai:42:0.5', undefined);
     expect(source).not.toHaveBeenCalled();
+  });
+
+  it('does not let a disabled optional source hide an automatic lookup result', async () => {
+    const { value, tatakai, toko, source } = registry();
+    tatakai.mockRejectedValue(new ApiError(404, 'EPISODE_UNAVAILABLE', 'QA missing'));
+    toko.mockRejectedValue(new ApiError(503, 'TOKO_DISABLED', 'QA disabled'));
+    source.mockRejectedValue(new ApiError(404, 'STREMIO_EPISODE_UNAVAILABLE', 'QA no media'));
+    await expect(value.resolve('42', 13)).rejects.toMatchObject({ status: 404, code: 'STREMIO_EPISODE_UNAVAILABLE' });
+    await expect(value.resolve('42', 13, 'toko')).rejects.toMatchObject({ status: 503, code: 'TOKO_DISABLED' });
   });
 
   it('deduplicates identical video URLs without assigning one mirror captions to another', () => {

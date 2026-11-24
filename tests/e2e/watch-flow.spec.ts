@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import type { StreamingAvailability } from '../../src/shared/providers';
 
 // Synthetic anime identities, episode titles and artwork test the interface only.
 // The public HLS demo is not evidence of anime, episode or language availability.
@@ -21,7 +22,7 @@ function gate() {
   return { pending, release };
 }
 
-async function fixture(page: Page, options: { pending?: Map<number, ReturnType<typeof gate>>; failures?: Set<number>; catalogPending?: ReturnType<typeof gate> } = {}) {
+async function fixture(page: Page, options: { pending?: Map<number, ReturnType<typeof gate>>; failures?: Set<number>; catalogPending?: ReturnType<typeof gate>; index?: StreamingAvailability } = {}) {
   const playbackRequests: URL[] = [];
   await page.route('https://qa.hpmovies.invalid/**', route => route.fulfill({
     contentType: 'image/svg+xml',
@@ -33,7 +34,7 @@ async function fixture(page: Page, options: { pending?: Map<number, ReturnType<t
       await options.catalogPending?.pending;
       return route.fulfill({ json: { data: anime } });
     }
-    if (url.pathname === '/api/streaming/anime/21/episodes') return route.fulfill({ json: { data: { available: true, episodes } } });
+    if (url.pathname === '/api/streaming/anime/21/episodes') return route.fulfill({ json: { data: options.index ?? { available: true, episodes } } });
     if (url.pathname.endsWith('/intro') || url.pathname.endsWith('/ending')) return route.fulfill({ json: { data: null } });
     if (url.pathname.startsWith('/api/streaming/episodes/')) {
       const id = decodeURIComponent(url.pathname.split('/').at(-1)!);
@@ -123,6 +124,32 @@ test('a playback failure preserves episode navigation and retries the selected e
   await expect(page.locator('video')).toBeVisible();
   expect(requests.filter(url => decodeURIComponent(url.pathname).endsWith(episode(2).id))).toHaveLength(2);
   expect(await page.locator('video').evaluate(video => video.paused)).toBe(true);
+  await noOverflow(page);
+});
+
+test('a catalog episode list stays visible and clean while a playback retry refreshes only the failed episode', async ({ page }) => {
+  const failures = new Set([2]);
+  const message = 'O índice da fonte não respondeu na fixture.';
+  const requests = await fixture(page, {
+    failures,
+    index: { available: false, catalogFallback: true, episodes: episodes.slice(0, 9), message },
+  });
+  await page.goto('/anime/21');
+  await page.getByRole('link', { name: `Assistir episódio 2 — ${episode(2).title}`, exact: true }).click();
+  const stage = page.getByLabel('Área de reprodução');
+  await expect(stage.getByRole('alert')).toContainText('Falha sintética');
+  await expect(sidebar(page).getByRole('link', { name: /^Assistir episódio/ })).toHaveCount(9);
+  await expect(sidebar(page).getByText(message)).toHaveCount(0);
+  await expect(sidebar(page).getByRole('alert')).toHaveCount(0);
+  failures.delete(2);
+  await stage.getByRole('button', { name: 'Tentar novamente' }).click();
+  await expect(page.locator('video')).toBeVisible();
+  await episodeLink(page, 3).click();
+  await expect(page.getByRole('heading', { name: episode(3).title, exact: true })).toBeVisible();
+  const lookups = (number: number) => requests.filter(url => decodeURIComponent(url.pathname).endsWith(episode(number).id));
+  expect(lookups(2).map(url => url.searchParams.get('refresh'))).toEqual([null, '1']);
+  expect(lookups(3).length).toBeGreaterThan(0);
+  expect(lookups(3).every(url => !url.searchParams.has('refresh'))).toBe(true);
   await noOverflow(page);
 });
 

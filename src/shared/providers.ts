@@ -3,6 +3,8 @@ export interface CatalogAnime {
   title: string;
   titleOriginal?: string;
   titleNative?: string;
+  /** Alternative titles; only the adult catalog requests them, for source matching. */
+  synonyms?: string[];
   studios?: string[];
   /** Number of AniList users who have this title on a list, not a ranking. */
   popularity?: number;
@@ -21,6 +23,8 @@ export interface CatalogAnime {
   status?: string;
   genres: string[];
   episodeCount?: number;
+  /** Episodes already aired while a title is releasing (AniList next airing number - 1). */
+  airedEpisodes?: number;
   duration?: number;
   relations?: Array<{ relation: string; anime: CatalogAnime }>;
   recommendations?: CatalogAnime[];
@@ -141,11 +145,13 @@ export interface StreamingAvailability {
   message?: string;
   state?: ProviderState;
   diagnostics?: ProviderDiagnostic[];
+  /** The list came from catalog metadata because no source index answered; media is checked per episode. */
+  catalogFallback?: boolean;
 }
 
 export interface AnimeStreamingProvider {
   episodes(animeId: string, titles?: string[]): Promise<StreamingAvailability>;
-  playback(episodeId: string, titles?: string[]): Promise<Playback>;
+  playback(episodeId: string, titles?: string[], refresh?: boolean): Promise<Playback>;
 }
 
 export type ProviderState = 'available' | 'unavailable' | 'checking' | 'empty' | 'unauthorized' | 'connection_error';

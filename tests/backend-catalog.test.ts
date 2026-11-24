@@ -3,6 +3,8 @@ import { HiAnime, HiAnimeError } from 'aniwatch';
 import { createApp } from '../src/aniwatch-apis/src/app';
 import { AniwatchAPICache } from '../src/aniwatch-apis/src/config/cache';
 import { AniListCatalogProvider } from '../src/aniwatch-apis/src/providers/anilist';
+import { PortugueseSubtitleProvider } from '../src/aniwatch-apis/src/providers/portuguese-subtitles';
+import { StreamingRegistry } from '../src/aniwatch-apis/src/providers/registry';
 import type { AnimeCatalogProvider } from '../src/shared/providers';
 
 function media(id = 1) {
@@ -45,9 +47,14 @@ describe('catalog routes', () => {
   });
 
   it('never invents playable episodes for catalog titles', async () => {
-    const response = await createApp({ catalog: catalogMock() }).request('/api/streaming/anime/1/episodes');
+    const subtitles = new PortugueseSubtitleProvider({ enabled: false });
+    vi.spyOn(subtitles, 'episodeMetadata').mockResolvedValue([{ id: 'tatakai:1:1', number: 1, title: 'Catalog episode' }]);
+    const registry = new StreamingRegistry({ subtitles });
+    const response = await createApp({ catalog: catalogMock(), registry }).request('/api/streaming/anime/1/episodes');
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ data: { available: false, episodes: [] } });
+    const { data } = await response.json();
+    expect(data).toMatchObject({ available: false, catalogFallback: true, episodes: [{ id: 'tatakai:1:1' }] });
+    expect(data.episodes[0].available).toBeUndefined();
   });
 
   it('returns a marked demo with attribution, real sources and an explanatory caption track', async () => {
@@ -115,6 +122,19 @@ describe('AniList catalog integration', () => {
     expect(variables).not.toHaveProperty('genre');
     expect(variables).not.toHaveProperty('format');
     expect(variables).not.toHaveProperty('status');
+  });
+
+  it('derives aired episodes only from the next scheduled AniList episode', async () => {
+    const airing = { ...media(2), status: 'RELEASING', episodes: 12, nextAiringEpisode: { episode: 9 } };
+    const first = { ...media(3), status: 'RELEASING', episodes: 12, nextAiringEpisode: { episode: 1 } };
+    const fetcher = vi.fn(async () => providerResponse({ Page: { pageInfo: { currentPage: 1, hasNextPage: false }, media: [airing, first, media()] } }));
+    const provider = new AniListCatalogProvider({ fetcher: fetcher as typeof fetch, cache: new AniwatchAPICache() });
+    const { items } = await provider.search({ search: 'airing' });
+    expect(items[0]).toMatchObject({ id: '2', episodeCount: 12, airedEpisodes: 8 });
+    expect(items[1].airedEpisodes).toBeUndefined();
+    expect(items[2].airedEpisodes).toBeUndefined();
+    const request = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(request[1].body)).query).toContain('nextAiringEpisode { episode }');
   });
 
   it('uses GraphQL variables for filters, normalizes metadata and caches distinct searches separately', async () => {

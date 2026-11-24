@@ -1,4 +1,148 @@
-# Estado de desenvolvimento — 08/11/2026
+# Estado de desenvolvimento — 24/11/2026
+
+## Sites de streaming adulto — 24/11/2026
+
+O usuário restaurou o filtro de menores e pediu a integração de animeshentai.biz,
+assistirhentai.com e muitohentai.com. Nenhum tem API. Todos usam o player do
+Blogger, que oferece MP4 progressivo de 360p. O novo provedor `adult-sites`
+segue o padrão das outras fontes: `ADULT_SITES`, autorização de conteúdo e
+domínio `googlevideo.com`. O player do muitohentai protegido por Referer não é
+usado. Gêneros como Lolicon, Shotacon e Vida Escolar bloqueiam a obra. Também
+foi corrigido o envio de mais de cinco títulos ao Tatakai, que gerava "Informe
+até cinco títulos". Teste real: AniList 212667 com 7 episódios e 3 fontes no
+episódio 1. O gateway entregou MP4 no início e perto do fim do arquivo.
+
+720p: o assistirhentai hospeda alguns episódios em `videos.assistirhentai.com`,
+com player video.js próprio. O provedor confere o `ftyp` e a altura no `tkhd`
+antes de oferecer o arquivo, e o 720p aparece antes dos espelhos de 360p
+(domínio `assistirhentai.com` em `ADULT_SITES_ALLOWED_STREAM_DOMAINS`). O "HD"
+do animeshentai é o próprio Blogger (SABR) e não serve. O `vitest.config.ts`
+agora zera as variáveis adultas, para o `.env` do desenvolvedor não ligar sites
+reais nos testes.
+
+Correção: o Blogger também oferece o MP4 progressivo de 720p (itag 22) quando
+o envio é HD. A primeira análise usou um vídeo sem HD e concluiu, errado, que
+só havia 360p. O provedor agora devolve 1080p/720p/360p, do maior para o menor,
+nos três sites. Resultados vazios de mídia deixaram de ir para o cache. Passaram
+910 testes, lint e build. Detalhes em [ADULT-CONTENT.md](ADULT-CONTENT.md).
+
+## Conteúdo adulto opcional — 24/11/2026
+
+Nova seção 18+ com títulos `isAdult` do AniList, desligada em dois níveis:
+`ADULT_CONTENT_ENABLED=true` no backend e “Mostrar conteúdo adulto (18+)” em
+Sua experiência, com confirmação de idade. As rotas `/api/adult/*` exigem o
+cabeçalho `X-HPMovies-Adult: 18+`. O menu ganha “Conteúdo adulto” (`/adult`),
+com catálogo, busca, tags, detalhes e player próprio. O conteúdo adulto não
+entra em histórico, lista nem Continuar assistindo. Detalhes, rotas e
+configuração em [ADULT-CONTENT.md](ADULT-CONTENT.md).
+
+Obras que retratam menores são sempre bloqueadas. Esse limite não é
+configurável. A pedido do usuário, o filtro foi reduzido a sinais fortes: saíram
+Age Gap, Flat Chest, Coming of Age, Teens' Love, Shoujo e “child/kids/young”
+genéricos. Na amostra real de 528 títulos, o bloqueio caiu de 288 para 185 (35%).
+
+Reprodução: as fontes existentes (Tatakai/Toko) e a hentai-api opcional
+(`HENTAI_API_URL`) são consultadas em paralelo por ID do AniList e títulos. A
+hentai-api publicada não funciona hoje. O DNS da busca do HAnime morreu, o
+hanime.tv usa Turnstile/CSRF e o HentaiHaven responde 403. Os schemas dela
+também respondem 422 nas rotas de busca, detalhes e fontes. O cliente tolera as
+duas formas de resposta para uma versão corrigida. Teste real com
+`ADULT_CONTENT_ENABLED=true` em portas separadas: o catálogo trouxe 19 a 24
+títulos por fileira. O Tatakai encontrou índice de 12 episódios para um título.
+Nenhuma fonte entregou vídeo nos quatro títulos testados: dois 404 e dois 503.
+
+Passaram 892 testes em 74 arquivos, typecheck, lint e build. A validação visual
+com Playwright não rodou: os navegadores dele exigem `sudo npx playwright
+install-deps` neste WSL (faltam `libnspr4.so` e `libasound2t64`).
+
+## Lista de episódios e nova tentativa de reprodução — 24/11/2026
+
+Listas preenchidas aparecem normalmente nos detalhes e no player, inclusive
+quando os títulos e miniaturas vêm do catálogo. A falha do índice original
+continua registrada no diagnóstico. A lista mostra erro e ação de recuperação
+quando não consegue trazer episódios. A indisponibilidade de vídeo aparece na
+área do player do episódio selecionado.
+
+As ações de tentar novamente renovam a consulta das fontes do episódio em foco.
+O navegador envia `refresh=1` apenas em nova tentativa explícita. O Tatakai
+repassa o pedido ao host local. O Stremio refaz a consulta de streams na origem
+configurada e aproveita o manifesto já carregado. O servidor evita que a resposta
+com links temporários seja armazenada no cache HTTP. A troca de episódio volta
+à consulta normal. O player preserva a posição e a intenção de reprodução ao
+renovar uma sessão já aberta.
+
+Em Blast of Tempest, a lista exibiu 24 episódios sem o aviso e manteve a
+miniatura de First Kiss. A nova tentativa real do episódio 7 consultou as fontes
+e ainda retornou HTTP 404, sem candidatos. Captura em
+`/tmp/hpmovies-blast-episode-list-retry.png`. As verificações de recuperação
+com mídia e provedores sintéticos são separadas desse resultado real.
+
+Passaram 848 testes em 71 arquivos e 32 cenários Playwright distintos em desktop
+e celular. Lint, build e `git diff --check` também passaram.
+
+## Diagnóstico do Tatakai, Toko e Nebula — 24/11/2026
+
+O host local Tatakai respondeu em `/health` e carregou a extensão Toko, que
+lista Nebula e AniZone como fontes de anime. O adaptador Toko HTTP independente
+está desativado nesta configuração. Ele requer um serviço próprio e habilitá-lo
+na mesma porta não criaria uma fonte adicional.
+
+O índice do Nebula respondeu HTTP 523 para Blast of Tempest, One Piece, Attack
+on Titan e Chainsmoker Cat. O host local traduziu isso para HTTP 502 no índice.
+Na consulta de mídia, Nebula retornou zero candidatos nos quatro casos.
+O código 523 mostra que a Cloudflare não alcançou o servidor de origem na
+consulta do índice. [Documentação da Cloudflare](https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-523/)
+
+AniZone retornou um candidato em One Piece E1, Attack on Titan E1 e Chainsmoker
+Cat E2. A API validou o vídeo nos três casos usando seleção Tatakai explícita.
+No navegador, One Piece E1 e Attack on Titan E1 foram reproduzidos com AniZone
+selecionado. Áudio e quadros foram decodificados e o vídeo avançou após seek a
+90 s. Os frames amostrados foram conferidos. Capturas locais em
+`/tmp/hpmovies-tatakai-control-21.png` e `/tmp/hpmovies-tatakai-control-16498.png`.
+Chainsmoker Cat foi conferido apenas pelo contrato da API nesta rodada.
+
+Em Blast of Tempest E7, a extensão retornou `empty` para Nebula e AniZone. O
+addon Stremio, com manifesto ativo, também retornou zero streams. A rota final
+continuou em HTTP 404 com os aliases inglês e original do anime. O índice
+substituto forneceu os 24 episódios e miniaturas pelo Cinemeta.
+
+O cliente agora distingue `error` e `timeout` de um resolvedor configurado
+quando a resposta chega sem fontes. Trata essa falha explícita como temporária,
+permite nova consulta e evita guardá-la como ausência de vídeo. Um resultado
+`empty` continua sem mídia, como na amostra de Blast of Tempest. A mensagem da
+lista substituta passou a indicar explicitamente a falha do índice de vídeo.
+Passaram 843 testes em 71 arquivos, lint, build e `git diff --check`.
+
+## Miniaturas de Blast of Tempest durante a falha da fonte — 24/11/2026
+
+A fonte principal de anime falhou ao carregar o índice de Blast of Tempest
+(AniList 14075). O host local retornou HTTP 502 para o índice e o serviço de
+metadados que ele consulta respondeu HTTP 523. A consulta de vídeo do episódio
+7 retornou zero fontes no host local. O addon FMHY estava ativo e também
+retornou zero streams para IMDb tt2294048, temporada 1, episódio 7. A
+numeração coincide com o catálogo do distribuidor, que chama o episódio
+“First Kiss”. [Aniplex of America](https://aniplexusa.com/blastoftempest/)
+
+Quando nenhuma fonte entrega um índice, a API agora tenta recuperar títulos e
+miniaturas do Cinemeta pelo mapeamento AniList–IMDb já usado na reprodução e
+nas legendas. A lista mantém os IDs do anime, respeita as temporadas e os
+deslocamentos validados e informa que o vídeo será consultado por episódio.
+O índice original tem prioridade quando disponível. O AniList ainda fornece
+a lista numerada se a consulta de metadados falhar. No player, o episódio
+atual aparece como selecionado até haver uma fonte preparada.
+
+Em verificação local sem fixtures de rede, Blast of Tempest mostrou 24
+episódios e 24 URLs de miniaturas distintas. As imagens dos episódios 6, 7 e
+8 carregaram no navegador. A navegação dos detalhes ao episódio 7 preservou
+`tatakai:14075:7` e mostrou “First Kiss” e a imagem do episódio. A interface
+foi conferida em desktop e a 320 px, sem overflow ou erros JavaScript.
+O episódio 7 continuou indisponível para reprodução nas fontes configuradas.
+
+Passaram 840 testes em 71 arquivos, 24 cenários Playwright em desktop e
+celular, lint, build e `git diff --check`. Capturas temporárias em
+`/tmp/hpmovies-tempest-desktop.png` e `/tmp/hpmovies-tempest-mobile.png`.
+As correções locais ficaram no workspace com as alterações já preparadas
+preservadas.
 
 ## Conexão Stremio recuperada e inicialização automática — 08/11/2026
 

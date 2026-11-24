@@ -39,6 +39,53 @@ function setup(options: { rows?: unknown[]; mappings?: unknown[]; metadata?: unk
 const playback: Playback = { episode: { id: 'tatakai:42:3', number: 3, title: 'QA', available: true },
   sources: [{ url: 'https://video.example.org/one.m3u8', type: 'hls', subtitles: [] }], subtitles: [], audioLanguages: ['ja'], isDemo: false };
 
+describe('episode metadata fallback', () => {
+  it('keeps the exact season/offset, excludes known future episodes and sanitizes thumbnails', async () => {
+    const thumbnail = 'https://episodes.metahub.space/tt0123456/2/2/w780.jpg';
+    const { provider, calls } = setup({
+      mappings: [{ ...mapping, season: { tvdb: 2, tmdb: 2 }, episode_offset: { tvdb: 1, tmdb: 1 } }],
+      metadata: { meta: { id: imdb, videos: [
+        { id: `${imdb}:1:2`, season: 1, episode: 2, title: 'Wrong season' },
+        { id: `${imdb}:2:1`, season: 2, episode: 1, title: 'Previous part' },
+        { id: `${imdb}:2:2`, season: 2, episode: 2, name: 'First of the part', thumbnail },
+        { id: `${imdb}:2:3`, season: 2, episode: 3, title: 'Future episode', released: '2999-01-01' },
+        { id: 'tt0000001:2:4', season: 2, episode: 4, title: 'Foreign episode' },
+        { id: `${imdb}:2:5`, season: 2, episode: 5, thumbnail: `${thumbnail}?private=fixture` },
+        { id: `${imdb}:2:6`, season: 2, episode: 6, thumbnail: 'https://127.0.0.1/private' },
+      ] } },
+    });
+    expect(await provider.episodeMetadata('42')).toEqual([
+      { id: 'tatakai:42:1', number: 1, title: 'First of the part', thumbnail },
+      { id: 'tatakai:42:4', number: 4, title: 'Episódio 4' },
+      { id: 'tatakai:42:5', number: 5, title: 'Episódio 5' },
+    ]);
+    expect(await provider.resolveIdentity('42', 4)).toEqual({ imdb, kind: 'series', season: 2, episode: 5 });
+    expect(calls.map(url => url.hostname)).toEqual(['raw.githubusercontent.com', 'v3-cinemeta.strem.io']);
+  });
+
+  it('preserves the known whole-series prefix without relabeling rows after a numbering gap', async () => {
+    const { provider } = setup({ metadata: { meta: { id: imdb, videos: [
+      { id: `${imdb}:0:1`, season: 0, episode: 1, title: 'Special' },
+      { id: `${imdb}:2:1`, season: 2, episode: 1, title: 'Second season' },
+      { id: `${imdb}:1:1`, season: 1, episode: 1, title: 'First season' },
+      { id: `${imdb}:2:3`, season: 2, episode: 3, title: 'After the gap' },
+    ] } } });
+    expect(await provider.episodeMetadata('42')).toEqual([
+      { id: 'tatakai:42:1', number: 1, title: 'First season' },
+      { id: 'tatakai:42:2', number: 2, title: 'Second season' },
+    ]);
+    expect(await provider.resolveIdentity('42', 3)).toBeUndefined();
+  });
+
+  it('rejects duplicate episodes and an IMDb response for another work', async () => {
+    const video = { id: `${imdb}:1:1`, season: 1, episode: 1 };
+    const duplicate = setup({ metadata: { meta: { id: imdb, videos: [video, video] } } }).provider;
+    const foreign = setup({ metadata: { meta: { id: 'tt0000001', videos: [video] } } }).provider;
+    await expect(duplicate.episodeMetadata('42')).rejects.toMatchObject({ status: 502 });
+    await expect(foreign.episodeMetadata('42')).rejects.toMatchObject({ status: 502 });
+  });
+});
+
 describe('Portuguese subtitle discovery and safe files', () => {
   it('maps a whole unique series absolute episode across seasons and verifies every returned identity', async () => {
     const { provider, calls } = setup({ rows: [row(), row({ IDSubtitleFile: '124', SeriesEpisode: '2' }), row({ IDSubtitleFile: '125', SeriesIMDBParent: '654321' }), row({ IDSubtitleFile: '126', SubLanguageID: 'eng' })] });

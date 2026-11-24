@@ -234,6 +234,32 @@ describe('verified Toko JSON HTTP contract', () => {
     expect(availability.episodes[0].available).toBeUndefined();
   });
 
+  it.each(['error', 'timeout'])('treats a configured resolver state of %s as temporary and retries on the next lookup', async status => {
+    const sources = vi.fn()
+      .mockReturnValueOnce({ sources: [], providerStatus: [{ provider: 'Permitted', status, error: 'private upstream detail' }] })
+      .mockReturnValueOnce({ sources: [stream()], providerStatus: [{ provider: 'permitted', status: 'ok' }] });
+    const fetcher = vi.fn(async (raw: string) => raw.includes('/health') ? json(health)
+      : raw.includes('/index/episodes') ? json(index) : json(sources()));
+    const provider = new TokoStreamingProvider({
+      client: new TokoHttpClient({ ...config(), retries: 0 }, { fetcher: fetcher as typeof fetch }),
+      probe: async () => {},
+    });
+    await expect(provider.playback('toko:1:1')).rejects.toMatchObject({
+      status: 503, code: 'TOKO_UPSTREAM_UNAVAILABLE',
+      message: 'Uma fonte de vídeo do Toko não respondeu agora. Tente novamente em instantes.',
+    });
+    await expect(provider.playback('toko:1:1')).resolves.toMatchObject({ sources: [{ providerId: 'permitted' }] });
+    expect(sources).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a true empty result distinct from a failure of an unconfigured resolver', async () => {
+    const fetcher = vi.fn(async (raw: string) => raw.includes('/health') ? json(health)
+      : raw.includes('/index/episodes') ? json(index)
+        : json({ sources: [], providerStatus: [{ provider: 'permitted', status: 'empty' }, { provider: 'other', status: 'error' }] }));
+    const provider = new TokoStreamingProvider({ client: new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch }) });
+    await expect(provider.playback('toko:1:1')).rejects.toMatchObject({ status: 404, code: 'EPISODE_UNAVAILABLE' });
+  });
+
   it('returns only verified candidates with at most two simultaneous probes', async () => {
     const candidates = ['first.m3u8', 'broken.mp4', 'third.m3u8', 'fourth.m3u8'].map((path, i) => ({ ...stream(), url: `https://media.example.com/${path}`, quality: String(i), type: i === 1 ? 'mp4' : 'hls' }));
     const fetcher = vi.fn(async (raw: string) => raw.includes('/health') ? json(health)
@@ -299,17 +325,37 @@ describe('verified Toko JSON HTTP contract', () => {
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it('bounds distinct in-flight requests while deduplicating identical keys', async () => {
+  it('bounds distinct in-flight requests, queues the rest in order and deduplicates identical keys', async () => {
     let release!: () => void;
     const pending = new Promise<void>((resolve) => { release = resolve; });
-    const fetcher = vi.fn(async () => { await pending; return json(index); });
+    let active = 0;
+    let peak = 0;
+    const fetcher = vi.fn(async () => { active++; peak = Math.max(peak, active); await pending; active--; return json(index); });
     const client = new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch });
     const tasks = [1, 2, 3, 4].map((id) => client.episodes(id));
     const same = client.episodes(1);
-    await expect(client.episodes(5)).rejects.toMatchObject({ code: 'TOKO_BUSY' });
+    const queued = client.episodes(5);
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(4));
     release();
-    await Promise.all([...tasks, same]);
-    expect(fetcher).toHaveBeenCalledTimes(4);
+    await Promise.all([...tasks, same, queued]);
+    expect(fetcher).toHaveBeenCalledTimes(5);
+    expect(peak).toBeLessThanOrEqual(4);
+  });
+
+  it('fails a queued request with TOKO_BUSY only after its bounded wait', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = vi.fn(() => new Promise<Response>(() => {}));
+      const client = new TokoHttpClient(config(), { fetcher: fetcher as typeof fetch });
+      [1, 2, 3, 4].forEach((id) => { void client.episodes(id).catch(() => undefined); });
+      const queued = client.episodes(5);
+      const assertion = expect(queued).rejects.toMatchObject({ code: 'TOKO_BUSY' });
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(fetcher).toHaveBeenCalledTimes(4);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await assertion;
+      expect(fetcher).toHaveBeenCalledTimes(4);
+    } finally { vi.useRealTimers(); }
   });
 
   it('bounds timeout retries and converts connection failures into isolated availability states', async () => {

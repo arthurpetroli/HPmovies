@@ -36,6 +36,23 @@ describe('local API cache', () => {
     expect(failing).toHaveBeenCalledTimes(2);
   });
 
+  it('bypasses saved memory and Redis values on refresh and shares the new lookup', async () => {
+    const redis = { get: vi.fn(async () => JSON.stringify('stale')), set: vi.fn(async () => undefined), quit: async () => undefined };
+    const cache = new AniwatchAPICache({ redisClient: redis });
+    let complete!: (value: string) => void;
+    const getter = vi.fn(() => new Promise<string>(resolve => { complete = resolve; }));
+    await expect(cache.getOrSet(getter, 'stream', 30)).resolves.toBe('stale');
+    const first = cache.getOrSet(getter, 'stream', 30, true);
+    const duplicate = cache.getOrSet(getter, 'stream', 30, true);
+    const regular = cache.getOrSet(getter, 'stream', 30);
+    complete('fresh');
+    expect(await Promise.all([first, duplicate, regular])).toEqual(['fresh', 'fresh', 'fresh']);
+    await expect(cache.getOrSet(getter, 'stream', 30)).resolves.toBe('fresh');
+    expect(getter).toHaveBeenCalledTimes(1);
+    expect(redis.get).toHaveBeenCalledTimes(1);
+    expect(redis.set).toHaveBeenCalledWith('stream', JSON.stringify('fresh'), 'EX', 30);
+  });
+
   it('evicts the least recently used entry at the memory limit', async () => {
     const cache = new AniwatchAPICache({ maxEntries: 2 });
     const a = vi.fn(async () => 'a');

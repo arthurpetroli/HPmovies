@@ -9,6 +9,7 @@ const MEDIA_FIELDS = `
   id type isAdult title { romaji english native }
   coverImage { extraLarge large } bannerImage description(asHtml: false)
   averageScore startDate { year } season format status episodes duration genres
+  nextAiringEpisode { episode }
 `;
 
 const HOME_QUERY = `query CatalogHome {
@@ -124,7 +125,7 @@ export function validateCatalogQuery(params: Record<string, string>): CatalogQue
   return result;
 }
 
-function record(value: unknown): Record<string, unknown> {
+export function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new ApiError(502, 'INVALID_CATALOG_RESPONSE', 'O catálogo respondeu com dados inválidos. Tente novamente.');
   }
@@ -177,16 +178,19 @@ function mediaTrailer(value: unknown): CatalogAnime['trailer'] {
   return { id, site: site as 'youtube' | 'dailymotion', thumbnail: safeUrl(trailer.thumbnail) };
 }
 
-function normalizeMedia(value: unknown): CatalogAnime {
+/** `adult` selects the only accepted AniList isAdult value; the two catalogs never mix. */
+export function normalizeMedia(value: unknown, adult = false): CatalogAnime {
   const media = record(value);
   const id = number(media.id);
   const titles = record(media.title);
   const title = text(titles.english) ?? text(titles.romaji) ?? text(titles.native);
-  if (!id || !Number.isInteger(id) || !title || media.type !== 'ANIME' || media.isAdult !== false) {
+  if (!id || !Number.isInteger(id) || !title || media.type !== 'ANIME' || media.isAdult !== adult) {
     throw new ApiError(502, 'INVALID_CATALOG_RESPONSE', 'O catálogo respondeu com dados inválidos. Tente novamente.');
   }
   const cover = media.coverImage ? record(media.coverImage) : {};
   const startDate = media.startDate ? record(media.startDate) : {};
+  // The next scheduled number is the only catalog signal for how many episodes already aired.
+  const nextAiring = media.nextAiringEpisode ? number(record(media.nextAiringEpisode).episode) : undefined;
   return {
     id: String(id), title, titleOriginal: text(titles.romaji) ?? text(titles.native),
     poster: safeUrl(cover.extraLarge) ?? safeUrl(cover.large) ?? '',
@@ -195,12 +199,107 @@ function normalizeMedia(value: unknown): CatalogAnime {
     format: text(media.format), status: text(media.status), season: text(media.season),
     genres: Array.isArray(media.genres) ? media.genres.filter((genre): genre is string => typeof genre === 'string') : [],
     episodeCount: number(media.episodes), duration: number(media.duration),
+    ...(nextAiring && Number.isInteger(nextAiring) && nextAiring > 1 && nextAiring <= 100_000 ? { airedEpisodes: nextAiring - 1 } : {}),
   };
 }
 
 function normalizeList(value: unknown): CatalogAnime[] {
   if (!Array.isArray(value)) throw new ApiError(502, 'INVALID_CATALOG_RESPONSE', 'Lista inválida recebida do catálogo.');
-  return value.filter((media) => media !== null).map(normalizeMedia);
+  return value.filter((media) => media !== null).map(media => normalizeMedia(media));
+}
+
+interface DetailsOptions {
+  adult: boolean;
+  /** Extra condition for related and recommended titles. */
+  accept?: (node: Record<string, unknown>) => boolean;
+}
+
+/** Full details from an AniList Media record, shared by the general and adult catalogs. */
+export function normalizeDetails(media: Record<string, unknown>, options: DetailsOptions = { adult: false }): CatalogAnime {
+  const allowed = (node: Record<string, unknown>) => node.type === 'ANIME' && node.isAdult === options.adult && (!options.accept || options.accept(node));
+  const anime = normalizeMedia(media, options.adult);
+  anime.titleNative = text(optionalRecord(media.title).native);
+  anime.popularity = number(media.popularity);
+  anime.countryOfOrigin = text(media.countryOfOrigin);
+  anime.startDate = mediaDate(media.startDate);
+  anime.endDate = mediaDate(media.endDate);
+  anime.trailer = mediaTrailer(media.trailer);
+  const studios = optionalRecord(media.studios).nodes;
+  anime.studios = Array.isArray(studios) ? [...new Set(studios.flatMap(value => {
+    const name = text(optionalRecord(value).name);
+    return name ? [name] : [];
+  }))] : [];
+  const relations = media.relations ? record(media.relations).edges : undefined;
+  const recommendations = media.recommendations ? record(media.recommendations).nodes : undefined;
+  anime.relations = Array.isArray(relations) ? relations.flatMap((value) => {
+    if (!value) return [];
+    const edge = record(value);
+    if (!edge.node) return [];
+    const node = record(edge.node);
+    if (!allowed(node)) return [];
+    return [{ relation: text(edge.relationType) ?? 'RELATED', anime: normalizeMedia(node, options.adult) }];
+  }) : [];
+  anime.recommendations = Array.isArray(recommendations) ? recommendations.flatMap((value) => {
+    if (!value) return [];
+    const recommendation = record(value).mediaRecommendation;
+    if (!recommendation) return [];
+    const node = record(recommendation);
+    return allowed(node) ? [normalizeMedia(node, options.adult)] : [];
+  }) : [];
+  anime.externalLinks = Array.isArray(media.externalLinks) ? media.externalLinks.flatMap((value) => {
+    if (!value) return [];
+    const link = record(value);
+    const url = safeUrl(link.url);
+    const site = text(link.site);
+    return url && site ? [{ url, site }] : [];
+  }) : [];
+  const characters = media.characters ? record(media.characters).edges : undefined;
+  anime.characters = Array.isArray(characters) ? characters.flatMap(value => {
+    if (!value) return [];
+    const edge = record(value);
+    if (!edge.node) return [];
+    const node = record(edge.node);
+    const name = node.name ? text(record(node.name).full) : undefined;
+    const id = number(node.id);
+    const image = node.image ? safeUrl(record(node.image).medium) : undefined;
+    return id && name ? [{ id: String(id), name, image, role: text(edge.role) }] : [];
+  }) : [];
+  return anime;
+}
+
+/** One bounded AniList GraphQL request with the catalog's error contract. */
+export async function anilistRequest(fetcher: typeof fetch, timeoutMs: number, query: string, variables: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  let response: Response;
+  try {
+    response = await fetcher(runtimeConfig.anilistUrl, {
+      redirect: 'error', method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    if (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name)) {
+      throw new ApiError(504, 'CATALOG_TIMEOUT', 'O catálogo demorou a responder. Tente novamente.');
+    }
+    throw new ApiError(503, 'CATALOG_UNAVAILABLE', 'Não foi possível conectar ao AniList. Verifique sua conexão e tente novamente.');
+  }
+  if (response.status === 429) {
+    const retryAfter = Number(response.headers.get('Retry-After')) || 60;
+    throw new ApiError(503, 'CATALOG_RATE_LIMIT', 'O AniList está limitando as consultas. Aguarde um momento e tente novamente.', Math.min(3600, Math.max(1, retryAfter)));
+  }
+  if (response.status === 403) throw new ApiError(503, 'CATALOG_UNAVAILABLE', 'O AniList recusou o acesso à API. O serviço pode estar temporariamente indisponível. Tente novamente mais tarde.');
+  if (response.status === 404) throw new ApiError(404, 'ANIME_NOT_FOUND', 'Anime não encontrado no catálogo.');
+  if (!response.ok) throw new ApiError(502, 'CATALOG_UPSTREAM_ERROR', 'O AniList está indisponível no momento. Tente novamente.');
+  let payload: Record<string, unknown>;
+  try {
+    payload = record(await response.json());
+  } catch {
+    throw new ApiError(502, 'INVALID_CATALOG_RESPONSE', 'O catálogo respondeu com dados inválidos. Tente novamente.');
+  }
+  if (Array.isArray(payload.errors) && payload.errors.length) {
+    const isNotFound = payload.errors.some((error) => error && typeof error === 'object' && 'status' in error && error.status === 404);
+    if (isNotFound) throw new ApiError(404, 'ANIME_NOT_FOUND', 'Anime não encontrado no catálogo.');
+    throw new ApiError(502, 'CATALOG_UPSTREAM_ERROR', 'Não foi possível consultar o catálogo. Tente novamente.');
+  }
+  return record(payload.data);
 }
 
 interface AniListOptions {
@@ -220,38 +319,8 @@ export class AniListCatalogProvider implements AnimeCatalogProvider {
     this.timeoutMs = options.timeoutMs ?? 12000;
   }
 
-  private async request(query: string, variables: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
-    let response: Response;
-    try {
-      response = await this.fetcher(runtimeConfig.anilistUrl, {
-        redirect: 'error', method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(this.timeoutMs),
-      });
-    } catch (error) {
-      if (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name)) {
-        throw new ApiError(504, 'CATALOG_TIMEOUT', 'O catálogo demorou a responder. Tente novamente.');
-      }
-      throw new ApiError(503, 'CATALOG_UNAVAILABLE', 'Não foi possível conectar ao AniList. Verifique sua conexão e tente novamente.');
-    }
-    if (response.status === 429) {
-      const retryAfter = Number(response.headers.get('Retry-After')) || 60;
-      throw new ApiError(503, 'CATALOG_RATE_LIMIT', 'O AniList está limitando as consultas. Aguarde um momento e tente novamente.', Math.min(3600, Math.max(1, retryAfter)));
-    }
-    if (response.status === 403) throw new ApiError(503, 'CATALOG_UNAVAILABLE', 'O AniList recusou o acesso à API. O serviço pode estar temporariamente indisponível. Tente novamente mais tarde.');
-    if (response.status === 404) throw new ApiError(404, 'ANIME_NOT_FOUND', 'Anime não encontrado no catálogo.');
-    if (!response.ok) throw new ApiError(502, 'CATALOG_UPSTREAM_ERROR', 'O AniList está indisponível no momento. Tente novamente.');
-    let payload: Record<string, unknown>;
-    try {
-      payload = record(await response.json());
-    } catch {
-      throw new ApiError(502, 'INVALID_CATALOG_RESPONSE', 'O catálogo respondeu com dados inválidos. Tente novamente.');
-    }
-    if (Array.isArray(payload.errors) && payload.errors.length) {
-      const isNotFound = payload.errors.some((error) => error && typeof error === 'object' && 'status' in error && error.status === 404);
-      if (isNotFound) throw new ApiError(404, 'ANIME_NOT_FOUND', 'Anime não encontrado no catálogo.');
-      throw new ApiError(502, 'CATALOG_UPSTREAM_ERROR', 'Não foi possível consultar o catálogo. Tente novamente.');
-    }
-    return record(payload.data);
+  private request(query: string, variables: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+    return anilistRequest(this.fetcher, this.timeoutMs, query, variables);
   }
 
   home(): Promise<CatalogHome> {
@@ -294,55 +363,7 @@ export class AniListCatalogProvider implements AnimeCatalogProvider {
     return this.cache.getOrSet(async () => {
       const data = await this.request(DETAILS_QUERY, { id: Number(id) });
       if (data.Media === null) throw new ApiError(404, 'ANIME_NOT_FOUND', 'Anime não encontrado no catálogo.');
-      const media = record(data.Media);
-      const anime = normalizeMedia(media);
-      anime.titleNative = text(optionalRecord(media.title).native);
-      anime.popularity = number(media.popularity);
-      anime.countryOfOrigin = text(media.countryOfOrigin);
-      anime.startDate = mediaDate(media.startDate);
-      anime.endDate = mediaDate(media.endDate);
-      anime.trailer = mediaTrailer(media.trailer);
-      const studios = optionalRecord(media.studios).nodes;
-      anime.studios = Array.isArray(studios) ? [...new Set(studios.flatMap(value => {
-        const name = text(optionalRecord(value).name);
-        return name ? [name] : [];
-      }))] : [];
-      const relations = media.relations ? record(media.relations).edges : undefined;
-      const recommendations = media.recommendations ? record(media.recommendations).nodes : undefined;
-      anime.relations = Array.isArray(relations) ? relations.flatMap((value) => {
-        if (!value) return [];
-        const edge = record(value);
-        if (!edge.node) return [];
-        const node = record(edge.node);
-        if (node.type !== 'ANIME' || node.isAdult !== false) return [];
-        return [{ relation: text(edge.relationType) ?? 'RELATED', anime: normalizeMedia(node) }];
-      }) : [];
-      anime.recommendations = Array.isArray(recommendations) ? recommendations.flatMap((value) => {
-        if (!value) return [];
-        const recommendation = record(value).mediaRecommendation;
-        if (!recommendation) return [];
-        const node = record(recommendation);
-        return node.type === 'ANIME' && node.isAdult === false ? [normalizeMedia(node)] : [];
-      }) : [];
-      anime.externalLinks = Array.isArray(media.externalLinks) ? media.externalLinks.flatMap((value) => {
-        if (!value) return [];
-        const link = record(value);
-        const url = safeUrl(link.url);
-        const site = text(link.site);
-        return url && site ? [{ url, site }] : [];
-      }) : [];
-      const characters = media.characters ? record(media.characters).edges : undefined;
-      anime.characters = Array.isArray(characters) ? characters.flatMap(value => {
-        if (!value) return [];
-        const edge = record(value);
-        if (!edge.node) return [];
-        const node = record(edge.node);
-        const name = node.name ? text(record(node.name).full) : undefined;
-        const id = number(node.id);
-        const image = node.image ? safeUrl(record(node.image).medium) : undefined;
-        return id && name ? [{ id: String(id), name, image, role: text(edge.role) }] : [];
-      }) : [];
-      return anime;
+      return normalizeDetails(record(data.Media));
     }, `catalog:anilist:details:v2:${id}`, 3600);
   }
 

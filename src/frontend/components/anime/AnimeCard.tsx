@@ -98,9 +98,9 @@ export function AnimeCard({ anime, rank }: { anime: CatalogAnime; rank?: number 
           </div>
         </section>
       </AnimeWatchLink>
-      {previewOpen && <button type="button" onClick={() => libraryService.toggle(anime)} className={`card-save ${saved ? 'is-saved' : ''}`} aria-label={saved ? `Remover ${anime.title} da lista` : `Adicionar ${anime.title} à lista`} title={saved ? 'Na minha lista' : 'Adicionar à minha lista'} aria-pressed={saved}>
+      {previewOpen && <div className="anime-card-layer"><button type="button" onClick={() => libraryService.toggle(anime)} className={`card-save ${saved ? 'is-saved' : ''}`} aria-label={saved ? `Remover ${anime.title} da lista` : `Adicionar ${anime.title} à lista`} title={saved ? 'Na minha lista' : 'Adicionar à minha lista'} aria-pressed={saved}>
         {saved ? <Check size={20} aria-hidden="true" /> : <Bookmark size={20} aria-hidden="true" />}
-      </button>}
+      </button></div>}
       <button
         ref={previewButtonRef}
         type="button"

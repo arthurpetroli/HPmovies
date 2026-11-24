@@ -37,23 +37,25 @@ export const watchEpisodes = (id: string, titles?: string[], refresh = false) =>
   requestKey(id, titles), () => streamingService.episodes(id, titles), 120_000, refresh);
 
 export const watchPlayback = (id: string, titles?: string[], refresh = false) => cached(playbackRequests,
-  requestKey(id, titles), () => streamingService.playback(id, titles), 20_000, refresh);
+  requestKey(id, titles), () => streamingService.playback(id, titles, refresh), 20_000, refresh);
 
 /** Resolve media through the backend before the complete episode index is ready. */
 export const watchStart = (animeId: string, titles?: string[], refresh = false, preferredEpisode?: number) => {
   const progress = libraryService.getHistory().find(item =>
     item.anime?.id === animeId || /^(?:tatakai|toko):([1-9]\d*):/.exec(item.episodeId)?.[1] === animeId);
   return cached(entryRequests, JSON.stringify([requestKey(animeId, titles), progress?.episodeId, progress?.completed, preferredEpisode]), async () => {
-    const resolveIndexed = async () => {
+    const resolveIndexed = async (initialFailure?: unknown) => {
       // Fractional/special episode indexes may begin somewhere other than 1.
       const availability = await watchEpisodes(animeId, titles, refresh);
+      if (availability.catalogFallback && initialFailure instanceof Error) throw initialFailure;
       const first = selectWatchEpisode(animeId, availability.episodes);
       if (!first) throw new Error(availability.message || 'Os episódios deste anime ainda não foram encontrados nas fontes conectadas.');
       return watchPlayback(first.id, titles, refresh);
     };
-    const playback = preferredEpisode !== undefined ? await contentService.playback(animeId, String(preferredEpisode), { titles })
+    const options = refresh ? { titles, refresh: true } : { titles };
+    const playback = preferredEpisode !== undefined ? await contentService.playback(animeId, String(preferredEpisode), options)
       : progress ? progress.completed ? await resolveIndexed() : await watchPlayback(progress.episodeId, titles, refresh)
-      : await contentService.playback(animeId, '1', { titles }).catch(resolveIndexed);
+      : await contentService.playback(animeId, '1', options).catch(resolveIndexed);
     const expiresAt = Date.parse(playback.expiresAt || '');
     playbackRequests.set(requestKey(playback.episode.id, titles), {
       promise: Promise.resolve(playback), pending: false,

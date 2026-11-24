@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
-import type { Ref, RefObject } from 'react';
+import type { CSSProperties, Ref, RefObject } from 'react';
 import Hls from 'hls.js';
 import { Check, Loader2, Maximize, Minimize, Pause, Play, RotateCcw, Settings, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
 import type { StreamSource, StreamSubtitle } from '../../../shared/providers';
 import { loadConvertedSubtitle, readCaptionPreferences, saveCaptionPreferences } from './subtitles';
 import { hasValidIntro, orderedSubtitles, portugueseCaptionRank, preferredSubtitleId } from './playbackUtils';
 import './playerCaptions.css';
+import './player.css';
 import type { IntroTiming } from '../../services/intro';
 import { ExternalSubtitlePicker } from './ExternalSubtitlePicker';
 
@@ -26,6 +27,7 @@ interface VideoPlayerProps {
   initialTime?: number;
   onProgress?: (currentTime: number, duration: number) => void;
   onSourceError?: (failure: VideoSourceError) => void;
+  onRetrySources?: () => void;
   onSourcePlaying?: () => void;
   onEnded?: () => void;
   onSubtitleChange?: (subtitle: StreamSubtitle | undefined) => void;
@@ -51,9 +53,9 @@ const formatTime = (seconds: number) => {
   return hours ? `${hours}:${minutes.toString().padStart(2, '0')}:${remainder}` : `${minutes}:${remainder}`;
 };
 
-const buttonClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white/90 transition hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-400';
-const selectClass = 'w-full rounded-lg border border-white/15 bg-[#202831] px-3 py-2 text-sm text-white focus:border-teal-400 focus:outline-none';
-const episodeActionClass = 'absolute right-3 top-3 z-30 inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/30 bg-black/80 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-teal-400 hover:text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 sm:right-4 sm:top-4';
+const buttonClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white/90 transition hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-400';
+const selectClass = 'w-full text-sm focus:border-teal-400 focus:outline-none';
+const episodeActionClass = 'absolute right-3 top-3 z-30 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/30 bg-black/70 backdrop-blur-md px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-teal-400 hover:text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 sm:right-4 sm:top-4';
 
 /** Keep optional segment timings scoped to the current source and actual duration. */
 function useEpisodeTiming(native: IntroTiming | undefined, resolver: VideoPlayerProps['introResolver'], url: string, duration: number) {
@@ -71,7 +73,7 @@ function useEpisodeTiming(native: IntroTiming | undefined, resolver: VideoPlayer
   return hasValidIntro(native, duration) ? native : resolved.key === key ? resolved.value : undefined;
 }
 
-export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, episodeId, initialSubtitleId, onExternalSubtitleSelect, intro, introResolver, ending, endingResolver, onNextEpisode, onPrepareNextEpisode, initialTime = 0, onProgress, onSourceError, onSourcePlaying, onEnded, onSubtitleChange, autoPlay = false, autoSkipIntro = false, suspended = false, fullscreenContainerRef, className = '' }: VideoPlayerProps) {
+export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, episodeId, initialSubtitleId, onExternalSubtitleSelect, intro, introResolver, ending, endingResolver, onNextEpisode, onPrepareNextEpisode, initialTime = 0, onProgress, onSourceError, onRetrySources, onSourcePlaying, onEnded, onSubtitleChange, autoPlay = false, autoSkipIntro = false, suspended = false, fullscreenContainerRef, className = '' }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const captionTrackRef = useRef<HTMLTrackElement>(null);
   const captionTextRef = useRef<HTMLSpanElement>(null);
@@ -519,7 +521,7 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
       </video>
 
       {buffering && !error && <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/15" role="status" aria-label="Carregando vídeo"><Loader2 className="h-10 w-10 animate-spin text-teal-400" /></div>}
-      {!playing && !buffering && !error && <button type="button" aria-label="Reproduzir vídeo" className="absolute left-1/2 top-1/2 z-[22] flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-teal-400 text-slate-950 shadow-lg transition hover:scale-105 focus-visible:outline focus-visible:outline-white" onClick={togglePlay}><Play className="ml-1 h-7 w-7 fill-current" /></button>}
+      {!playing && !buffering && !error && <button type="button" aria-label="Reproduzir vídeo" className="player-big-play" onClick={togglePlay}><Play className="ml-1 h-7 w-7 fill-current" /></button>}
       {!error && controlsVisible && <>
         <button type="button" className="absolute left-3 top-1/2 z-[22] flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white sm:hidden" aria-label="Voltar 10 segundos" onClick={() => seek(-10)}><RotateCcw size={19} /></button>
         <button type="button" className="absolute right-3 top-1/2 z-[22] flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white sm:hidden" aria-label="Avançar 10 segundos" onClick={() => seek(10)}><SkipForward size={19} /></button>
@@ -527,7 +529,18 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
 
       {error && <div role="alert" className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-black/85 p-6 text-center">
         <p className="max-w-lg text-sm text-white/90">{error}</p>
-        <button type="button" className="rounded-lg bg-teal-400 px-5 py-2.5 font-semibold text-slate-950 hover:bg-teal-300" onClick={() => { startPositionRef.current = videoRef.current?.currentTime || startPositionRef.current; setError(null); setBuffering(true); setQualities([]); setQuality(-1); setAttempt(value => value + 1); }}>Tentar novamente</button>
+        <button type="button" className="rounded-lg bg-teal-400 px-5 py-2.5 font-semibold text-slate-950 hover:bg-teal-300" onClick={() => {
+          if (onRetrySources) {
+            onRetrySources();
+            return;
+          }
+          startPositionRef.current = videoRef.current?.currentTime || startPositionRef.current;
+          setError(null);
+          setBuffering(true);
+          setQualities([]);
+          setQuality(-1);
+          setAttempt(value => value + 1);
+        }}>{onRetrySources ? 'Tentar fontes novamente' : 'Tentar novamente'}</button>
       </div>}
       <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex max-h-[calc(100%-1.5rem)] flex-col items-start gap-2">
       {notice && <div role="status" className="pointer-events-auto flex w-full items-center justify-between gap-3 rounded-lg bg-black/85 px-3 py-2 text-xs text-white/90"><p>{notice}</p><button type="button" aria-label="Fechar mensagem" className="shrink-0 p-1 hover:text-teal-300" onClick={() => setNotice(null)}><X size={16} /></button></div>}
@@ -554,7 +567,7 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
       }}><SkipForward size={16} aria-hidden="true" />Pular abertura</button>}
       {canGoNext && showEpisodeAction && <button type="button" className={episodeActionClass} onClick={onNextEpisode}><SkipForward size={16} aria-hidden="true" />Próximo episódio</button>}
 
-      {settingsOpen && <div className="absolute bottom-16 right-3 z-30 max-h-[calc(100%-5rem)] w-[min(320px,calc(100%-1.5rem))] overflow-y-auto rounded-xl border border-white/15 bg-[#10161f]/95 p-4 shadow-xl backdrop-blur-xl" aria-label="Configurações do vídeo">
+      {settingsOpen && <div className="absolute bottom-16 right-3 z-30 max-h-[calc(100%-5rem)] w-[min(320px,calc(100%-1.5rem))] overflow-y-auto rounded-xl border border-white/15 bg-[#0d121a]/95 p-4 shadow-xl backdrop-blur-xl" aria-label="Configurações do vídeo">
         <div className="mb-4 flex items-center justify-between"><span className="font-semibold">Configurações</span><button type="button" className={buttonClass} aria-label="Fechar configurações" onClick={() => setSettingsOpen(false)}><X size={18} /></button></div>
         <label className="mb-4 block space-y-2"><span className="text-xs font-medium text-white/60">Qualidade</span><select aria-label="Qualidade do vídeo" className={selectClass} value={quality} onChange={event => { const value = Number(event.target.value); setQuality(value); if (hlsRef.current) hlsRef.current.currentLevel = value; }}>
           <option value={-1}>{source.type === 'hls' ? 'Automática' : source.label ?? 'Original'}</option>
@@ -574,13 +587,13 @@ export function VideoPlayer({ ref, source, poster, subtitles = EMPTY_SUBTITLES, 
         onClose={() => setExternalPickerOpen(false)} onSelect={track => { onExternalSubtitleSelect(track); setExternalPickerOpen(false); }} />}
 
       <div className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black via-black/70 to-transparent px-3 pb-2 pt-10 transition-opacity sm:px-5 sm:pb-3 ${controlsVisible || !playing || settingsOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`} inert={error || (!controlsVisible && playing && !settingsOpen) ? true : undefined}>
-        <label className="block"><span className="sr-only">Posição do vídeo</span><input aria-label="Posição do vídeo" aria-valuetext={`${formatTime(time)} de ${formatTime(duration)}`} type="range" min={0} max={duration || 1} step={0.1} value={Math.min(time, duration || 1)} disabled={!duration} onChange={event => { if (videoRef.current) videoRef.current.currentTime = Number(event.target.value); }} className="h-1.5 w-full cursor-pointer accent-teal-400" /></label>
+        <label className="block"><span className="sr-only">Posição do vídeo</span><input aria-label="Posição do vídeo" aria-valuetext={`${formatTime(time)} de ${formatTime(duration)}`} type="range" min={0} max={duration || 1} step={0.1} value={Math.min(time, duration || 1)} disabled={!duration} onChange={event => { if (videoRef.current) videoRef.current.currentTime = Number(event.target.value); }} className="player-range w-full" style={{ '--fill': `${Math.min(100, (Math.min(time, duration || 1) / (duration || 1)) * 100)}%` } as CSSProperties} /></label>
         <div className="mt-1 flex items-center gap-1 sm:gap-2">
           <button type="button" className={buttonClass} aria-label={playing ? 'Pausar' : 'Reproduzir'} title={playing ? 'Pausar (K)' : 'Reproduzir (K)'} onClick={togglePlay}>{playing ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}</button>
           <button type="button" className={`${buttonClass} hidden sm:flex`} aria-label="Voltar 10 segundos" title="Voltar 10 segundos" onClick={() => seek(-10)}><RotateCcw size={20} /><span className="sr-only">10 segundos</span></button>
           <button type="button" className={`${buttonClass} hidden sm:flex`} aria-label="Avançar 10 segundos" title="Avançar 10 segundos" onClick={() => seek(10)}><SkipForward size={20} /></button>
           <button type="button" className={buttonClass} aria-label={muted || volume === 0 ? 'Ativar som' : 'Silenciar'} title="Som (M)" onClick={toggleMute}>{muted || volume === 0 ? <VolumeX size={21} /> : <Volume2 size={21} />}</button>
-          <input type="range" aria-label="Volume" min={0} max={1} step={0.05} value={muted ? 0 : volume} className="hidden w-20 cursor-pointer accent-teal-400 md:block" onChange={event => { if (videoRef.current) { videoRef.current.volume = Number(event.target.value); videoRef.current.muted = false; } }} />
+          <input type="range" aria-label="Volume" min={0} max={1} step={0.05} value={muted ? 0 : volume} className="player-range player-range--volume hidden md:block" style={{ '--fill': `${(muted ? 0 : volume) * 100}%` } as CSSProperties} onChange={event => { if (videoRef.current) { videoRef.current.volume = Number(event.target.value); videoRef.current.muted = false; } }} />
           <span className="ml-1 whitespace-nowrap text-[11px] tabular-nums text-white/75 sm:text-xs">{formatTime(time)} <span className="text-white/35">/</span> {formatTime(duration)}</span>
           <div className="flex-1" />
           <span className="hidden text-[11px] text-white/60 lg:inline">{source.type === 'hls' ? qualityLabel : source.label ?? 'Original'}</span>

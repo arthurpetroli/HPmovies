@@ -112,7 +112,7 @@ describe('watch entry preparation and episode selection', () => {
     await prepareAnimeWatch(anime);
     expect(mocks.episodes).toHaveBeenCalledOnce();
     expect(mocks.playback).toHaveBeenCalledOnce();
-    expect(mocks.playback).toHaveBeenCalledWith(episodes[1].id, [anime.title, anime.titleOriginal]);
+    expect(mocks.playback).toHaveBeenCalledWith(episodes[1].id, [anime.title, anime.titleOriginal], false);
     mocks.episodes.mockRejectedValueOnce(new Error('Fixture index unavailable'));
     await expect(prepareAnimeWatch({ ...anime, id: '99' })).resolves.toBeUndefined();
   });
@@ -139,7 +139,7 @@ describe('watch entry preparation and episode selection', () => {
     mocks.playback.mockResolvedValue({ ...playback, episode: special });
     const { watchStart } = await import('../src/frontend/services/watchEntry');
     await expect(watchStart('21', [anime.title])).resolves.toMatchObject({ episode: special });
-    expect(mocks.playback).toHaveBeenCalledWith(special.id, [anime.title]);
+    expect(mocks.playback).toHaveBeenCalledWith(special.id, [anime.title], false);
     expect(mocks.content).toHaveBeenCalledWith('21', '1', { titles: [anime.title] });
   });
 
@@ -147,7 +147,7 @@ describe('watch entry preparation and episode selection', () => {
     mocks.history.mockReturnValue([progress(episodes[3].id)]);
     const { watchStart } = await import('../src/frontend/services/watchEntry');
     await watchStart('21', [anime.title]);
-    expect(mocks.playback).toHaveBeenCalledWith(episodes[3].id, [anime.title]);
+    expect(mocks.playback).toHaveBeenCalledWith(episodes[3].id, [anime.title], false);
     expect(mocks.content).not.toHaveBeenCalled();
     expect(mocks.episodes).not.toHaveBeenCalled();
   });
@@ -156,7 +156,7 @@ describe('watch entry preparation and episode selection', () => {
     mocks.history.mockReturnValue([progress(episodes[1].id, true)]);
     const { watchStart } = await import('../src/frontend/services/watchEntry');
     await watchStart('21', [anime.title]);
-    expect(mocks.playback).toHaveBeenCalledWith(episodes[3].id, [anime.title]);
+    expect(mocks.playback).toHaveBeenCalledWith(episodes[3].id, [anime.title], false);
     expect(mocks.content).not.toHaveBeenCalled();
     expect(mocks.episodes).toHaveBeenCalledOnce();
   });
@@ -177,6 +177,14 @@ describe('watch entry preparation and episode selection', () => {
     expect(mocks.content).toHaveBeenCalledOnce();
     expect(mocks.episodes).not.toHaveBeenCalled();
     expect(mocks.playback).not.toHaveBeenCalled();
+  });
+
+  it('forwards an explicit retry of the scheduled episode to the content endpoint', async () => {
+    const { watchStart } = await import('../src/frontend/services/watchEntry');
+    await expect(watchStart('21', [anime.title], false, 5)).rejects.toThrow();
+    mocks.content.mockResolvedValue(playback);
+    await expect(watchStart('21', [anime.title], true, 5)).resolves.toBe(playback);
+    expect(mocks.content).toHaveBeenLastCalledWith('21', '5', { titles: [anime.title], refresh: true });
   });
 
   it('does not reuse an entry cached for a different episode in watch history', async () => {

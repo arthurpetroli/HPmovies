@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { CatalogAnime } from '../../../shared/providers';
 import { AnimeCard } from './AnimeCard';
 
-export function AnimeRowCarousel({ title, subtitle, animes, viewAllLink, ranked = false }: { title: string; subtitle?: string; animes: CatalogAnime[]; viewAllLink?: string; ranked?: boolean }) {
+/** `renderItem` replaces the default card, e.g. for titles outside the general catalog. */
+export function AnimeRowCarousel({ title, subtitle, animes, viewAllLink, ranked = false, renderItem }: { title: string; subtitle?: string; animes: CatalogAnime[]; viewAllLink?: string; ranked?: boolean; renderItem?: (anime: CatalogAnime, index: number) => ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const [arrows, setArrows] = useState({ left: false, right: false });
   useEffect(() => {
@@ -23,14 +25,14 @@ export function AnimeRowCarousel({ title, subtitle, animes, viewAllLink, ranked 
       <div className="section-heading">
         <div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>
         <div className="row-actions">
-          {viewAllLink && <Link to={viewAllLink} className="text-link">Ver todos <ArrowRight size={15} /></Link>}
+          {viewAllLink && <Link to={viewAllLink} className="text-link">Ver todos <ArrowRight size={15} aria-hidden="true" /></Link>}
           <div className="carousel-arrows">
-            <button className="icon-button" onClick={() => ref.current?.scrollBy({ left: -ref.current.clientWidth * .8, behavior: 'smooth' })} disabled={!arrows.left} aria-label={`Anteriores em ${title}`}><ChevronLeft size={19} /></button>
-            <button className="icon-button" onClick={() => ref.current?.scrollBy({ left: ref.current.clientWidth * .8, behavior: 'smooth' })} disabled={!arrows.right} aria-label={`Próximos em ${title}`}><ChevronRight size={19} /></button>
+            <button className="icon-button" onClick={() => ref.current?.scrollBy({ left: -ref.current.clientWidth * .8, behavior: 'smooth' })} disabled={!arrows.left} aria-label={`Anteriores em ${title}`}><ChevronLeft size={19} aria-hidden="true" /></button>
+            <button className="icon-button" onClick={() => ref.current?.scrollBy({ left: ref.current.clientWidth * .8, behavior: 'smooth' })} disabled={!arrows.right} aria-label={`Próximos em ${title}`}><ChevronRight size={19} aria-hidden="true" /></button>
           </div>
         </div>
       </div>
-      <div ref={ref} className="anime-carousel scrollbar-hide">{animes.map((anime, index) => <AnimeCard key={anime.id} anime={anime} rank={ranked ? index + 1 : undefined} />)}</div>
+      <div ref={ref} className="anime-carousel scrollbar-hide" data-can-prev={arrows.left} data-can-next={arrows.right}>{animes.map((anime, index) => renderItem ? <Fragment key={anime.id}>{renderItem(anime, index)}</Fragment> : <AnimeCard key={anime.id} anime={anime} rank={ranked ? index + 1 : undefined} />)}</div>
     </section>
   );
 }

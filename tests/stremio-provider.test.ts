@@ -33,6 +33,25 @@ describe('HTTP addon streaming', () => {
     await expect(denied.playback(request)).rejects.toMatchObject({ code: 'STREMIO_UNAUTHORIZED' });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+
+  it('refreshes an empty stream result while retaining the configured addon query and cached manifest', async () => {
+    const streamResponse = vi.fn().mockReturnValueOnce({ streams: [] })
+      .mockReturnValueOnce({ streams: [{ url: 'https://media.example.com/new.mp4' }] });
+    const fetcher = vi.fn(async (raw: string) => raw.includes('/manifest.json') ? json(manifest) : json(streamResponse()));
+    const provider = new StremioStreamingProvider({
+      addons: [{ ...addon, manifestUrl: 'https://addon.example.com/configured/manifest.json?setting=public' }],
+      fetcher: fetcher as typeof fetch,
+    });
+    await expect(provider.playback(request)).rejects.toMatchObject({ code: 'STREMIO_EPISODE_UNAVAILABLE' });
+    await expect(provider.playback(request)).rejects.toMatchObject({ code: 'STREMIO_EPISODE_UNAVAILABLE' });
+    await expect(provider.playback(request, undefined, true)).resolves.toMatchObject({ sources: [{ url: 'https://media.example.com/new.mp4' }] });
+    await expect(provider.playback(request)).resolves.toMatchObject({ sources: [{ url: 'https://media.example.com/new.mp4' }] });
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      'https://addon.example.com/configured/manifest.json?setting=public',
+      'https://addon.example.com/configured/stream/series/tt1234567%3A1%3A2.json?setting=public',
+      'https://addon.example.com/configured/stream/series/tt1234567%3A1%3A2.json?setting=public',
+    ]);
+  });
   it('isolates addon failures and refuses redirect transports', async () => {
     const fetcher = vi.fn(async (raw: string) => raw.includes('broken.example.com') ? new Response(null, { status: 302, headers: { Location: 'http://127.0.0.1/private' } }) : raw.endsWith('/manifest.json') ? json(manifest) : json({ streams: [{ url: 'https://media.example.com/video.mp4' }] }));
     const provider = new StremioStreamingProvider({ addons: [{ ...addon, id: 'broken', manifestUrl: 'https://broken.example.com/manifest.json' }, addon], fetcher: fetcher as typeof fetch });

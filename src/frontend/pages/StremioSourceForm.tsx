@@ -3,7 +3,7 @@ import { ArrowLeft, Film, Play } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { CinemaType } from '../../shared/cinema';
 
-const fieldClass = 'min-h-11 w-full min-w-0 rounded-lg border border-white/15 bg-[#151d25] px-3 py-3 text-white';
+const fieldClass = 'field-control min-w-0';
 
 export function StremioSourceForm() {
   const [params] = useSearchParams();
@@ -16,7 +16,7 @@ export function StremioSourceForm() {
   return <main id="main-content" className="page-shell content-width">
     <div className="page-heading"><h1>Abra pelas fontes Stremio.</h1><p>Use o ID IMDb de um filme, série ou anime. Para séries, informe a temporada e o episódio dessa edição.</p></div>
     <nav aria-label="Consulta de fontes" className="mb-6 flex flex-wrap gap-3"><Link className="button-secondary" to="/sources"><ArrowLeft size={16} aria-hidden="true" />Fontes AniList</Link><Link className="button-secondary" to="/cinema"><Film size={16} aria-hidden="true" />Filmes e séries</Link></nav>
-    <form className="max-w-3xl rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:p-7" onSubmit={event => {
+    <form className="max-w-3xl surface-card p-5 sm:p-7" onSubmit={event => {
       event.preventDefault();
       const id = imdb.trim();
       if (!/^tt\d{5,12}$/.test(id)) return;

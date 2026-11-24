@@ -31,7 +31,7 @@ export function WatchLoadingShell() {
     {(anime || cinema) && <div className="watch-backdrop" aria-hidden="true"><WatchArtwork image={anime?.banner || cinema?.background} fallback={fallback} /></div>}
     <div className="watch-layout">
       <div className="watch-screen"><div className="watch-stage"><WatchArtwork image={image} fallback={fallback} /><div className="watch-transition"><Loader2 size={32} className="animate-spin" aria-hidden="true" /><span role="status">{opening}…</span>{(anime?.title || cinema?.title) && <small>{anime?.title || cinema?.title}</small>}</div></div></div>
-      {identity?.type === 'movie' ? <aside className="watch-sidebar"><section className="rounded-xl border border-white/10 p-5"><h2 className="font-semibold">Filme completo</h2>{cinema && <p className="mt-3 text-sm text-slate-400">{cinema.title}</p>}</section></aside> : <aside className="watch-sidebar watch-sidebar-skeleton" aria-label="Episódios" aria-busy="true"><h2>Episódios</h2>{Array.from({ length: 5 }, (_, index) => <div className="skeleton" key={index} />)}</aside>}
+      {identity?.type === 'movie' ? <aside className="watch-sidebar"><section className="surface-card p-5"><h2 className="font-semibold">Filme completo</h2>{cinema && <p className="mt-3 text-sm text-slate-400">{cinema.title}</p>}</section></aside> : <aside className="watch-sidebar watch-sidebar-skeleton" aria-label="Episódios" aria-busy="true"><h2>Episódios</h2>{Array.from({ length: 5 }, (_, index) => <div className="skeleton" key={index} />)}</aside>}
     </div>
   </main>;
 }

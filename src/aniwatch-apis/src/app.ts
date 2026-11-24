@@ -29,6 +29,14 @@ import { AutomaticSubtitleJobs } from './providers/automatic-subtitle-jobs.js';
 import { IntroSkipProvider } from './providers/intro-skips.js';
 import type { CinemaProvider } from '../../shared/cinema.js';
 import { CinemetaProvider, cinemaQuery, validateCinemaId, validateCinemaType } from './providers/cinemeta.js';
+import { ADULT_CONSENT_HEADER, ADULT_CONSENT_VALUE } from '../../shared/adult.js';
+import { loadAdultConfig } from './config/adult.js';
+import type { AdultConfig } from './config/adult.js';
+import { AniListAdultCatalogProvider, validateAdultCatalogQuery } from './providers/anilist-adult.js';
+import type { AdultCatalogProvider } from './providers/anilist-adult.js';
+import { HentaiApiProvider } from './providers/hentai-api.js';
+import { AdultSitesProvider } from './providers/adult-sites.js';
+import { AdultContentService } from './providers/adult-content.js';
 
 interface AppOptions {
   catalog?: AnimeCatalogProvider;
@@ -44,6 +52,10 @@ interface AppOptions {
   introSkips?: IntroSkipProvider;
   mangaArchives?: MangaArchiveJobs;
   cinema?: CinemaProvider;
+  adult?: AdultConfig;
+  adultCatalog?: AdultCatalogProvider;
+  hentaiApi?: HentaiApiProvider;
+  adultSites?: AdultSitesProvider;
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -66,6 +78,9 @@ export function createApp(options: AppOptions = {}) {
   const content = options.content ?? new ContentRegistry(registry);
   const novels = options.novels ?? new NovelRegistry(new NovelContentProvider(new AniListNovelProvider(), content), undefined, new WuxiaWorldSiteProvider());
   const introSkips = options.introSkips ?? new IntroSkipProvider();
+  const adult = options.adult ?? loadAdultConfig();
+  const adultCatalog = options.adultCatalog ?? new AniListAdultCatalogProvider();
+  const adultContent = new AdultContentService(adultCatalog, registry, [options.adultSites ?? new AdultSitesProvider(), options.hentaiApi ?? new HentaiApiProvider()]);
   const automaticSubtitles = options.automaticSubtitles ?? new AutomaticSubtitleJobs({ load: async path => {
     const match = /^\/api\/(streaming\/media|subtitles\/file)\/([a-zA-Z0-9_-]+)$/.exec(path);
     if (!match) throw new ApiError(400, 'INVALID_SUBTITLE', 'Faixa de legenda inválida.');
@@ -77,7 +92,7 @@ export function createApp(options: AppOptions = {}) {
   app.use('*', (c, next) => (c.req.path.startsWith('/api/manga/image/') || c.req.path.startsWith('/api/content/image/') || c.req.path.startsWith('/api/streaming/media/') || c.req.path.startsWith('/api/subtitles/file/') ? imageHeaders : ordinaryHeaders)(c, next));
   app.use('*', cors({
     origin: runtimeConfig.allowedOrigins,
-    allowHeaders: ['Content-Type', 'Accept', 'Range'],
+    allowHeaders: ['Content-Type', 'Accept', 'Range', ADULT_CONSENT_HEADER],
     exposeHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges'],
     allowMethods: ['GET', 'POST', 'OPTIONS'],
   }));
@@ -128,12 +143,53 @@ export function createApp(options: AppOptions = {}) {
     if (new URL(c.req.url).search) throw new ApiError(400, 'INVALID_CINEMA_QUERY', 'Os detalhes aceitam somente o tipo e o identificador IMDb.');
     return c.json({ data: await cinema.details(validateCinemaType(c.req.param('type')), validateCinemaId(c.req.param('imdb'))) });
   });
+
+  // Adult routes exist only when the operator enables them, and answer only a
+  // browser where the person turned on adult content and confirmed being 18+.
+  app.get('/api/adult/status', c => {
+    c.header('Cache-Control', 'no-store');
+    return c.json({ data: { enabled: adult.enabled } });
+  });
+  app.use('/api/adult/*', async (c, next) => {
+    c.header('Cache-Control', 'private, no-store');
+    if (!adult.enabled) return c.json({ error: 'ADULT_CONTENT_DISABLED', message: 'O conteúdo adulto está desativado neste servidor. Defina ADULT_CONTENT_ENABLED=true no .env do backend e reinicie.' }, 404);
+    if (c.req.header(ADULT_CONSENT_HEADER) !== ADULT_CONSENT_VALUE) return c.json({ error: 'ADULT_CONSENT_REQUIRED', message: 'Ative o conteúdo adulto em Sua experiência e confirme que você tem 18 anos ou mais.' }, 403);
+    await next();
+  });
+  app.get('/api/adult/catalog/home', async c => c.json({ data: await adultCatalog.home() }));
+  app.get('/api/adult/catalog/search', async c => c.json({ data: await adultCatalog.search(validateAdultCatalogQuery(c.req.query())) }));
+  app.get('/api/adult/catalog/tags', async c => c.json({ data: await adultCatalog.tags() }));
+  app.get('/api/adult/catalog/anime/:id', async c => c.json({ data: await adultCatalog.details(validateAnimeId(c.req.param('id'))) }));
+  app.get('/api/adult/anime/:id/episodes', async c => c.json({ data: await adultContent.episodes(validateAnimeId(c.req.param('id'))) }));
+  app.get('/api/adult/anime/:id/episodes/:episode', async c => {
+    const id = validateAnimeId(c.req.param('id'));
+    const episode = c.req.param('episode');
+    const params = new URL(c.req.url).searchParams;
+    if (!/^[1-9]\d{0,3}$/.test(episode) || [...params.keys()].some(key => key !== 'refresh')) throw new ApiError(400, 'INVALID_EPISODE', 'Episódio inválido.');
+    const playback = await adultContent.playback(id, Number(episode), refreshPlayback(params));
+    return c.json({ data: await automaticSubtitles.offer(playback) });
+  });
+  app.get('/api/adult/sources', async c => c.json({ data: { diagnostics: await adultContent.diagnostics() } }));
   app.get('/api/streaming/anime/:id/episodes', async (c) => {
     const id = c.req.param('id');
     if (id !== 'demo') validateAnimeId(id);
     return c.json({ data: await streaming.episodes(id, titleHints(new URL(c.req.url).searchParams)) });
   });
-  app.get('/api/streaming/episodes/:id', async (c) => c.json({ data: await automaticSubtitles.offer(await streaming.playback(c.req.param('id'), titleHints(new URL(c.req.url).searchParams))) }));
+  function refreshPlayback(params: URLSearchParams): boolean {
+    const values = params.getAll('refresh');
+    if (values.length > 1 || values.length === 1 && values[0] !== '1') {
+      throw new ApiError(400, 'INVALID_PLAYBACK_REFRESH', 'Use refresh=1 para consultar as fontes novamente.');
+    }
+    return values.length === 1;
+  }
+  app.get('/api/streaming/episodes/:id', async (c) => {
+    c.header('Cache-Control', 'no-store');
+    const params = new URL(c.req.url).searchParams;
+    const titles = titleHints(params);
+    const id = c.req.param('id');
+    const playback = refreshPlayback(params) ? await streaming.playback(id, titles, true) : await streaming.playback(id, titles);
+    return c.json({ data: await automaticSubtitles.offer(playback) });
+  });
   for (const segment of ['intro', 'ending'] as const) app.get(`/api/streaming/episodes/:id/${segment}`, async c => {
     const params = new URL(c.req.url).searchParams;
     const id = c.req.param('id');
@@ -178,11 +234,16 @@ export function createApp(options: AppOptions = {}) {
   });
 
   app.get('/api/content/anime/:id/episodes/:episode', async c => {
+    c.header('Cache-Control', 'no-store');
     const id = validateWorkId(c.req.param('id')).slice('anilist:'.length);
     const episode = c.req.param('episode');
     if (!/^(?:[1-9]\d{0,5}|0)(?:\.\d{1,3})?$/.test(episode)) throw new ApiError(400, 'INVALID_EPISODE', 'Episódio inválido.');
     const params = new URL(c.req.url).searchParams;
-    return c.json({ data: await automaticSubtitles.offer(await registry.resolve(id, Number(episode), params.get('source') || undefined, titleHints(params))) });
+    const source = params.get('source') || undefined;
+    const titles = titleHints(params);
+    const playback = refreshPlayback(params) ? await registry.resolve(id, Number(episode), source, titles, true)
+      : await registry.resolve(id, Number(episode), source, titles);
+    return c.json({ data: await automaticSubtitles.offer(playback) });
   });
   const stremioProvider = (params: URLSearchParams) => {
     if ([...params.keys()].some(key => key !== 'provider') || params.getAll('provider').length > 1) {

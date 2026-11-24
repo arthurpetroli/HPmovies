@@ -1,13 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { SearchBar } from '../search/SearchBar';
+import { BrandMark } from '../ui/Brand';
 
-export function Brand() {
-  return <Link to="/" className="brand" aria-label="HPmovies — início"><span className="brand-icon"><Play size={18} fill="currentColor" /></span><span>HP<span className="brand-light">movies</span><span className="brand-dot">.</span></span></Link>;
-}
-
-/** Search floats over the artwork without a bar obscuring it. */
+/** A busca flutua sobre a arte, sem uma barra fixa; o cabeçalho ganha vidro depois de rolar. */
 export function Topbar({ searchRequest = 0 }: { searchRequest?: number }) {
   const search = useRef<HTMLDivElement>(null);
   const [scrolled, setScrolled] = useState(() => window.scrollY > 16);
@@ -34,5 +30,8 @@ export function Topbar({ searchRequest = 0 }: { searchRequest?: number }) {
     window.addEventListener('keydown', shortcut);
     return () => window.removeEventListener('keydown', shortcut);
   }, []);
-  return <header className="search-header" data-scrolled={scrolled}><div className="floating-search" ref={search} onPointerDown={event => { if (event.target instanceof HTMLFormElement) { event.preventDefault(); search.current?.querySelector('input')?.focus(); } }}><a className="skip-link" href="#main-content">Ir para o conteúdo</a><SearchBar /></div></header>;
+  return <header className="search-header" data-scrolled={scrolled}>
+    <Link to="/" className="header-brand" aria-label="HPmovies — início"><BrandMark /></Link>
+    <div className="floating-search" ref={search} onPointerDown={event => { if (event.target instanceof HTMLFormElement) { event.preventDefault(); search.current?.querySelector('input')?.focus(); } }}><a className="skip-link" href="#main-content">Ir para o conteúdo</a><SearchBar /></div>
+  </header>;
 }
